@@ -16,6 +16,7 @@ class Observations(Base):
     quality_grade = Column(String)
     observed_on = Column(Date)
     origin = Column(String)
+    # NOTE: Does not include geom column
 
 class Photos(Base):
     __tablename__ = 'photos'
