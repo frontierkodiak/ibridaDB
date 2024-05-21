@@ -1,0 +1,93 @@
+Analysis for L40 taxa:
+
+Taxon ID: 47744
+New taxa count: 0
+Deprecated taxa count: 0
+Active status changes count: 0
+Name changes count: 0
+Other attribute changes count: 0
+Observations with new taxa count: 0
+Observations with deprecated taxa count: 0
+Observations with active status changes count: 0
+Observations with common new taxa count: 0
+Observations with common deprecated taxa count: 0
+Observations with common active status changes count: 0
+
+Taxon ID: 47157
+New taxa count: 0
+Deprecated taxa count: 0
+Active status changes count: 0
+Name changes count: 0
+Other attribute changes count: 0
+Observations with new taxa count: 0
+Observations with deprecated taxa count: 0
+Observations with active status changes count: 0
+Observations with common new taxa count: 0
+Observations with common deprecated taxa count: 0
+Observations with common active status changes count: 0
+
+Taxon ID: 47792
+New taxa count: 0
+Deprecated taxa count: 0
+Active status changes count: 0
+Name changes count: 0
+Other attribute changes count: 0
+Observations with new taxa count: 0
+Observations with deprecated taxa count: 0
+Observations with active status changes count: 0
+Observations with common new taxa count: 0
+Observations with common deprecated taxa count: 0
+Observations with common active status changes count: 0
+
+Taxon ID: 47651
+New taxa count: 0
+Deprecated taxa count: 0
+Active status changes count: 0
+Name changes count: 0
+Other attribute changes count: 0
+Observations with new taxa count: 0
+Observations with deprecated taxa count: 0
+Observations with active status changes count: 0
+Observations with common new taxa count: 0
+Observations with common deprecated taxa count: 0
+Observations with common active status changes count: 0
+
+Taxon ID: 47208
+New taxa count: 0
+Deprecated taxa count: 0
+Active status changes count: 0
+Name changes count: 0
+Other attribute changes count: 0
+Observations with new taxa count: 0
+Observations with deprecated taxa count: 0
+Observations with active status changes count: 0
+Observations with common new taxa count: 0
+Observations with common deprecated taxa count: 0
+Observations with common active status changes count: 0
+
+Taxon ID: 47822
+New taxa count: 0
+Deprecated taxa count: 0
+Active status changes count: 0
+Name changes count: 0
+Other attribute changes count: 0
+Observations with new taxa count: 0
+Observations with deprecated taxa count: 0
+Observations with active status changes count: 0
+Observations with common new taxa count: 0
+Observations with common deprecated taxa count: 0
+Observations with common active status changes count: 0
+
+Taxon ID: 47201
+New taxa count: 0
+Deprecated taxa count: 0
+Active status changes count: 0
+Name changes count: 0
+Other attribute changes count: 0
+Observations with new taxa count: 0
+Observations with deprecated taxa count: 0
+Observations with active status changes count: 0
+Observations with common new taxa count: 0
+Observations with common deprecated taxa count: 0
+Observations with common active status changes count: 0
+

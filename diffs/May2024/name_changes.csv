@@ -1,0 +1,719 @@
+taxon_id,rank_level,existing_name,new_name
+272480,10.0,Anacroneuria flavonimuta,Anacroneuria flavominuta
+299440,10.0,Psilocera mexicana,Psilocera mexicanum
+299034,10.0,Marietta mexicana,Marietta mexicanus
+349781,10.0,× chitalpa tashkentensis,× Chitalpa tashkentensis
+415501,10.0,× fatshedera lizei,× Fatshedera lizei
+569902,10.0,Acmopolynema rufescens,Cosmocomoidea rufescens
+677184,10.0,Negeniaspidius nobilis,Lamennaisia nobilis
+664059,10.0,Encarsia flava,Encarsia flavus
+758247,10.0,Dnopherula brunneus,Dnopherula brunnea
+756426,10.0,Gerenia dorsalis,Gerenia dorsale
+751956,10.0,Diaspiniphagus pulchellus,Diaspiniphagus pulchella
+759290,10.0,Caryanda flavomaculata,Caryanda flavo-maculata
+760677,10.0,Phytomastax quighaiensis,Phytomastax qinghaiensis
+763978,10.0,Humpatella nigropicta,Humpatella nigro-picta
+772020,10.0,Deilagaon clavatum,Deilagaon clavata
+773194,10.0,Pegoscapus mexicanus,Pegoscapus mexicana
+1075099,5.0,Chrysochroa ocellata fulgens,Chrysochroa fulgens
+1083757,10.0,Helegonatopus dimorphus,Helegonatopus dimorpha
+1083755,10.0,Ginsiana carpetana,Ginsiana carpetanus
+1083834,10.0,Sympiesis notata,Sympiesis notatus
+1083431,10.0,Trichomalopsis peregrina,Trichomalopsis peregrinus
+1133416,10.0,× crataemespilus grandiflora,× Crataemespilus grandiflora
+1152017,10.0,Bothriothorax intermedius,Bothriothorax intermedia
+1181238,10.0,× agropogon robinsonii,× Agropogon robinsonii
+1205896,10.0,Anacamptis x olida,Anacamptis × olida
+1231440,10.0,Caenacis lauta,Caenacis lautus
+1259793,10.0,Daihiniodes hastifera,Daihiniodes hastiferus
+1240998,10.0,Stictomischus obscurus,Stictomischus obscura
+1275932,10.0,Olivenebula confecta,Dandirania confecta
+1283589,10.0,Simyra conspersa,Acronicta conspersa
+1337894,10.0,Simyra dentinosoides,Acronicta dentinosoides
+1337231,10.0,Endecous cavernicolus,Endecous cavernicola
+1319688,10.0,× serapicamptis anatolica,× Serapicamptis anatolica
+1347918,10.0,Emilia latens,Emilia × latens
+1347175,10.0,Hyaleucerea erythrotela,Hyaleucerea erythrotelus
+1366088,10.0,× dactylodenia wintonii,× Dactylodenia wintonii
+1378246,10.0,Eusandalum ibericum,Eusandalum iberica
+1419373,10.0,Holochlora nigrospinulosa,Holochlora nigro-spinulosa
+1429006,10.0,Ascobius boltoni,Folliculina boltoni
+1424731,11.0,Macrophya rufipes,Macrophya rufipes-diversipes
+1447422,10.0,× crataegosorbus miczurinii,× Crataegosorbus miczurinii
+1455039,10.0,× hoodiapelia beukmanii,× Hoodiapelia beukmanii
+1455784,10.0,× elyhordeum montanense,× Elyhordeum montanense
+298877,10.0,Torymus texanus,Torymus texanum
+299139,10.0,Ufens niger,Ufens nigrum
+530909,10.0,Astronesthes lucifer,Astronesthes lucifera
+558249,10.0,Trichogramma turkestanicum,Trichogramma turkestanica
+686695,10.0,Pteroptrix coloba,Pteroptrix colobus
+666493,10.0,Ficomila gambiensis,Ficomila gambiense
+712043,25.0,Gophoini,Gophonini
+757136,10.0,Coptacra punctoria,Coptacra punctaria
+751362,10.0,Encarsia fusca,Encarsia fuscus
+751103,10.0,Pteroptrix calva,Pteroptrix calvus
+757886,10.0,Chorthippus kusnetzovi,Chorthippus kuznetzovi
+756417,10.0,Diexis varentzovi,Diexis varentzowi
+767837,10.0,Bardylis multiguttatus,Bardylis multiguttata
+774267,10.0,Plastocorypha vandicana,Plastocorypha vandikana
+833580,10.0,Achillea × roseoalba,Achillea roseoalba
+882407,10.0,Dendrobium x delicatum,Dendrobium × delicatum
+883690,10.0,Idiarthron hammuliferum,Idiarthron hamuliferum
+942736,10.0,× harrisinopsis jusbertii,× Harrisinopsis jusbertii
+981599,10.0,Prosopogryllacris labaumei,Prosopogryllacris la-baumei
+1067287,27.0,Antrocarcininae,Antrocarcinidae
+1079886,10.0,× brassocattleya felisminiana,× Brassocattleya felisminiana
+1079892,10.0,× rhynchanthe bernardii,× Rhynchanthe bernardii
+1083506,10.0,Eusandalum elongatum,Eusandalum elongata
+1143593,10.0,× haagespostoa climaxantha,× Haagespostoa climaxantha
+1167949,15.0,Malodora,Malodorae
+1157082,10.0,Allicyrtaspis conicicersus,Allicyrtaspis conicicersa
+1206013,11.0,Tulipa biflora sensu lato,Tulipa biflora
+1278300,10.0,× crataemespilus canescens,× Crataemespilus canescens
+1283967,10.0,Pluchea x fosbergii,Pluchea × fosbergii
+1299592,10.0,Cecidostiba fungosa,Cecidostiba fungosus
+1297391,10.0,Emmelia stassarti,Acontia stassarti
+1291856,10.0,Macrosia fumeola,Eilema fumeola
+1304150,10.0,Autoba coccidiphaga,Eublemma coccidiphaga
+1320381,10.0,Warimiri madliba,Warimiri madiba
+1321592,10.0,× serapicamptis fontanae,× Serapicamptis fontanae
+1347400,10.0,Psoloptera locotmemica,Psoloptera leucotmemica
+1348125,10.0,Haplotropis agiensis,Haplotropis aqiensis
+1367825,10.0,Bendis magdalia,Lesmone magdalia
+244823,10.0,Scutellista caerulea,Scutellista caeruleus
+299300,10.0,Plagiomerus cyaneus,Plagiomerus cyanea
+299172,10.0,Dirhinus texanus,Dirhinus texana
+392486,10.0,Mesopolobus incultus,Mesopolobus incultum
+460911,10.0,Venitus latreillei,Venitus latreillii
+507295,10.0,Otitesella uluzi complex,Otitesella uluzi
+495581,10.0,Dictyogenus alpinus,Dictyogenus alpinum
+659640,10.0,Courtella penicula,Courtella peniculum
+682390,10.0,Pediobius amaurocoelus,Pediobius amaurocoela
+667997,10.0,Habrolepis obscura,Habrolepis obscurus
+751862,10.0,Encarsia pulliclava,Encarsia pulliclavus
+751876,10.0,Encarsia seminigriclava,Encarsia seminigriclavus
+751277,10.0,Encarsia brittanica,Encarsia brittanicus
+751094,10.0,Pteroptrix arabica,Pteroptrix arabicus
+761758,10.0,Probolotettix centrosotettigoides,Probolotettix centrositettigoides
+879844,10.0,Isophya beybienkoi,Isophya bey-bienkoi
+869515,10.0,Angara albofasciata,Angara albo-fasciata
+906587,10.0,Dendrobium x gracillimum,Dendrobium × gracillimum
+995096,10.0,× dryostichum singulare,× Dryostichum singulare
+1019111,10.0,× triticosecale rimpaui,× Triticosecale rimpaui
+1043063,10.0,× pseudorhiza illyrica,× Pseudorhiza illyrica
+1048695,10.0,Chartocerus subaeneus,Chartocerus subaenea
+1043058,10.0,× pseudorhiza bruniana,× Pseudorhiza bruniana
+1067780,10.0,Ovis gmelini,Ovis gmelinii
+1079887,10.0,× brassocattleya arauji,× Brassocattleya arauji
+1083489,10.0,Ufensia foersteri,Ufens foersteri
+1083612,10.0,Tetramesa eremita,Tetramesa eremitum
+1167952,15.0,Heterophyllidia,Heterophyllidiae
+1193579,10.0,Ammopelmatus longispinus,Ammopelmatus longispina
+1234692,10.0,Megadytes robustus,Trifurcitus robustus
+1253478,10.0,Pseudotrigonidium noctifolia,Pseudotrigonidium noctifolium
+1295840,10.0,Hypercalymnia hausmanni,Acontia hausmanni
+1304145,10.0,Autoba subangulata,Eublemma subangulata
+1347155,10.0,Pseudohyaleucerea romani,Pseudocharis romani
+1350061,10.0,Ruspolia macroxiphus,Ruspolia macroxipha
+1350380,10.0,Tetradinodula reticula,Tetradinodula reticulata
+1365210,10.0,Ectotrypa repentinus,Ectotrypa repentina
+1393651,11.0,Entyloma ranunculi-repentis,Entyloma eburneum
+1391541,10.0,Torymus advenus,Torymus advena
+1414739,10.0,Tetramesa hyalipennis,Tetramesa hyalipenne
+1413711,10.0,Myrmecophilus quadrispina,Myrmecophilus quadrispinus
+1433847,10.0,Calonarius callochrous,Calonarius calochrous
+1470927,10.0,Senecio × eboracensis,Senecio eboracensis
+1455049,10.0,× elyleymus bergrothii,× Elyleymus bergrothii
+1455054,10.0,× pseudorhiza bulgarica,× Pseudorhiza bulgarica
+98239,10.0,Coeliccia pracritii,Coeliccia prakritii
+104241,10.0,Lepidophyma zongolica,Lepidophyma zongolicum
+222327,10.0,Isocapnia paluosa,Isocapnia palousa
+264647,10.0,Copidosoma truncatellum,Copidosoma truncatellus
+299437,10.0,Lyrcus incertus,Eurydinoteloides incertus
+293603,10.0,Hapithus aztecus,Hapithus azteca
+299467,10.0,Torymus nubilus,Torymus nubila
+298831,10.0,Ectromatopsis americana,Ectromatopsis americanum
+348016,10.0,Xenocatantops humilis,Xenocatantops humile
+433455,10.0,Chrysochraon beybienkoi,Chrysochraon bey-bienkoi
+469374,10.0,Zagrammosoma centrolineatum,Zagrammosoma centrolineata
+504097,10.0,Metapelma spectabile,Metapelma spectabilis
+686693,10.0,Pteroptrix aprica,Pteroptrix apricus
+686699,10.0,Pteroptrix prolata,Pteroptrix prolatus
+754694,10.0,Austrohancockia albitubercle,Austrohancockia albitubercula
+751835,10.0,Encarsia perpulchella,Encarsia perpulchellus
+751136,10.0,Pteroptrix perata,Pteroptrix peratus
+751303,10.0,Encarsia clara,Encarsia clarus
+757432,10.0,Eyprepocnemis roseus,Eyprepocnemis rosea
+767758,10.0,Coccobius flaviclavus,Coccobius flaviclava
+764072,10.0,Rubellia nigrosignata,Rubellia nigro-signata
+797823,10.0,Chaenotetrastichus semiflavus,Chaenotetrastichus semiflava
+970127,10.0,× gigantocalamus malpenensis,× Gigantocalamus malpenensis
+962783,10.0,Plutothrix trifasciata,Plutothrix trifasciatus
+995095,10.0,× dryostichum singulare,× Dryostichum singulare
+1083623,10.0,Tetramesa aciculata,Tetramesa aciculatum
+1167593,10.0,Sympiesis triclada,Sympiesis tricladus
+1198708,10.0,× dactylanthera chevallieriana,× Dactylanthera chevallieriana
+1198693,10.0,× orchidactylorhiza farquetii,× Orchidactylorhiza farquetii
+1190723,10.0,Trichomalopsis acuminata,Trichomalopsis acuminatus
+1234697,10.0,Megadytes guignoti,Metaxydytes guignoti
+1234698,10.0,Megadytes laevigatus,Metaxydytes laevigatus
+1234700,10.0,Megadytes marginithorax,Metaxydytes marginithorax
+1234691,10.0,Megadytes perplexus,Trifurcitus perplexus
+1262794,10.0,Acroclisoides sinicus,Acroclisoides sinica
+1262835,10.0,Strigoderma villosula,Strigoderma villosela
+1246579,10.0,Manulea pseudofumidisca,Eilema pseudofumidisca
+1272267,5.0,Urva fusca siccata,Urva fusca siccatus
+1296269,10.0,Hypercalymnia laurenconi,Acontia laurenconi
+1296272,10.0,Hypercalymnia splendida,Acontia splendida
+1297435,10.0,Emmelia bellula,Acontia bellula
+1304148,10.0,Autoba vinotincta,Eublemma vinotincta
+1301732,10.0,Facidia luteilinea,Platyja luteilinea
+1337793,10.0,Eoxizicus dao,Xizicus dao
+1319687,10.0,× serapicamptis adulterina,× Serapicamptis adulterina
+1345727,10.0,Paracolax unicolor,Nodaria unicolor
+1428948,10.0,Pheidole rugulata,Pheidole rugatula
+1473932,10.0,Psallus fagi,Mesopsallus fagi
+1448380,5.0,Parnassius delphius infernalis,Parnassius staudingeri infernalis
+1458178,10.0,Bowie vinphuc,Bowie vinhphuc
+30010,10.0,Hapsidophrys lineatus,Hapsidophrys lineata
+27249,10.0,Chironius scurrulus,Chironius scurrula
+256331,10.0,Eremopedes ephippiata,Eremopedes ephippiatus
+298844,10.0,Galeopsomyia compacta,Galeopsomyia compactus
+423656,10.0,Lycalopex gymnocercus,Lycalopex gymnocerca
+433461,10.0,Clonia lalandei,Clonia lalandaei
+498707,10.0,Trigonidium infuscata,Trigonidium infuscatum
+655209,5.0,Camponotus olivieri oliveri,Camponotus olivieri olivieri
+686692,10.0,Pteroptrix aethiopica,Pteroptrix aethiopicus
+759933,10.0,Ommexecha gigliotosi,Ommexecha giglio-tosi
+751894,10.0,Encarsia submetallica,Encarsia submetallicus
+751121,10.0,Pteroptrix longiclavata,Pteroptrix longiclavatus
+761752,10.0,Tegotettix cristiferus,Tegotettix cristifer
+777319,10.0,Capnogryllacris primigenii,Capnogryllacris primi-genii
+776383,10.0,Ruidocollaris truncatolobata,Ruidocollaris truncato-lobata
+905791,10.0,Hyperimerus pusillus,Hyperimerus pusilla
+1017290,10.0,Horismenus floridanus,Horismenus floridana
+1043064,10.0,× pseudorhiza nieschalkii,× Pseudorhiza nieschalkii
+1066681,33.0,Cancellothyroidea,Cancellothyridoidea
+1127435,10.0,Aulogymnus trilineatus,Aulogymnus trilineata
+1139822,10.0,Gollumiella minuta,Gollumiella minutus
+1139823,10.0,Gollumiella antennata,Gollumiella antennatus
+1156094,10.0,Cymbiodyta bifidus,Cymbiodyta bifida
+1234685,10.0,Megadytes magnus,Bifurcitus magnus
+1234687,10.0,Megadytes aubei,Trifurcitus aubei
+1240381,5.0,Macaria notata appalachiata,Macaria ulsterata appalachiata
+1281751,24.0,Truljaliina,Truljaliini
+1297006,10.0,Simyra albicosta,Acronicta albicosta
+1301373,10.0,Megacephalomana rivulosum,Platyja rivulosum
+1399393,10.0,Myrmoteras cuneonodus,Myrmoteras cuneonodum
+1464298,5.0,Cataglyphis emmae hoggariensis,Cataglyphis emmae hoggarensis
+1458694,10.0,Dinarmus italicus,Dinarmus italica
+169042,10.0,Smilax lasioneura,Smilax lasioneuron
+207986,10.0,Tamarixia radiata,Tamarixia radiatus
+311201,10.0,Encarsia citrina,Encarsia citrinus
+628762,10.0,Cowperia areolata,Cowperia areolatus
+686703,10.0,Pteroptrix unica,Pteroptrix unicus
+685975,10.0,Pseudectroma gilvum,Pseudectroma gilva
+661435,10.0,Deilagaon megarhopalum,Deilagaon megarhopalus
+755189,10.0,Macromotettix torulisinota,Macromotettix torulisinotus
+757349,10.0,Egnatioides beybienkoi,Egnatioides bey-bienkoi
+763922,10.0,Caprorhinus andohahalensis,Caprorhinus andohahelensis
+767972,10.0,Centrodora oophaga,Centrodora oophagus
+901251,10.0,Sathrophylliopsis longepilosa,Sathrophylliopsis longe-pilosa
+952658,10.0,Psyllaephagus lusitanicus,Psyllaephagus lusitanicum
+1079884,10.0,× brassocattleya litoralis,× Brassocattleya litoralis
+1099702,10.0,Pseudotorymus sapphyrinus,Pseudotorymus sapphyrina
+1083529,10.0,Pseudotorymus pannonicus,Pseudotorymus pannonica
+1083426,10.0,Urolepis maritima,Urolepis maritimus
+1083780,10.0,Choreia inepta,Choreia ineptus
+1122579,5.0,Ovis gmelini isphahanica,Ovis gmelinii isphahanica
+1141911,10.0,Ablerus peruvianus,Ablerus peruviana
+1198692,10.0,× orchidactylorhiza atacina,× Orchidactylorhiza atacina
+1198703,10.0,× cephalorchis sussana,× Cephalorchis sussana
+1181209,10.0,× festulpia melderisii,× Festulpia melderisii
+1204146,10.0,Arachnocephalus shackeltoni,Arachnocephalus shackletoni
+1228216,10.0,Echthroplexiella dunensis,Echthroplexiella dunense
+1243326,10.0,Anurogryllus fulvaster,Anurogryllus fulvastrus
+1240380,5.0,Macaria notata notata,Macaria ulsterata ulsterata
+1292189,10.0,Thysanoptyx fimbriata,Teulisna fimbriata
+1337774,10.0,Eoxizicus choui,Xizicus choui
+1337777,10.0,Eoxizicus curvicercus,Xizicus curvicercus
+1337794,10.0,Eoxizicus dentatus,Xizicus dentatus
+1334364,10.0,Miselia plumipes,Hadena plumipes
+1337677,10.0,Calosota metallica,Calosota metallicus
+1343267,10.0,× astrolista bicarinata,× Astrolista bicarinata
+1397927,10.0,Celtis orthocanthos,Celtis orthacanthos
+1394494,10.0,Bendis irregularis,Lesmone irregularis
+1404323,10.0,Centaurodendron schillerii,Centaurodendron schilleri
+1428899,10.0,Pheidole gautheri,Pheidole gauthieri
+1440060,24.0,Nicertina,Nicertini
+1455016,10.0,× sorbaronia monstrosa,× Sorbaronia monstrosa
+293431,10.0,Vilerna pygmaea,Vilerna pygmea
+407441,10.0,Mesopolobus nobilis,Mesopolobus nobile
+408498,10.0,Cirrospilus variegatus,Zagrammosoma variegatum
+391323,10.0,Lamennaisia ambigua,Lamennaisia ambiguus
+415522,20.0,× citrofortunella,× Citrofortunella
+411298,10.0,Erythrina ×sykesii,Erythrina × sykesii
+451471,10.0,Ormyrus nitidulus,Ormyrus nitidula
+649428,10.0,Anagyrus rubellus,Anagyrus rubella
+656117,10.0,Ceratosolen appendiculatus,Ceratosolen appendiculata
+686694,10.0,Pteroptrix cavana,Pteroptrix cavanus
+759681,10.0,Conophyma kusnetzovi,Conophyma kusnezovi
+755222,10.0,Metrodora arcuatus,Metrodora arcuata
+756486,10.0,Traulia kukenthali,Traulia kuekenthali
+756835,10.0,Maculacris flavomaculata,Maculacris flavo-maculata
+757462,10.0,Cataloipus cymbiferus,Cataloipus cymbifer
+751107,10.0,Pteroptrix deserta,Pteroptrix desertus
+760953,10.0,Biroella burgersi,Biroella buergersi
+762115,10.0,Tetrix morbillosus,Tetrix morbillosa
+767980,10.0,Centrodora speciosissima,Centrodora speciosissimus
+773156,10.0,Pegoscapus aerumnosus,Pegoscapus aerumnosa
+773165,10.0,Pegoscapus attentus,Pegoscapus attenta
+954392,10.0,× serapicamptis sonii,× Serapicamptis sonii
+1050460,10.0,Cerocephala rufa,Cerocephala rufus
+1067843,5.0,Ovis gmelini laristanica,Ovis gmelinii laristanica
+1096678,10.0,Uromenus bonneti,Uromenus bonnetti
+1083771,10.0,Echthroplexiella talitzkyi,Echthroplexiella talitzkii
+1083550,10.0,Monodontomerus aeneus,Monodontomerus aenea
+1083514,10.0,Eupelmus falcatus,Eupelmus falcata
+1083752,10.0,Leptomastix flava,Leptomastix flavus
+1083759,10.0,Hoplopsis minuta,Hoplopsis minutus
+1134258,10.0,Montana barretoi,Montana barretii
+1234690,10.0,Megadytes obesus,Trifurcitus obesus
+1250401,10.0,Brachytarsophrys intermedia,Brachytarsophrys intermedius
+1243340,10.0,Anurogryllus pantanai,Anurogryllus pantanal
+1272300,5.0,Urva brachyura palawana,Urva brachyura palawanus
+1284587,10.0,Oglasa fuscitemrinata,Oglasa fusciterminata
+1283590,10.0,Simyra renimaculata,Acronicta renimaculata
+1298532,10.0,Nanna diplisticta,Arctiananna diplisticta
+1295876,10.0,Iambia thwaitesi,Iambia thwaitesii
+1297437,10.0,Emmelia fuscoalba,Acontia fuscoalba
+1302550,10.0,Selepa violascens,Selepa violescens
+1337775,10.0,Eoxizicus concavilaminus,Xizicus concavilaminus
+1337796,10.0,Eoxizicus divergentis,Xizicus divergentis
+1319689,10.0,× serapicamptis andaluciana,× Serapicamptis andaluciana
+1312766,10.0,Paederotella teberdensis,Veronica teberdensis
+1345369,10.0,Antrocephalus nasutus,Antrocephalus nasuta
+1347207,10.0,Conocephalus tepemah,Conocephalus tepemeh
+1400748,10.0,Sectus integrus,Sectus integer
+1412694,10.0,Polyrhachis glabrinotum,Polyrhachis glabrinota
+1465140,10.0,× serapicamptis rousii,× Serapicamptis rousii
+1460827,10.0,× chiranthomontodendron lenzii,× Chiranthomontodendron lenzii
+1466376,10.0,Chrysonotomyia auripunctata,Chrysonotomyia auripunctatus
+1455045,10.0,× elyleymus turneri,× Elyleymus turneri
+173318,20.0,Bolshecapnia,Bolschecapnia
+264501,10.0,Aenasius advenus,Aenasius advena
+264552,10.0,Podagrion brasiliense,Podagrion brasiliensis
+298887,10.0,Aceratoneuromyia indica,Aceratoneuromyia indicum
+317625,10.0,Marietta picta,Marietta pictus
+311208,10.0,Chalcedectus caelatus,Chalcedectus caelata
+358436,10.0,Neoperla niponenensis,Neoperla niponensis
+524125,10.0,Bunodosoma californica,Bunodosoma californicum
+539766,10.0,Hapsidophrys smaragdinus,Hapsidophrys smaragdina
+561493,10.0,Sinocnemis henanese,Sinocnemis henanensis
+654004,10.0,Brachymeria olethria,Brachymeria olethrius
+655539,10.0,Cardeniopsis nigropunctata,Cardeniopsis nigropunctatus
+681935,10.0,Parechthrodryinus prolatus,Tyndarichus prolatus
+681826,10.0,Paratettix subpustulata,Paratettix subpustulatus
+686702,10.0,Pteroptrix serrata,Pteroptrix serratus
+681101,10.0,Panstenon collare,Panstenon collaris
+665910,10.0,Eusandalum cyaneum,Eusandalum cyanea
+693731,10.0,Torymus magnificus,Torymus magnifica
+758387,10.0,Hemiacris dromedarius,Hemiacris dromedaria
+759108,10.0,Atympanum carinotus,Atympanum carinotum
+751131,10.0,Pteroptrix nudicella,Pteroptrix nudicellus
+751832,10.0,Encarsia peltata,Encarsia peltatus
+751099,10.0,Pteroptrix biguttata,Pteroptrix biguttatus
+751143,10.0,Pteroptrix sparsiciliata,Pteroptrix sparsiciliatus
+751766,10.0,Encarsia magniclava,Encarsia magniclavus
+756837,10.0,Madimbania cephalicus,Madimbania cephalica
+767836,10.0,Bardylis metallicus,Bardylis metallica
+763740,10.0,Lophothericles dogodea,Lophothericles degodea
+773163,10.0,Pegoscapus assuetus,Pegoscapus assueta
+877465,10.0,Crataegus margarettae,Crataegus margaretta
+1038534,10.0,× tridentapelia bijliae,× Tridentapelia bijliae
+1079882,10.0,× brassocattleya rubyi,× Brassocattleya rubyi
+1099069,10.0,Oopristus turkestanicus,Oopristus turkestanica
+1083776,10.0,Dinocarsiella alpina,Dinocarsiella alpinus
+1122690,5.0,Anser anser domesticus × anser cygnoides domesticus,Anser anser domesticus × cygnoides domesticus
+1141957,10.0,Psyllaephagus flabellatus,Psyllaephagus flabellata
+1169030,10.0,Salomona burgersia,Salomona buergersia
+1234686,10.0,Megadytes australis,Paramegadytes australis
+1234693,10.0,Megadytes carcharias,Metaxydytes carcharias
+1250854,10.0,Entedon magnificus,Entedon magnifica
+1240270,10.0,Tetramesa crassicornis,Tetramesa crassicorne
+1273388,10.0,Athaumasta lithoplasta,Victrix lithoplasta
+1288394,10.0,Lygephila philbyi,Tathorhynchus philbyi
+1295395,10.0,Hypercalymnia versicolorata,Acontia versicolorata
+1297438,10.0,Emmelia subnotha,Acontia subnotha
+1304154,10.0,Autoba ochreola,Eublemma -ochreola-
+1324588,10.0,× serapicamptis bevilacquae,× Serapicamptis bevilacquae
+1337795,10.0,Eoxizicus dischidus,Xizicus dischidus
+1333506,10.0,Eulepidotis stigmastica,Eulepidotis stigmasticta
+1334363,10.0,Miselia umbrata,Hadena umbrata
+1347547,10.0,Dolichopoda propanti,Dolichopoda propantii
+1371393,10.0,× bacurio delphinatifolius,× Bacurio delphinatifolius
+1399418,10.0,Trichomyrmex dentigera,Trichomyrmex dentiger
+1404844,10.0,Agamerion cleptideum,Agamerion cleptidea
+1449787,10.0,Atractotomus amygdali,Mesopsallus amygdali
+1463372,10.0,Polyrhachis latinoda,Polyrhachis latinota
+1455048,10.0,× elyleymus aristatus,× Elyleymus aristatus
+1455050,10.0,× elyleymus colvillensis,× Elyleymus colvillensis
+1457792,10.0,Strumigenys rowheri,Strumigenys rohweri
+215300,10.0,Bolshecapnia rogozera,Bolschecapnia rogozera
+265118,10.0,Alaptus psocidivorus,Alaptus pallidicornis
+265186,10.0,Torymus umbilicatus,Torymus umbilicata
+293478,10.0,Tettigidea australis,Tettigidea neoaustralis
+299434,10.0,Halticoptera aenea,Halticoptera aeneus
+311294,10.0,Neotrichoporoides viridimaculatus,Neotrichoporoides viridimaculata
+397998,10.0,Tetramesa linearis,Tetramesa lineare
+518692,10.0,× schedolium holmbergii,× Schedolium holmbergii
+624860,20.0,Agnotecous,Agnothecous
+676443,10.0,Monstranusia antennata,Monstranusia antennatus
+661710,10.0,Desmonemoura pulchellum,Desmonemoura pulchella
+755378,10.0,Xistrellula kankauensis,Xistrellula kankauense
+751115,10.0,Pteroptrix japonica,Pteroptrix japonicus
+751119,10.0,Pteroptrix leptocera,Pteroptrix leptocerus
+751148,10.0,Pteroptrix vasta,Pteroptrix vastus
+767945,10.0,Centrodora flava,Centrodora flavus
+1043061,10.0,× pseudorhiza bulgarica,× Pseudorhiza bulgarica
+1079885,10.0,× brassocattleya lindleyana,× Brassocattleya lindleyana
+1098131,10.0,Hakea myrtoides x H petiolaris,Hakea myrtoides × petiolaris
+1083869,10.0,Elasmus nudus,Elasmus nuda
+1083777,10.0,Dinocarsis hemiptera,Dinocarsis hemipterus
+1105089,10.0,× dactylodenia st-quintinii,× Dactylodenia st-quintinii
+1126003,10.0,Asplenium × suevicum,Asplenium × murbeckii
+1198405,10.0,× myrmecolaelia fuchsii,× Myrmecolaelia fuchsii
+1193824,10.0,Miotropis histrionica,Miotropis histrionicus
+1188336,10.0,× cattlianthe dabeibaensis,× Cattlianthe dabeibaensis
+1229965,10.0,Sycophila biguttata,Sycophila biguttatus
+1255152,10.0,× festulolium hercynicum,× Festulolium hercynicum
+1298536,10.0,Nanna loloana,Arctiananna loloana
+1290462,10.0,Autoba griseicosta,Eublemma griseicosta
+1302368,10.0,Laetonima,Laetonima camerunica
+1347423,10.0,Dolicholobosa bisofurcala,Dolicholobosa bisofurcula
+1398118,10.0,Sphegigaster truncata,Sphegigaster truncatus
+1395489,5.0,Centhosia penthesilea paksha,Cethosia penthesilea paksha
+1410627,10.0,Liara tramplapensis,Liara tramlapensis
+1438214,10.0,Inakayalia cyanea,Inakayalia cyanaea
+1455017,10.0,× sorbaronia sorbifolia,× Sorbaronia sorbifolia
+1455053,10.0,× miltonidium salvadoi,× Miltonidium salvadoi
+1459258,10.0,Stenomalina epistena,Stenomalina epistenus
+1455785,10.0,× elyhordeum stebbinsianum,× Elyhordeum stebbinsianum
+70300,10.0,Castianeira longipalpa,Castianeira longipalpus
+39094,10.0,Liolaemus zullyi,Liolaemus zullyae
+156896,10.0,× elyleymus aleuticus,× Elyleymus aleuticus
+210404,10.0,Arphia pseudonietana,Arphia pseudo-nietana
+264820,10.0,Trichogramma pretiosum,Trichogramma pretiosa
+330529,10.0,Dichroplus vittigerum,Dichroplus vittiger
+552025,10.0,Cratomus megacephalus,Cratomus megacephala
+624387,20.0,× dactyloglossum mixtum,× Dactyloglossum mixtum
+622958,10.0,Asclepias syriaca × purpurascens,Asclepias purpurascens × syriaca
+673615,10.0,Lounsburyia trifasciata,Lounsburyia trifasciatus
+686701,10.0,Pteroptrix rupina,Pteroptrix rupinus
+665913,10.0,Eusandalum stylatum,Eusandalum stylatus
+755722,10.0,Tettiellona virungana,Tettiellona virunganus
+755838,10.0,Xya frontomaculatus,Xya frontomaculata
+756931,10.0,Peitharchicus flavolineata,Peitharchicus flavo-lineata
+758689,10.0,Netrosoma fusiforme,Netrosoma fusiformis
+751953,10.0,Diaspiniphagus maculatus,Diaspiniphagus maculata
+764397,10.0,Sphingonotus asperus,Sphingonotus asper
+746614,10.0,Microdontomerus annulatus,Microdontomerus annulata
+964856,10.0,× dactylodenia evansii,× Dactylodenia evansii
+1005688,10.0,Nemoricantor mayus,Nemoricantor maya
+1079890,10.0,× vandoglossum moorei,× Vandoglossum moorei
+1083543,10.0,Pseudotorymus leguminus,Pseudotorymus leguminum
+1083681,10.0,Bruchophagus scaposus,Eurytoma scaposa
+1083831,10.0,Sympiesis viridula,Sympiesis viridulus
+1083792,10.0,Blastothrix sericea,Blastothrix sericeus
+1122578,5.0,Ovis gmelini gmelini,Ovis gmelinii gmelinii
+1147312,10.0,Amblylakis nigrolimbata,Amblylakis nigro-limbata
+1198709,10.0,× dactylanthera fournieri,× Dactylanthera fournieri
+1234696,10.0,Megadytes guayanensis,Metaxydytes guayanensis
+1235489,10.0,Anaulacomera albonodulosa,Anaulacomera albo-nodulosa
+1249657,10.0,Bellieriomima lingulata,Sarcophaga lingulata
+1272236,5.0,Urva vitticolla vitticolla,Urva vitticollis vitticollis
+1292026,10.0,×agropogon lutosus,× Agropogon lutosus
+1301374,10.0,Megacephalomana saalmuelleri,Platyja saalmuelleri
+1308696,10.0,Syntomis obraztsovi,Amata -obraztsovi-
+1302889,10.0,Meganola perangulata,Meganola -perangulata-
+1305339,11.0,Pyrausta despicata,Pyrausta cespitalis
+1333607,10.0,Herminocala atomosa,Herminiocala atomosa
+1339925,10.0,Prunella x bicolor,Prunella × bicolor
+1339887,10.0,Camptoloma stueningi,Leucopardus stueningi
+1345680,10.0,Paralithosia decreta,Microlithosia decreta
+1368108,10.0,Letis hercyna,Feigeria hercyna
+1396189,13.0,Subcompactae,Pseudocompactae
+1475791,10.0,Abortelphusa namdaphaensis,Arbortelphusa namdaphaensis
+1458164,10.0,Bowie scarymonster,Bowie scarymonsters
+1458173,10.0,Bowie theisi,Bowie thiesi
+211340,10.0,Suwallia amoenacoleus,Suwallia amoenacolens
+264489,10.0,Aphytis hispanicus,Aphytis hispanica
+299190,10.0,Encarsia americana,Encarsia americanus
+393033,10.0,Mymar taprobanicum,Mymar taprobanicus
+523325,10.0,Chortoscirtes meruensis,Chortoscirtes meruense
+659810,5.0,Crematogaster hottentota basuto,Crematogaster hottentota bassuto
+687970,10.0,Ruandella stigmosa,Ruandella stigmosus
+693587,10.0,Tineobius montanus,Tineobius montana
+754703,10.0,Austrohancockia latifemura,Austrohancockia latifemora
+762121,10.0,Tetrix nigricolle,Tetrix nigricollis
+803492,10.0,Podagrion pachymerum,Podagrion pachymerus
+857429,10.0,Isophya zubowskii,Isophya zubovskii
+888906,10.0,Phylloptera quinquemaculata,Phylloptera quinque-maculata
+918457,10.0,Torymus capitis,Torymus capite
+966102,10.0,× reyllopia conollyana,× Reyllopia conollyana
+1027457,10.0,Pseudotorymus lazulellus,Pseudotorymus lazulella
+1067285,27.0,Calocarcininae,Calocarcinidae
+1076511,10.0,Conomorium patulum,Conomorium patulus
+1083873,10.0,Cirrospilus talitzkii,Zagrammosoma talitzkii
+1083687,10.0,Bruchophagus platypterus,Bruchophagus platyptera
+1083801,10.0,Aphycus moravicus,Aphycus moravica
+1083821,10.0,Tetrastichus populi,Aprostocetus populi
+1199449,10.0,× orchigymnadenia robsonii,× Orchigymnadenia robsonii
+1250560,10.0,× urceocharis edentata,× Urceocharis edentata
+1298535,10.0,Nanna pia,Arctiananna pia
+1290463,10.0,Autoba grisescems,Eublemma grisescems
+1292362,10.0,Schistophleps mundata,Schistophleps mundanata
+1306074,10.0,Homoeogryllus tessellatus,Homoeogryllus tesselatus
+1337797,10.0,Eoxizicus dubius,Xizicus dubius
+1371936,10.0,Dryas ×chamissonis,Dryas × chamissonis
+1391169,10.0,Storthoptera tripunctata,Storthoptera tripuncta
+1415219,30.0,Gonostomatidae,Gonostomidae
+1421946,10.0,Manulea hunanica,Eilema hunanica
+1436160,10.0,Andeophylloides zarauzense,Andeophylloides zarauzensis
+1462693,10.0,Bliastonotus atrifons,Bliastonotus atrifrons
+1456297,10.0,Choragus harrisi,Choragus harrisii
+1454962,10.0,Raddiella vanessae,Raddiella vanessiae
+215296,10.0,Bolshecapnia gregsoni,Bolschecapnia gregsoni
+299131,10.0,Tomocerodes americanus,Tomocerodes americana
+299311,10.0,Blepyrus pretiosus,Blepyrus pretiosa
+371380,10.0,Orchelimum agile,Orchelimum agilis
+409109,10.0,Soerensenella prehensor,Sorensenella prehensor
+387752,10.0,Coccidoctonus dubius,Coccidoctonus dubia
+387858,10.0,Copidosoma floridanum,Copidosoma floridanus
+392530,10.0,Metanotalia maderensis,Metanotalia maderense
+659642,10.0,Courtella scobinifera,Courtella scobiniferum
+677346,10.0,Neocharitopus crassus,Neocharitopus crassa
+668915,10.0,Henicus promontori,Henicus promontorii
+754599,10.0,Batrachidea flavonotata,Batrachidea flavo-notata
+755228,10.0,Metrodora pygmaeus,Metrodora pygmaea
+750779,10.0,Eretmocerus aleyrodiphagus,Eretmocerus aleyrodiphaga
+750888,10.0,Zagrammosoma americanum,Zagrammosoma americana
+751917,10.0,Encarsia totiaurea,Encarsia totiaureus
+755532,10.0,Ergatettix dorsifera,Ergatettix dorsifer
+767911,10.0,Marietta pulchella,Marietta pulchellus
+762373,10.0,Theomolpus pulcher,Theomolpus pulchra
+773164,10.0,Pegoscapus astomus,Pegoscapus astoma
+1007840,10.0,Anostostoma erinaceus,Anostostoma erinaceum
+1117113,10.0,× thyrsocalamus liang,× Thyrsocalamus liang
+1101992,10.0,Glyptophysa novaehollandica,Glyptophysa novahollandica
+1144438,10.0,Finlaya poicilia,Aedes poicilia
+1245951,10.0,Xylena czernilae,Xylena czernilai
+1245986,10.0,Meleonoma microbrysa,Meleonoma microbyrsa
+1275931,10.0,Olivenebula pulcherrima,Dandirania pulcherrima
+1283675,10.0,Agnotecous robustus,Agnothecous robustus
+1283760,10.0,Catoptropteryx nigrospinosa,Catoptropteryx nigro-spinosa
+1290466,10.0,Autoba rubiginea,Eublemma rubiginea
+1299006,10.0,Megacephalomana remaudi,Platyja remaudi
+1293834,10.0,Glenoleon mulesi,Austrogymnocnemia mulesi
+1304157,10.0,Autoba reticulata,Eublemma reticulata
+1300061,10.0,Pachyneuron solitarium,Pachyneuron solitarius
+1475790,20.0,Abortelphusa,Arbortelphusa
+1466102,10.0,× brassocattleya litoralis,× Brassocattleya litoralis
+1455783,10.0,× elyhordeum macounii,× Elyhordeum macounii
+1453693,10.0,× thinoelymus drucei,× Thinoelymus drucei
+42795,10.0,Cercartetus nanus,Cercartetus nana
+194258,10.0,Spharagemon marmorata,Spharagemon marmoratum
+264526,10.0,Eupelmus allynii,Brasema allynii
+264819,10.0,Trichogramma minutum,Trichogramma minuta
+298852,10.0,Heimbra opaca,Heimbra opacus
+299135,10.0,Trichogramma brasiliense,Trichogrammatoidea brasiliensis
+299468,10.0,Torymus nudus,Torymus nuda
+371143,10.0,× butyagrus nabonnandii,× Butyagrus nabonnandii
+415523,10.0,× citrofortunella microcarpa,× Citrofortunella microcarpa
+524560,20.0,× beallara,× Beallara
+560789,10.0,Rectimarginalis fuscospinosa,Rectimarginalis fusco-spinosa
+563990,10.0,Polionemobius taprobanensis,Polionemobius taprobanense
+659633,10.0,Courtella armata,Courtella armatum
+700974,10.0,Gomphoceridius brevipennis,Gomphoceridius brevipenne
+759929,10.0,Descampsacris serrulatum,Descampsacris serrulata
+758358,10.0,Sporobolius infuscata,Sporobolius infuscatus
+751139,10.0,Pteroptrix processa,Pteroptrix processus
+756843,10.0,Malua burgersi,Malua buergersi
+759352,10.0,Cranae nigroreticulata,Cranae nigro-reticulata
+764055,10.0,Tanita lineaalba,Tanita linea-alba
+773160,10.0,Pegoscapus ambiguus,Pegoscapus ambigua
+851017,10.0,Macronycteris vittatus,Macronycteris vittata
+867767,10.0,Quadrastichus lasiocerus,Quadrastichus lasiocera
+964061,5.0,Croton michauxii elliptica,Croton michauxii ellipticus
+1083501,10.0,Trichogramma embryophagum,Trichogramma embryophagus
+1083871,10.0,Chrysocharis purpurea,Chrysocharis purpureus
+1158411,10.0,Progryllacris sanctivincentii,Progryllacris sancti-vincentii
+1181210,10.0,× festulpia hubbardii,× Festulpia hubbardii
+1238952,10.0,Anacamptis x kallithea,Anacamptis × kallithea
+1255153,10.0,× festulolium wippraense,× Festulolium wippraense
+1249658,10.0,Bellieriomima yaanensis,Sarcophaga yaanensis
+1298565,10.0,Phaegorista rubriventris,Stemonoceras rubriventris
+1290465,10.0,Autoba obscura,Eublemma obscura
+1301375,10.0,Megacephalomana stygium,Platyja stygium
+1331701,10.0,Crane lolobatensis,Cranae lolobatensis
+1339888,10.0,Camptoloma semiflavum,Leucopardus semiflavum
+1319690,10.0,× serapicamptis barlae,× Serapicamptis barlae
+1341942,10.0,Teulisna divisa,Teuloma divisa
+1393886,10.0,Encyrtus fuscus,Encyrtus fusca
+1401577,10.0,Zagrammosoma flavolineatum,Zagrammosoma flavolineata
+1415136,10.0,Aleuroctonus vittatus,Aleuroctonus vittata
+1428243,10.0,Trichilogaster esculenta,Trichilogaster esculentus
+1444096,10.0,Macrodasyceras japonicum,Macrodasyceras japonicus
+1462290,10.0,Pylorgus australiensis,Pylorgus australensis
+1455051,10.0,× elyleymus magadanensis,× Elyleymus magadanensis
+1455052,10.0,× elyleymus ungavensis,× Elyleymus ungavensis
+128860,10.0,Ophiothrix suensoni,Ophiothrix suensonii
+152837,40.0,Baerida,Baeriida
+207544,10.0,Tettigidea lateralis,Tettigidea laterale
+194300,10.0,Trimerotropis occidentiloides,Trimerotropis occidentaloides
+264996,10.0,Pseudectroma europaeum,Pseudectroma europaeus
+298851,10.0,Bruchophagus gibbus,Bruchophagus gibba
+378160,20.0,Soerensenella,Sorensenella
+397616,10.0,Subprionomitus ferus,Subprionomitus fera
+559359,10.0,Asplenium bulbiferum x a flaccidum,Asplenium bulbiferum x A flaccidum
+672696,10.0,Leptomastix nigra,Leptomastix nigrum
+681934,10.0,Parechthrodryinus orarius,Tyndarichus orarius
+755022,10.0,Bolivaritettix latipulvilus,Bolivaritettix latipulvillus
+755041,10.0,Bolivaritettix nilgirica,Bolivaritettix nilgiricus
+757328,10.0,Pachynotacris amethystinus,Pachynotacris amethystina
+759328,10.0,Caryanda sanguineoannulata,Caryanda sanguineo-annulata
+754159,20.0,Pouplainiella,Poulainiella
+768049,10.0,Aphytis secundus,Aphytis secunda
+763342,10.0,Nocarodes sanctidavidi,Nocarodes sancti-davidi
+773155,10.0,Pegoscapus aemulus,Pegoscapus aemula
+773235,10.0,Pleistodontes nigriventris,Pleistodontes nigriventre
+773195,10.0,Pegoscapus obscurus,Pegoscapus obscura
+904169,20.0,× gymnanacamptis,× Gymnanacamptis
+894741,10.0,Tachardiaephagus somervillei,Tachardiaephagus somervilli
+964270,10.0,×carpophyma pallida,× Carpophyma pallidum
+1000904,10.0,× calicharis butcheri,× Calicharis butcheri
+1019998,10.0,Comagaria rosea,× Comagaria rosea
+1043062,10.0,× pseudorhiza foelscheorum,× Pseudorhiza foelscheorum
+1067962,5.0,Ovis gmelini ophion,Ovis gmelinii ophion
+1083791,10.0,Blastothrix erythrostetha,Blastothrix erythrostethus
+1127966,10.0,Macroglenes chalybeus,Macroglenes chalybea
+1141893,10.0,Metaphaenodiscus umbilicatus,Metaphaenodiscus umbilicata
+1234694,10.0,Megadytes ecuadorius,Metaxydytes ecuadorius
+1234701,10.0,Megadytes steinheili,Metaxydytes steinheili
+1255151,10.0,× festulolium pseudofallax,× Festulolium pseudofallax
+1271400,10.0,Deiratonotus japonicum,Deiratonotus japonicus
+1283592,10.0,Simyra sincera,Acronicta sincera
+1295188,10.0,Hypercalymnia metaxantha,Acontia metaxantha
+1291962,10.0,Eilema nigripes,Churinga nigripes
+1304144,10.0,Autoba acrapex,Eublemma acrapex
+1338358,10.0,Monomorium trivale,Monomorium triviale
+1350025,10.0,× thinoelymus mucronatus,× Thinoelymus mucronatus
+1399749,10.0,Tetramesa eximia,Tetramesa eximium
+1399512,10.0,Apterolarnaca parvospinus,Apterolarnaca parvospina
+1390248,10.0,Notanisus sexramosus,Notanisus sexramosa
+1434557,10.0,Dolichoderus ghiliani,Dolichoderus ghilianii
+1463340,10.0,Polyrhachis promethius,Polyrhachis prometheus
+1465279,10.0,Agamerion coeruleiventre,Agamerion coeruleiventris
+1455014,10.0,× sorbaronia arsenii,× Sorbaronia arsenii
+1455015,10.0,× sorbaronia jackii,× Sorbaronia jackii
+1455056,10.0,× pseudorhiza nieschalkii,× Pseudorhiza nieschalkii
+215298,10.0,Bolshecapnia milami,Bolschecapnia milami
+264814,10.0,Torymus capillaceus,Torymus capillaceum
+265072,10.0,Pediobius furvus,Pediobius furvum
+299450,10.0,Paracentrobia acuminata,Paracentrobia acuminatum
+298876,10.0,Torymus obscurus,Torymus obscura
+299342,10.0,Omphale obscura,Omphale obscurus
+332338,10.0,Lycalopex griseus,Lycalopex grisea
+437898,10.0,Abisares viridipennis,Abisares viridipenne
+519339,10.0,Epiclerus nomocerus,Epiclerus nomocera
+540178,10.0,Rhinotyphlops scortecci,Rhinotyphlops scorteccii
+578900,10.0,Abutilon austro-africanum,Abutilon austroafricanum
+628027,10.0,Podagrion klugianum,Podagrion klugianus
+649475,10.0,Anasemion inutile,Anasemion inutilis
+672980,10.0,Libanasidus impicta,Libanasidus impictus
+684529,10.0,Podagrion instructum,Podagrion instructus
+761992,10.0,Paratettix freygessnerii,Paratettix frey-gessnerii
+830805,10.0,Paecilaema albisectus,Paecilaemula albisecta
+930216,10.0,Lutosa goeldianus,Lutosa goeldiana
+1040240,10.0,Arescon dimidiata,Arescon dimidiatus
+1067438,27.0,Garthiellinae,Garthiellidae
+1083575,10.0,Adontomerus robustus,Adontomerus robusta
+1083649,10.0,Eurytoma noxialis,Eurytoma noxiale
+1105232,10.0,Cosmocomoidea capitata,Cosmocomoidea capitatus
+1126483,10.0,Lamprotatus truncatus,Lamprotatus truncata
+1136625,10.0,× phyllosasa tranquillans,× Phyllosasa tranquillans
+1198710,10.0,× dactylanthera intermedia,× Dactylanthera intermedia
+1198695,10.0,× orchidactylorhiza helvetica,× Orchidactylorhiza helvetica
+1234688,10.0,Megadytes fallax,Trifurcitus fallax
+1272252,5.0,Urva auropunctata birmanica,Urva auropunctata birmanicus
+1283588,10.0,Simyra confusa,Acronicta confusa
+1298034,10.0,Nanna melanosticta,Arctiananna melanosticta
+1303413,10.0,Dipturus grahamorum,Dipturus grahami
+1339886,10.0,Camptoloma sylviae,Leucopardus sylviae
+1355029,10.0,Deiratonotus cristatum,Deiratonotus cristatus
+1350473,10.0,Eucereon nigripalpis,Eucereon nigripalpalis
+1368189,10.0,Celiptera cometophora,Celiptera cometephora
+1416701,20.0,Cyanicula caerulea × pheladenia deformis,Cyanicula caerulea × Pheladenia deformis
+1421947,10.0,Paralithosia nanlingica,Microlithosia nanlingica
+1437029,10.0,Phyrama laticolle,Phyrama laticollis
+1446353,10.0,× sorbocotoneaster pozdnjakovii,× Sorbocotoneaster pozdnjakovii
+27360,10.0,Oedipina complex,Oedipina komplex
+24707,10.0,Leptobrachium pullum,Leptobrachium pullus
+215302,10.0,Bolshecapnia spenceri,Bolschecapnia spenceri
+227509,10.0,Perlinodes aurea,Perlinodes aureus
+264986,10.0,Copidosomopsis plethoricus,Copidosoma plethoricus
+264837,10.0,Zagrammosoma multilineatum,Zagrammosoma multilineatus
+299464,10.0,Torymus crassus,Torymus crassa
+299329,10.0,Neochrysocharis formosa,Neochrysocharis formosus
+299222,10.0,Conura femorata,Conura femoratus
+311233,10.0,Anasaitis canosa,Anasaitis canosus
+398289,10.0,Trichomalopsis hemiptera,Trichomalopsis hemipterus
+465769,10.0,× cairanas,× Cairanas
+491598,20.0,× juncotrichia,× Juncotrichia
+622482,10.0,Calidris fuscicollis × calidris alpina,Calidris fuscicollis × Calidris alpina
+659315,10.0,Copidosoma varicorne,Copidosoma varicornis
+685976,10.0,Pseudectroma signatum,Pseudectroma signata
+687971,10.0,Ruandella tertia,Ruandella tertius
+686696,10.0,Pteroptrix incola,Pteroptrix incolus
+663857,10.0,Elisabethiella stuckenbergi,Elisabethiella stueckenbergi
+754902,10.0,Thymochares simplicior,Thymochares simplicius
+751108,10.0,Pteroptrix dimidiata,Pteroptrix dimidiatus
+751106,10.0,Pteroptrix conifuniculata,Pteroptrix conifuniculatus
+761264,10.0,Epigrypa bispinosus,Epigrypa bispinosa
+895022,10.0,Trichogramma jezoense,Trichogramma jezoensis
+893626,20.0,× malvalthaea,× Malvalthaea
+915842,10.0,Asplenium flaccidum x a hookerianum,Asplenium flaccidum x A hookerianum
+925968,10.0,Urva vitticolla,Urva vitticollis
+949104,10.0,Torymus californicus,Torymus californica
+978454,10.0,Leptoteratura albicornis,Leptoteratura albicorne
+1040839,30.0,Lagynidae,Lagynusidae
+1039265,10.0,× serapicamptis anatolica,× Serapicamptis anatolica
+1083604,10.0,Tetramesa rossica,Tetramesa rossicum
+1083609,10.0,Tetramesa phyllostachitis,Tetramesa phyllotachitis
+1083640,10.0,Eurytoma verticillata,Eurytoma verticillatum
+1083476,10.0,Coelopisthia extenta,Coelopisthia extentus
+1198694,10.0,× orchidactylorhiza guestphalica,× Orchidactylorhiza guestphalica
+1198696,10.0,× orchidactylorhiza jeanpertii,× Orchidactylorhiza jeanpertii
+1198711,10.0,× dactylanthera martysiensis,× Dactylanthera martysiensis
+1234695,10.0,Megadytes flohri,Metaxydytes flohri
+1234689,10.0,Megadytes gravidus,Trifurcitus gravidus
+1235303,10.0,Ischnosiphon hirsuta,Ischnosiphon hirsutus
+1262411,10.0,Lygephila moellendorfi,Lygephila moellendorffi
+1261005,10.0,Manulea flavociliata,Eilema flavociliata
+1275305,10.0,Agrotis rebustana,Agrotis robustana
+1272235,5.0,Urva vitticolla inornata,Urva vitticollis inornatus
+1277915,10.0,× pyraria irregularis,× Pyraria irregularis
+1296273,10.0,Hypercalymnia transducta,Acontia transducta
+1291864,10.0,Paralithosia honei,Microlithosia honei
+1337798,10.0,Eoxizicus duplum,Xizicus duplum
+1334371,10.0,Eriopyga mesostigata,Eriopyga mesostrigata
+1341153,10.0,Apelioma pteromalinum,Apelioma pteromalinus
+1350462,10.0,Eucereon leopardinus,Eucereon leopardinum
+1407346,5.0,Anthyllis hermanniae ischnusae,Anthyllis hermanniae ichnusae
+1389785,10.0,Aphelinoidea neomexicana,Aphelinoidea neomexicanus
+1471915,10.0,Eupelmus aseculatus,Eupelmus aseculata
+1475342,10.0,Ctenophorus tunluki,Ctenophorus tuniluki
+1463432,10.0,Polyrhachis noma,Polyrhachis nomo
+1469050,10.0,Egnatioides tourzaenis,Egnatioides tourzaensis
+1458170,10.0,Bowie teenagewildllife,Bowie teenagewildlife
+1455055,10.0,× pseudorhiza foelscheorum,× Pseudorhiza foelscheorum
