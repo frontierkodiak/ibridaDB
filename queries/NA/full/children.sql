@@ -58,10 +58,8 @@ SET name = t2.name
 FROM taxa t2  
 WHERE t1.taxon_id = t2.taxon_id;
 VACUUM ANALYZE NAfull_arthropoda_min50all_cap4000_photos;
--- Set variable for the \copy command
-\set arthropoda_copy_command '\\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_arthropoda_min50all_cap4000_photos) TO \'/exports/iNat-June2023/NAfull_arthropoda_min50all_cap4000_photos.csv\' DELIMITER \',\' CSV HEADER'
--- Execute the \copy command
-\gexec
+
+
 
 --- AVES
 CREATE TABLE NAfull_aves_min50all_cap4000 AS (
@@ -123,11 +121,6 @@ SET name = t2.name
 FROM taxa t2  
 WHERE t1.taxon_id = t2.taxon_id;
 VACUUM ANALYZE NAfull_aves_min50all_cap4000_photos;
--- Set variable for the aves_copy_command
-\set aves_copy_command '\\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_aves_min50all_cap4000_photos) TO \'/exports/iNat-June2023/NAfull_aves_min50all_cap4000_photos.csv\' DELIMITER \',\' CSV HEADER'
--- Execute the \copy command
-\gexec
-
 --- REPTILIA
 CREATE TABLE NAfull_reptilia_min50all_cap4000 AS (
     SELECT  
@@ -188,10 +181,6 @@ SET name = t2.name
 FROM taxa t2  
 WHERE t1.taxon_id = t2.taxon_id;
 VACUUM ANALYZE NAfull_reptilia_min50all_cap4000_photos;
--- Set variable for the reptilia_copy_command
-\set reptilia_copy_command '\\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_reptilia_min50all_cap4000_photos) TO \'/exports/iNat-June2023/NAfull_reptilia_min50all_cap4000_photos.csv\' DELIMITER \',\' CSV HEADER'
--- Execute the \copy command
-\gexec
 
 --- MAMMALIA
 CREATE TABLE NAfull_mammalia_min50all_cap4000 AS (
@@ -253,10 +242,7 @@ SET name = t2.name
 FROM taxa t2  
 WHERE t1.taxon_id = t2.taxon_id;
 VACUUM ANALYZE NAfull_mammalia_min50all_cap4000_photos;
--- Set variable for the mammalia_copy_command
-\set mammalia_copy_command '\\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_mammalia_min50all_cap4000_photos) TO \'/exports/iNat-June2023/NAfull_mammalia_min50all_cap4000_photos.csv\' DELIMITER \',\' CSV HEADER'
--- Execute the \copy command
-\gexec
+
 
 --- AMPHIBIA
 CREATE TABLE NAfull_amphibia_min50all_cap4000 AS (
@@ -318,10 +304,7 @@ SET name = t2.name
 FROM taxa t2  
 WHERE t1.taxon_id = t2.taxon_id;
 VACUUM ANALYZE NAfull_amphibia_min50all_cap4000_photos;
--- Set variable for the amphibia_copy_command
-\set amphibia_copy_command '\\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_amphibia_min50all_cap4000_photos) TO \'/exports/iNat-June2023/NAfull_amphibia_min50all_cap4000_photos.csv\' DELIMITER \',\' CSV HEADER'
--- Execute the \copy command
-\gexec
+
 
 --- ANGIOSPERMAE
 CREATE TABLE NAfull_angiospermae_min50all_cap4000 AS (
@@ -383,7 +366,10 @@ SET name = t2.name
 FROM taxa t2  
 WHERE t1.taxon_id = t2.taxon_id;
 VACUUM ANALYZE NAfull_angiospermae_min50all_cap4000_photos;
--- Set variable for the angiospermae_copy_command
-\set angiospermae_copy_command '\\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_angiospermae_min50all_cap4000_photos) TO \'/exports/iNat-June2023/NAfull_angiospermae_min50all_cap4000_photos.csv\' DELIMITER \',\' CSV HEADER'
--- Execute the \copy command
-\gexec
+
+-- \copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_arthropoda_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_arthropoda_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
+\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_aves_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_aves_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
+\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_reptilia_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_reptilia_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
+\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_mammalia_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_mammalia_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
+\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_amphibia_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_amphibia_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
+\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_angiospermae_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_angiospermae_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
