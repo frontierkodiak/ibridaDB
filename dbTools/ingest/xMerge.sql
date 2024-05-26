@@ -1,3 +1,4 @@
+
 -- Start transaction
 BEGIN;
 
@@ -63,14 +64,8 @@ CREATE INDEX temp_index_temp_observers_observer_id ON temp_observers (observer_i
 ALTER TABLE temp_observations ADD CONSTRAINT temp_observations_pkey PRIMARY KEY (observation_uuid);
 ALTER TABLE temp_photos ADD CONSTRAINT temp_photos_pkey PRIMARY KEY (photo_uuid, photo_id, position, observation_uuid);
 ALTER TABLE temp_observers ADD CONSTRAINT temp_observers_pkey PRIMARY KEY (observer_id);
-
--- Update the 'origin' for all tables and calculate 'geom' for observations
-UPDATE temp_observations SET
-    origin = 'iNat-May2024',
-    geom = ST_GeomFromText('POINT(' || longitude || ' ' || latitude || ')', 4326);
-
-UPDATE temp_photos SET origin = 'iNat-May2024';
-UPDATE temp_observers SET origin = 'iNat-May2024';
+-- Commit the transaction before running parallel updates
+COMMIT;
 
 -- Vacuum and analyze the tables
 VACUUM ANALYZE observations;
@@ -81,6 +76,12 @@ VACUUM ANALYZE temp_observations;
 VACUUM ANALYZE temp_photos;
 VACUUM ANALYZE temp_observers;
 
+-- Call the bash script to run updates in parallel
+\! /tool/ingest/xMerge.sh
+
+-- Start a new transaction for merging and reindexing
+BEGIN;
+
 -- Merge observations
 INSERT INTO observations
 SELECT * FROM temp_observations
@@ -89,7 +90,7 @@ ON CONFLICT (observation_uuid) DO NOTHING;
 -- Merge photos
 INSERT INTO photos
 SELECT * FROM temp_photos
-ON CONFLICT (photo_uuid, photo_id, position) DO NOTHING;
+ON CONFLICT (photo_uuid, photo_id, position, observation_uuid) DO NOTHING;
 
 -- Merge observers
 INSERT INTO observers
@@ -99,10 +100,10 @@ ON CONFLICT (observer_id) DO NOTHING;
 -- Commit the transaction if all operations succeed
 COMMIT;
 
--- Drop temporary tables if transaction is successful
-DROP TABLE temp_observations;
-DROP TABLE temp_photos;
-DROP TABLE temp_observers;
+-- -- Drop temporary tables if transaction is successful
+-- DROP TABLE temp_observations;
+-- DROP TABLE temp_photos;
+-- DROP TABLE temp_observers;
 
 -- Reindex master tables
 REINDEX TABLE observations;

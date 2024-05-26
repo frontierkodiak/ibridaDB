@@ -117,6 +117,7 @@ UPDATE observations SET origin = 'iNat-June2023';
 UPDATE photos SET origin = 'iNat-June2023';
 
 CREATE INDEX index_taxa_origins ON taxa USING GIN (to_tsvector('simple', origin));
+CREATE INDEX index_taxa_name ON taxa USING GIN (to_tsvector('simple', name));
 CREATE INDEX index_observers_origins ON observers USING GIN (to_tsvector('simple', origin));
 CREATE INDEX index_observations_origins ON observations USING GIN (to_tsvector('simple', origin));
 CREATE INDEX index_photos_origins ON photos USING GIN (to_tsvector('simple', origin));
