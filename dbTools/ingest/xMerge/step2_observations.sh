@@ -1,19 +1,21 @@
 #!/bin/bash
 
 # Define number of parallel processes
-NUM_PROCESSES=4
+NUM_PROCESSES=8
+
+# Define base directory for the scripts
+BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/ingest/xMerge"
 
 # Function to run the update in parallel
 run_update() {
   local OFFSET=$1
   local LIMIT=$2
-  docker exec -ti ibrida psql -U postgres -c "
-  UPDATE temp_observations
-  SET origin = 'iNat-May2024',
-      geom = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)
+  docker exec ibrida psql -U postgres -c "
+  UPDATE int_observations
+  SET geom = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::public.geometry
   WHERE observation_uuid IN (
     SELECT observation_uuid
-    FROM temp_observations
+    FROM int_observations
     ORDER BY observation_uuid
     OFFSET ${OFFSET}
     LIMIT ${LIMIT}
@@ -21,7 +23,7 @@ run_update() {
 }
 
 # Calculate total rows and batch size
-TOTAL_ROWS=$(docker exec -ti ibrida psql -U postgres -t -c "SELECT COUNT(*) FROM temp_observations;")
+TOTAL_ROWS=$(docker exec ibrida psql -U postgres -t -c "SELECT COUNT(*) FROM int_observations;")
 BATCH_SIZE=$((TOTAL_ROWS / NUM_PROCESSES))
 
 # Run updates in parallel

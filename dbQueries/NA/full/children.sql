@@ -1,3 +1,16 @@
+DROP TABLE IF EXISTS NAfull_arthropoda_min50all_cap4000;
+DROP TABLE IF EXISTS NAfull_arthropoda_min50all_cap4000_photos;
+DROP TABLE IF EXISTS NAfull_aves_min50all_cap4000;
+DROP TABLE IF EXISTS NAfull_aves_min50all_cap4000_photos;
+DROP TABLE IF EXISTS NAfull_mammalia_min50all_cap4000;
+DROP TABLE IF EXISTS NAfull_mammalia_min50all_cap4000_photos;
+DROP TABLE IF EXISTS NAfull_reptilia_min50all_cap4000;
+DROP TABLE IF EXISTS NAfull_reptilia_min50all_cap4000_photos;
+DROP TABLE IF EXISTS NAfull_amphibia_min50all_cap4000;
+DROP TABLE IF EXISTS NAfull_amphibia_min50all_cap4000_photos;
+DROP TABLE IF EXISTS NAfull_angiospermae_min50all_cap4000;
+DROP TABLE IF EXISTS NAfull_angiospermae_min50all_cap4000_photos;
+
 --- ARTHROPODA
 CREATE TABLE NAfull_arthropoda_min50all_cap4000 AS (
     SELECT  
@@ -9,12 +22,13 @@ CREATE TABLE NAfull_arthropoda_min50all_cap4000 AS (
         taxon_id, 
         quality_grade,  
         observed_on,
+        origin,
         ROW_NUMBER() OVER (
             PARTITION BY taxon_id 
             ORDER BY RANDOM()
         ) as rn
     FROM
-        NA_min50all_taxa_obs
+        NAfull_min50all_taxa_obs
     WHERE
         taxon_id IN (
             SELECT taxon_id
@@ -23,7 +37,7 @@ CREATE TABLE NAfull_arthropoda_min50all_cap4000 AS (
         )
         AND taxon_id IN (
             SELECT taxon_id
-            FROM NA_min50all_taxa_obs
+            FROM NAfull_min50all_taxa_obs
             GROUP BY taxon_id
             HAVING COUNT(*) >= 50
         )
@@ -32,7 +46,7 @@ DELETE FROM NAfull_arthropoda_min50all_cap4000 WHERE rn > 4000;
 CREATE TABLE NAfull_arthropoda_min50all_cap4000_photos AS
 SELECT  
     t1.observation_uuid, t1.latitude, t1.longitude, t1.positional_accuracy, t1.taxon_id,  
-    t1.observed_on, t2.photo_uuid, t2.photo_id, t2.extension, t2.width, t2.height, t2.position
+    t1.observed_on, t1.origin, t2.photo_uuid, t2.photo_id, t2.extension, t2.width, t2.height, t2.position
 FROM
     NAfull_arthropoda_min50all_cap4000 t1
     JOIN photos t2
@@ -59,8 +73,6 @@ FROM taxa t2
 WHERE t1.taxon_id = t2.taxon_id;
 VACUUM ANALYZE NAfull_arthropoda_min50all_cap4000_photos;
 
-
-
 --- AVES
 CREATE TABLE NAfull_aves_min50all_cap4000 AS (
     SELECT  
@@ -72,12 +84,13 @@ CREATE TABLE NAfull_aves_min50all_cap4000 AS (
         taxon_id, 
         quality_grade,  
         observed_on,
+        origin,
         ROW_NUMBER() OVER (
             PARTITION BY taxon_id 
             ORDER BY RANDOM()
         ) as rn
     FROM
-        NA_min50all_taxa_obs
+        NAfull_min50all_taxa_obs
     WHERE
         taxon_id IN (
             SELECT taxon_id
@@ -86,7 +99,7 @@ CREATE TABLE NAfull_aves_min50all_cap4000 AS (
         )
         AND taxon_id IN (
             SELECT taxon_id
-            FROM NA_min50all_taxa_obs
+            FROM NAfull_min50all_taxa_obs
             GROUP BY taxon_id
             HAVING COUNT(*) >= 50
         )
@@ -95,7 +108,7 @@ DELETE FROM NAfull_aves_min50all_cap4000 WHERE rn > 4000;
 CREATE TABLE NAfull_aves_min50all_cap4000_photos AS
 SELECT  
     t1.observation_uuid, t1.latitude, t1.longitude, t1.positional_accuracy, t1.taxon_id,  
-    t1.observed_on, t2.photo_uuid, t2.photo_id, t2.extension, t2.width, t2.height, t2.position
+    t1.observed_on, t1.origin, t2.photo_uuid, t2.photo_id, t2.extension, t2.width, t2.height, t2.position
 FROM
     NAfull_aves_min50all_cap4000 t1
     JOIN photos t2
@@ -121,6 +134,7 @@ SET name = t2.name
 FROM taxa t2  
 WHERE t1.taxon_id = t2.taxon_id;
 VACUUM ANALYZE NAfull_aves_min50all_cap4000_photos;
+
 --- REPTILIA
 CREATE TABLE NAfull_reptilia_min50all_cap4000 AS (
     SELECT  
@@ -132,12 +146,13 @@ CREATE TABLE NAfull_reptilia_min50all_cap4000 AS (
         taxon_id, 
         quality_grade,  
         observed_on,
+        origin,
         ROW_NUMBER() OVER (
             PARTITION BY taxon_id 
             ORDER BY RANDOM()
         ) as rn
     FROM
-        NA_min50all_taxa_obs
+        NAfull_min50all_taxa_obs
     WHERE
         taxon_id IN (
             SELECT taxon_id
@@ -146,7 +161,7 @@ CREATE TABLE NAfull_reptilia_min50all_cap4000 AS (
         )
         AND taxon_id IN (
             SELECT taxon_id
-            FROM NA_min50all_taxa_obs
+            FROM NAfull_min50all_taxa_obs
             GROUP BY taxon_id
             HAVING COUNT(*) >= 50
         )
@@ -155,7 +170,7 @@ DELETE FROM NAfull_reptilia_min50all_cap4000 WHERE rn > 4000;
 CREATE TABLE NAfull_reptilia_min50all_cap4000_photos AS
 SELECT  
     t1.observation_uuid, t1.latitude, t1.longitude, t1.positional_accuracy, t1.taxon_id,  
-    t1.observed_on, t2.photo_uuid, t2.photo_id, t2.extension, t2.width, t2.height, t2.position
+    t1.observed_on, t1.origin, t2.photo_uuid, t2.photo_id, t2.extension, t2.width, t2.height, t2.position
 FROM
     NAfull_reptilia_min50all_cap4000 t1
     JOIN photos t2
@@ -193,12 +208,13 @@ CREATE TABLE NAfull_mammalia_min50all_cap4000 AS (
         taxon_id, 
         quality_grade,  
         observed_on,
+        origin,
         ROW_NUMBER() OVER (
             PARTITION BY taxon_id 
             ORDER BY RANDOM()
         ) as rn
     FROM
-        NA_min50all_taxa_obs
+        NAfull_min50all_taxa_obs
     WHERE
         taxon_id IN (
             SELECT taxon_id
@@ -207,7 +223,7 @@ CREATE TABLE NAfull_mammalia_min50all_cap4000 AS (
         )
         AND taxon_id IN (
             SELECT taxon_id
-            FROM NA_min50all_taxa_obs
+            FROM NAfull_min50all_taxa_obs
             GROUP BY taxon_id
             HAVING COUNT(*) >= 50
         )
@@ -216,7 +232,7 @@ DELETE FROM NAfull_mammalia_min50all_cap4000 WHERE rn > 4000;
 CREATE TABLE NAfull_mammalia_min50all_cap4000_photos AS
 SELECT  
     t1.observation_uuid, t1.latitude, t1.longitude, t1.positional_accuracy, t1.taxon_id,  
-    t1.observed_on, t2.photo_uuid, t2.photo_id, t2.extension, t2.width, t2.height, t2.position
+    t1.observed_on, t1.origin, t2.photo_uuid, t2.photo_id, t2.extension, t2.width, t2.height, t2.position
 FROM
     NAfull_mammalia_min50all_cap4000 t1
     JOIN photos t2
@@ -243,7 +259,6 @@ FROM taxa t2
 WHERE t1.taxon_id = t2.taxon_id;
 VACUUM ANALYZE NAfull_mammalia_min50all_cap4000_photos;
 
-
 --- AMPHIBIA
 CREATE TABLE NAfull_amphibia_min50all_cap4000 AS (
     SELECT  
@@ -255,12 +270,13 @@ CREATE TABLE NAfull_amphibia_min50all_cap4000 AS (
         taxon_id, 
         quality_grade,  
         observed_on,
+        origin,
         ROW_NUMBER() OVER (
             PARTITION BY taxon_id 
             ORDER BY RANDOM()
         ) as rn
     FROM
-        NA_min50all_taxa_obs
+        NAfull_min50all_taxa_obs
     WHERE
         taxon_id IN (
             SELECT taxon_id
@@ -269,7 +285,7 @@ CREATE TABLE NAfull_amphibia_min50all_cap4000 AS (
         )
         AND taxon_id IN (
             SELECT taxon_id
-            FROM NA_min50all_taxa_obs
+            FROM NAfull_min50all_taxa_obs
             GROUP BY taxon_id
             HAVING COUNT(*) >= 50
         )
@@ -278,7 +294,7 @@ DELETE FROM NAfull_amphibia_min50all_cap4000 WHERE rn > 4000;
 CREATE TABLE NAfull_amphibia_min50all_cap4000_photos AS
 SELECT  
     t1.observation_uuid, t1.latitude, t1.longitude, t1.positional_accuracy, t1.taxon_id,  
-    t1.observed_on, t2.photo_uuid, t2.photo_id, t2.extension, t2.width, t2.height, t2.position
+    t1.observed_on, t1.origin, t2.photo_uuid, t2.photo_id, t2.extension, t2.width, t2.height, t2.position
 FROM
     NAfull_amphibia_min50all_cap4000 t1
     JOIN photos t2
@@ -305,7 +321,6 @@ FROM taxa t2
 WHERE t1.taxon_id = t2.taxon_id;
 VACUUM ANALYZE NAfull_amphibia_min50all_cap4000_photos;
 
-
 --- ANGIOSPERMAE
 CREATE TABLE NAfull_angiospermae_min50all_cap4000 AS (
     SELECT  
@@ -317,12 +332,13 @@ CREATE TABLE NAfull_angiospermae_min50all_cap4000 AS (
         taxon_id, 
         quality_grade,  
         observed_on,
+        origin,
         ROW_NUMBER() OVER (
             PARTITION BY taxon_id 
             ORDER BY RANDOM()
         ) as rn
     FROM
-        NA_min50all_taxa_obs
+        NAfull_min50all_taxa_obs
     WHERE
         taxon_id IN (
             SELECT taxon_id
@@ -331,7 +347,7 @@ CREATE TABLE NAfull_angiospermae_min50all_cap4000 AS (
         )
         AND taxon_id IN (
             SELECT taxon_id
-            FROM NA_min50all_taxa_obs
+            FROM NAfull_min50all_taxa_obs
             GROUP BY taxon_id
             HAVING COUNT(*) >= 50
         )
@@ -340,7 +356,7 @@ DELETE FROM NAfull_angiospermae_min50all_cap4000 WHERE rn > 4000;
 CREATE TABLE NAfull_angiospermae_min50all_cap4000_photos AS
 SELECT  
     t1.observation_uuid, t1.latitude, t1.longitude, t1.positional_accuracy, t1.taxon_id,  
-    t1.observed_on, t2.photo_uuid, t2.photo_id, t2.extension, t2.width, t2.height, t2.position
+    t1.observed_on, t1.origin, t2.photo_uuid, t2.photo_id, t2.extension, t2.width, t2.height, t2.position
 FROM
     NAfull_angiospermae_min50all_cap4000 t1
     JOIN photos t2
@@ -367,9 +383,9 @@ FROM taxa t2
 WHERE t1.taxon_id = t2.taxon_id;
 VACUUM ANALYZE NAfull_angiospermae_min50all_cap4000_photos;
 
--- \copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_arthropoda_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_arthropoda_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
--- \copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_aves_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_aves_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
--- \copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_reptilia_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_reptilia_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
--- \copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_mammalia_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_mammalia_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
--- \copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_amphibia_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_amphibia_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
-\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_angiospermae_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_angiospermae_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
+-- \copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, origin, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_arthropoda_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_arthropoda_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
+-- \copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, origin, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_aves_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_aves_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
+-- \copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, origin, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_reptilia_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_reptilia_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
+-- \copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, origin, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_mammalia_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_mammalia_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
+-- \copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, origin, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_amphibia_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_amphibia_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;
+-- \copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, origin, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM NAfull_angiospermae_min50all_cap4000_photos) TO '/exports/iNat-June2023/NAfull_angiospermae_min50all_cap4000_photos.csv' DELIMITER ',' CSV HEADER;

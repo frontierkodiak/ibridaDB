@@ -6,7 +6,7 @@
 ------ Filter out contested identifications: exclude species-level obs that are not RG.
 
 
---------- NAfull_min50all_taxa ----------------
+-- Create table NAfull_min50all_taxa containing distinct taxon_id that meets certain criteria.
 CREATE TABLE NAfull_min50all_taxa AS
 SELECT  
     DISTINCT observations.taxon_id  
@@ -29,17 +29,16 @@ WHERE
         GROUP BY observations.taxon_id
         HAVING COUNT(observation_uuid) >= 50
     );
---- Create table NAfull_min50all_taxa_obs containing all observations where taxon_id is in NAfull_min50all_taxa table.
+
+-- Create table NAfull_min50all_taxa_obs containing all observations where taxon_id is in NAfull_min50all_taxa table, including the 'origin' column.
 CREATE TABLE NAfull_min50all_taxa_obs AS
 SELECT  
     observation_uuid, observer_id, latitude, longitude, positional_accuracy, taxon_id, quality_grade,  
-    observed_on
+    observed_on, origin
 FROM
     observations
 WHERE
     taxon_id IN (
         SELECT taxon_id
         FROM NAfull_min50all_taxa
-    )
-    ;
---------------------------------------------------------
+    );
