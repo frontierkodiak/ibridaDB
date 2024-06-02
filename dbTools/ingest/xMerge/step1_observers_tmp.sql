@@ -2,7 +2,7 @@
 -- Start transaction
 BEGIN;
 
--- Drop table if it exists
+-- -- Drop table if it exists
 DROP TABLE IF EXISTS int_observers;
 
 -- Create intermediate table for observers

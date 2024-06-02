@@ -3,7 +3,7 @@
 BEGIN;
 
 -- -- Drop table if it exists
--- DROP TABLE IF EXISTS int_observers;
+DROP TABLE IF EXISTS int_observers;
 
 -- Create intermediate table for observers
 CREATE TABLE int_observers (

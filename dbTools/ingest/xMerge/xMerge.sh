@@ -30,6 +30,11 @@ docker exec ibrida psql -U postgres -c "\d int_observations"
 docker exec ibrida psql -U postgres -c "\d int_photos"
 docker exec ibrida psql -U postgres -c "\d int_observers"
 
+# Clean up temporary SQL scripts
+rm $BASE_DIR/step1_observations_tmp.sql
+rm $BASE_DIR/step1_photos_tmp.sql
+rm $BASE_DIR/step1_observers_tmp.sql
+
 # Run the parallel update script
 echo "Calculating geometry..."
 $BASE_DIR/step2_observations.sh
@@ -50,9 +55,6 @@ wait
 echo "Final SQL scripts completed."
 
 # Clean up temporary SQL scripts
-rm $BASE_DIR/step1_observations_tmp.sql
-rm $BASE_DIR/step1_photos_tmp.sql
-rm $BASE_DIR/step1_observers_tmp.sql
 rm $BASE_DIR/step3_observations_tmp.sql
 rm $BASE_DIR/step3_photos_tmp.sql
 rm $BASE_DIR/step3_observers_tmp.sql

@@ -2,7 +2,7 @@
 -- Start transaction
 BEGIN;
 
--- Drop table if it exists
+-- -- Drop table if it exists
 DROP TABLE IF EXISTS int_photos;
 
 -- Create intermediate table for photos

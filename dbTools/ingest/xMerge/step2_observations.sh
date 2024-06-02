@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define number of parallel processes
-NUM_PROCESSES=8
+NUM_PROCESSES=24
 
 # Define base directory for the scripts
 BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/ingest/xMerge"
