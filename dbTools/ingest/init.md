@@ -139,3 +139,14 @@ ADD CONSTRAINT observers_pkey PRIMARY KEY (observer_id);
 -- Add primary key to taxa
 ALTER TABLE taxa
 ADD CONSTRAINT taxa_pkey PRIMARY KEY (taxon_id);
+
+
+--- Inspect
+----- See primary key definition
+SELECT conname AS constraint_name, 
+       pg_get_constraintdef(c.oid) AS constraint_definition
+FROM   pg_constraint c
+JOIN   pg_namespace n ON n.oid = c.connamespace
+JOIN   pg_class cl ON cl.oid = c.conrelid
+WHERE  cl.relname = 'photos' AND c.contype = 'p';
+------- Why photos table "position" col surrounded by quotes?
