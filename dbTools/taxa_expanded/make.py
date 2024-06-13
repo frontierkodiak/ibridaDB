@@ -257,12 +257,12 @@ if __name__ == "__main__":
     parser.add_argument('--csv_path', type=str, default='/pond/Polli/Assets/Taxonomy/expanded_taxa.csv', help='Path to the input CSV file.')
     parser.add_argument('--db_url', type=str, default='postgresql://postgres:password@localhost:5432/postgres', help='Database connection URL.')
     parser.add_argument('--drop_existing', action='store_true', help='Drop existing rows in the taxa_expanded table before adding new rows.')
+    parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
 
     args = parser.parse_args()
     
-    debug = True
-    if debug:
+    if args.debug:
         args.db_url = "mysql+pymysql://polli:polli@localhost:3307/taxaDB"
         args.drop_existing = True
     
-    main(args.csv_path, args.db_url, args.drop_existing)
+    main(args.csv_path, args.db_url, args.drop_existing, args.debug)
