@@ -15,23 +15,21 @@ export EXCLUDE_BEFORE
 
 # Create temporary SQL scripts with substituted variables
 echo "Creating step1 SQL temp scripts..."
-# sed "s/:source/$SOURCE/g; s/:origins/$ORIGINS/g; s/:exclude_before/$EXCLUDE_BEFORE/g" $BASE_DIR/step1_observations.sql > $BASE_DIR/step1_observations_tmp.sql
+sed "s/:source/$SOURCE/g; s/:origins/$ORIGINS/g; s/:exclude_before/$EXCLUDE_BEFORE/g" $BASE_DIR/step1_observations.sql > $BASE_DIR/step1_observations_tmp.sql
 sed "s/:origins/$ORIGINS/g" $BASE_DIR/step1_pt1_photos.sql > $BASE_DIR/step1_pt1_photos_tmp.sql
 sed "s/:origins/$ORIGINS/g" $BASE_DIR/step1_pt2_photos.sql > $BASE_DIR/step1_pt2_photos_tmp.sql
-# sed "s/:source/$SOURCE/g; s/:origins/$ORIGINS/g" $BASE_DIR/step1_observers.sql > $BASE_DIR/step1_observers_tmp.sql
+sed "s/:source/$SOURCE/g; s/:origins/$ORIGINS/g" $BASE_DIR/step1_observers.sql > $BASE_DIR/step1_observers_tmp.sql
 
 # Run the initial SQL scripts in parallel with variable substitution
 echo "Running step1 observations and observers SQL scripts..."
-# docker exec ibrida psql -U postgres -f /tool/ingest/xMergeQuick/step1_observations_tmp.sql &
-# docker exec ibrida psql -U postgres -f /tool/ingest/xMergeQuick/step1_observers_tmp.sql &
-# wait
+docker exec ibrida psql -U postgres -f /tool/ingest/xMergeQuick/step1_observations_tmp.sql &
+docker exec ibrida psql -U postgres -f /tool/ingest/xMergeQuick/step1_pt1_photos_tmp.sql &
+docker exec ibrida psql -U postgres -f /tool/ingest/xMergeQuick/step1_observers_tmp.sql &
+wait
 echo "Completed all step1 observations and observers SQL scripts."
-
-# Run the initial SQL script for photos
-echo "Running step1_pt1_photos SQL script..."
-docker exec ibrida psql -U postgres -f /tool/ingest/xMergeQuick/step1_pt1_photos_tmp.sql
 echo "Completed step1_pt1_photos SQL script."
 
+# Run the initial SQL script for photos
 echo "Running step1_pt2_photos SQL script..."
 docker exec ibrida psql -U postgres -f /tool/ingest/xMergeQuick/step1_pt2_photos_tmp.sql
 echo "Completed step1_pt2_photos SQL script."
@@ -43,10 +41,10 @@ docker exec ibrida psql -U postgres -c "\d int_photos"
 docker exec ibrida psql -U postgres -c "\d int_observers"
 
 # Clean up temporary SQL scripts
-# rm $BASE_DIR/step1_observations_tmp.sql
+rm $BASE_DIR/step1_observations_tmp.sql
 rm $BASE_DIR/step1_pt1_photos_tmp.sql
 rm $BASE_DIR/step1_pt2_photos_tmp.sql
-# rm $BASE_DIR/step1_observers_tmp.sql
+rm $BASE_DIR/step1_observers_tmp.sql
 echo "Tables created successfully, continuing with step 2..."
 
 # Run the parallel update script
