@@ -10,6 +10,3 @@ ON CONFLICT (observer_id) DO NOTHING;
 
 -- Commit the transaction
 COMMIT;
-
--- Reindex observers table
-REINDEX TABLE observers;

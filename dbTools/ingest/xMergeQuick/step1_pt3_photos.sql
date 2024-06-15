@@ -1,14 +1,4 @@
--- step1_photos.sql part 2
-
--- Start transaction 2
-BEGIN;
-
--- Delete photos that do not have a corresponding observation
-DELETE FROM int_photos_partial
-WHERE observation_uuid NOT IN (SELECT observation_uuid FROM int_observations_partial);
-
--- Commit transaction 2
-COMMIT;
+-- step1_pt3_photos.sql
 
 -- Start transaction 3
 BEGIN;

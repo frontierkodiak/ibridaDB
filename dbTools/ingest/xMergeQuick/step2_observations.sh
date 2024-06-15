@@ -1,7 +1,10 @@
 #!/bin/bash
 
-# Define number of parallel processes
-NUM_PROCESSES=8
+# step2_observations.sh
+# This script updates the observations table with the geom column
+
+# Accept NUM_PROCESSES from the command line
+NUM_PROCESSES=$1
 
 # Define base directory for the scripts
 BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/ingest/xMerge"

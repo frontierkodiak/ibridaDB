@@ -1,4 +1,5 @@
--- step1_photos.sql part 1
+-- step1_pt1_photos.sql
+
 -- Start transaction 1
 BEGIN;
 
