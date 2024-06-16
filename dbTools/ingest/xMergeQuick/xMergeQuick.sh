@@ -26,6 +26,11 @@ if [ -z "$NUM_PROCESSES" ] || [ "$NUM_PROCESSES" -eq 0 ]; then
   NUM_PROCESSES=16
 fi
 
+# Pre-cleanup: Ensure no existing types or tables conflict
+echo "Pre-cleanup: Ensuring no existing types or tables conflict..."
+docker exec ibrida psql -U postgres -c "DROP TYPE IF EXISTS int_photos_partial CASCADE;"
+docker exec ibrida psql -U postgres -c "DROP TABLE IF EXISTS int_photos_partial CASCADE;"
+
 # Create temporary SQL scripts with substituted variables
 echo "Creating step1 SQL temp scripts..."
 # Only create temporary scripts for steps that are being run

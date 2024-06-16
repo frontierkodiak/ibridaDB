@@ -2,9 +2,6 @@
 -- Start transaction
 BEGIN;
 
--- Drop table if it exists
-DROP TABLE IF EXISTS int_observations_partial;
-
 -- Create intermediate table for observations
 CREATE TABLE int_observations_partial (
     observation_uuid uuid NOT NULL,

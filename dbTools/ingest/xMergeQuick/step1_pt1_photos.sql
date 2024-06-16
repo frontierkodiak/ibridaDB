@@ -3,9 +3,6 @@
 -- Start transaction 1
 BEGIN;
 
--- Drop table if it exists
-DROP TABLE IF EXISTS int_photos_partial;
-
 -- Create intermediate table for photos
 CREATE TABLE int_photos_partial (
     photo_uuid uuid NOT NULL,

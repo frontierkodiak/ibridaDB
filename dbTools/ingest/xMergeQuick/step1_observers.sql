@@ -2,9 +2,6 @@
 -- Start transaction
 BEGIN;
 
--- -- Drop table if it exists
-DROP TABLE IF EXISTS int_observers_partial;
-
 -- Create intermediate table for observers
 CREATE TABLE int_observers_partial (
     observer_id integer NOT NULL,
