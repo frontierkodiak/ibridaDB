@@ -30,13 +30,12 @@ fi
 
 # Pre-cleanup: Ensure no existing types or tables conflict
 echo "Pre-cleanup: Ensuring no existing types or tables conflict..."
+docker exec ibrida psql -U postgres -c "DROP TABLE IF EXISTS int_photos_partial CASCADE;"
 docker exec ibrida psql -U postgres -c "DROP TYPE IF EXISTS int_photos_partial CASCADE;"
-docker exec ibrida psql -U postgres -c "DROP TABLE IF EXISTS int_photos_partial CASCADE;"
 docker exec ibrida psql -U postgres -c "DROP TABLE IF EXISTS int_observations_partial CASCADE;"
+docker exec ibrida psql -U postgres -c "DROP TYPE IF EXISTS int_observations_partial CASCADE;"
 docker exec ibrida psql -U postgres -c "DROP TABLE IF EXISTS int_observers_partial CASCADE;"
-docker exec ibrida psql -U postgres -c "DROP TABLE IF EXISTS int_observations_partial CASCADE;"
-docker exec ibrida psql -U postgres -c "DROP TABLE IF EXISTS int_photos_partial CASCADE;"
-docker exec ibrida psql -U postgres -c "DROP TABLE IF EXISTS int_observers_partial CASCADE;"
+docker exec ibrida psql -U postgres -c "DROP TYPE IF EXISTS int_observers_partial CASCADE;"
 
 # Create temporary SQL scripts with substituted variables
 echo "Creating step1 SQL temp scripts..."
