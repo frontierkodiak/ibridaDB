@@ -104,7 +104,7 @@ UPDATE observations SET geom = ST_GeomFromText('POINT(' || longitude || ' ' || l
 CREATE INDEX observations_geom ON observations USING GIST (geom);
 VACUUM ANALYZE;
 ```
-Adding 'origins' tag for versioning
+Adding 'origins' tag for versioning the pull date from iNat
 ```sql
 ALTER TABLE taxa ADD COLUMN origin VARCHAR(255);
 ALTER TABLE observers ADD COLUMN origin VARCHAR(255);
@@ -122,6 +122,30 @@ CREATE INDEX index_observers_origins ON observers USING GIN (to_tsvector('simple
 CREATE INDEX index_observations_origins ON observations USING GIN (to_tsvector('simple', origin));
 CREATE INDEX index_photos_origins ON photos USING GIN (to_tsvector('simple', origin));
 ```
+
+Add 'version' tag for version with the ibrida-pulls schema (used downstream).
+```sql
+ALTER TABLE photos ADD COLUMN version VARCHAR(255);
+ALTER TABLE observations ADD COLUMN version VARCHAR(255);
+ALTER TABLE observers ADD COLUMN version VARCHAR(255);
+ALTER TABLE taxa ADD COLUMN version VARCHAR(255);
+
+
+UPDATE photos SET version = 'v1';
+UPDATE observations SET version = 'v1';
+UPDATE observers SET version = 'v1';
+UPDATE taxa SET version = 'v1';
+
+CREATE INDEX index_photos_version ON photos USING GIN (to_tsvector('simple', version));
+CREATE INDEX index_observations_version ON observations USING GIN (to_tsvector('simple', version));
+CREATE INDEX index_observers_version ON observers USING GIN (to_tsvector('simple', version));
+CREATE INDEX index_taxa_version ON taxa USING GIN (to_tsvector('simple', version));
+
+-- Verify
+SELECT DISTINCT version FROM photos;
+SELECT DISTINCT version FROM observations;
+```
+
 Explicitly set primary keys on master tables:
 ```sql
 -- Add primary key to observations
