@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Database and user variables
-DB_NAME="ibrida-v0"
 DB_USER="postgres"
 DB_TEMPLATE="template_postgis"
 NUM_PROCESSES=8
@@ -15,6 +14,9 @@ ORIGIN_VALUE="iNat-${SOURCE}"
 
 # Version variable
 VERSION_VALUE="v0"
+
+# Construct database name
+DB_NAME="ibrida-${VERSION_VALUE}"
 
 # Function to execute SQL commands
 execute_sql() {
