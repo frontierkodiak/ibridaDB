@@ -32,8 +32,9 @@ print_progress() {
   echo "======================================"
 }
 
-# Create database
+# Create database, drop if exists
 print_progress "Creating database"
+docker exec ibrida psql -U "$DB_USER" -c "DROP DATABASE IF EXISTS \"$DB_NAME\";"
 docker exec ibrida psql -U "$DB_USER" -c "CREATE DATABASE \"$DB_NAME\" WITH TEMPLATE $DB_TEMPLATE OWNER $DB_USER;"
 
 # Connect to the database and create tables
@@ -129,10 +130,13 @@ execute_sql "
 BEGIN;
 
 CREATE INDEX observations_geom ON observations USING GIST (geom);
-VACUUM ANALYZE;
 
 COMMIT;
 "
+
+# Vacuum analyze
+print_progress "Vacuum analyze"
+execute_sql "VACUUM ANALYZE;"
 
 # Add and update origin columns
 print_progress "Adding and updating origin columns"

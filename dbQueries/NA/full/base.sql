@@ -7,6 +7,8 @@
 
 
 -- Create table NAfull_min50all_taxa containing distinct taxon_id that meets certain criteria.
+---- NOTATION:
+------ <REGION_TAG>_min<MIN_OBS>_all_taxa
 CREATE TABLE NAfull_min50all_taxa AS
 SELECT  
     DISTINCT observations.taxon_id  
@@ -31,6 +33,9 @@ WHERE
     );
 
 -- Create table NAfull_min50all_taxa_obs containing all observations where taxon_id is in NAfull_min50all_taxa table, including the 'origin' column.
+
+---- NOTATION:
+------ <REGION_TAG>_min<MIN_OBS>_all_taxa_obs
 CREATE TABLE NAfull_min50all_taxa_obs AS
 SELECT  
     observation_uuid, observer_id, latitude, longitude, positional_accuracy, taxon_id, quality_grade,  
