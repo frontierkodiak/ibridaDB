@@ -15,6 +15,21 @@ CONTAINER_EXPORT_BASE_PATH="${CONTAINER_EXPORT_BASE_PATH}"
 ORIGIN_VALUE="${ORIGIN_VALUE}"
 VERSION_VALUE="${VERSION_VALUE}"
 
+# Debugging output
+echo "DB_USER: ${DB_USER}"
+echo "DB_NAME: ${DB_NAME}"
+echo "REGION_TAG: ${REGION_TAG}"
+echo "MIN_OBS: ${MIN_OBS}"
+echo "MAX_RN: ${MAX_RN}"
+echo "PRIMARY_ONLY: ${PRIMARY_ONLY}"
+echo "EXPORT_SUBDIR: ${EXPORT_SUBDIR}"
+echo "DB_CONTAINER: ${DB_CONTAINER}"
+echo "HOST_EXPORT_BASE_PATH: ${HOST_EXPORT_BASE_PATH}"
+echo "CONTAINER_EXPORT_BASE_PATH: ${CONTAINER_EXPORT_BASE_PATH}"
+echo "ORIGIN_VALUE: ${ORIGIN_VALUE}"
+echo "VERSION_VALUE: ${VERSION_VALUE}"
+echo "Parent obs table: ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs"
+
 # Clades and their respective ancestry filters
 declare -A CLADES
 CLADES=( 
@@ -57,7 +72,7 @@ fi
 process_clade() {
   local clade=$1
   local ancestry_filter=${CLADES[$clade]}
-  local table_name="${REGION_TAG}_${clade}_min${MIN_OBS}all_cap${MAX_RN}"
+  local table_name="${clade}"
   local photos_table_name="${table_name}_photos"
   local export_path="${CONTAINER_EXPORT_DIR}/${photos_table_name}.csv"
 
@@ -89,7 +104,7 @@ process_clade() {
               ORDER BY RANDOM()
           ) as rn
       FROM
-          ${REGION_TAG}_min${MIN_OBS}all_taxa_obs
+          ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs
       WHERE
           taxon_id IN (
               SELECT taxon_id
@@ -98,7 +113,7 @@ process_clade() {
           )
           AND taxon_id IN (
               SELECT taxon_id
-              FROM ${REGION_TAG}_min${MIN_OBS}all_taxa_obs
+              FROM ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs
               GROUP BY taxon_id
               HAVING COUNT(*) >= ${MIN_OBS}
           )
@@ -155,7 +170,7 @@ process_clade() {
 # Function to process the "other" clade
 process_other_clade() {
   local clade="other"
-  local table_name="${REGION_TAG}_${clade}_min${MIN_OBS}all_cap${MAX_RN}"
+  local table_name="${REGION_TAG}_${clade}_min${MIN_OBS}_all_cap${MAX_RN}"
   local photos_table_name="${table_name}_photos"
   local export_path="${CONTAINER_EXPORT_DIR}/${photos_table_name}.csv"
 
@@ -188,7 +203,7 @@ process_other_clade() {
               ORDER BY RANDOM()
           ) as rn
       FROM
-          ${REGION_TAG}_min${MIN_OBS}all_taxa_obs
+          ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs
       WHERE
           taxon_id IN (
               SELECT taxon_id
@@ -197,7 +212,7 @@ process_other_clade() {
           )
           AND taxon_id IN (
               SELECT taxon_id
-              FROM ${REGION_TAG}_min${MIN_OBS}all_taxa_obs
+              FROM ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs
               GROUP BY taxon_id
               HAVING COUNT(*) >= ${MIN_OBS}
           )
@@ -280,21 +295,21 @@ summary_file="${HOST_EXPORT_DIR}/export_summary.txt"
   echo ""
   echo "Table Row Counts:"
   for clade in "${!CLADES[@]}"; do
-    table_name="${REGION_TAG}_${clade}_min${MIN_OBS}all_cap${MAX_RN}"
+    table_name="${REGION_TAG}_${clade}_min${MIN_OBS}_all_cap${MAX_RN}"
     row_count=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT COUNT(*) FROM ${table_name};" | tr -d '[:space:]')
     echo "${table_name}: ${row_count} rows"
   done
-  table_name="${REGION_TAG}_other_min${MIN_OBS}all_cap${MAX_RN}"
+  table_name="${REGION_TAG}_other_min${MIN_OBS}_all_cap${MAX_RN}"
   row_count=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT COUNT(*) FROM ${table_name};" | tr -d '[:space:]')
   echo "${table_name}: ${row_count} rows"
   echo ""
   echo "Column Names:"
   for clade in "${!CLADES[@]}"; do
-    table_name="${REGION_TAG}_${clade}_min${MIN_OBS}all_cap${MAX_RN}_photos"
+    table_name="${REGION_TAG}_${clade}_min${MIN_OBS}_all_cap${MAX_RN}_photos"
     columns=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT column_name FROM information_schema.columns WHERE table_name = '${table_name}';" | tr -d '[:space:]' | paste -sd, -)
     echo "${table_name}: ${columns}"
   done
-  table_name="${REGION_TAG}_other_min${MIN_OBS}all_cap${MAX_RN}_photos"
+  table_name="${REGION_TAG}_other_min${MIN_OBS}_all_cap${MAX_RN}_photos"
   columns=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT column_name FROM information_schema.columns WHERE table_name = '${table_name}';" | tr -d '[:space:]' | paste -sd, -)
   echo "${table_name}: ${columns}"
 } > "$summary_file"
