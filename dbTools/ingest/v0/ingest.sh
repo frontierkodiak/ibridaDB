@@ -32,111 +32,111 @@ print_progress() {
   echo "======================================"
 }
 
-# # Create database, drop if exists
-# print_progress "Creating database"
-# docker exec ibrida psql -U "$DB_USER" -c "DROP DATABASE IF EXISTS \"$DB_NAME\";"
-# docker exec ibrida psql -U "$DB_USER" -c "CREATE DATABASE \"$DB_NAME\" WITH TEMPLATE $DB_TEMPLATE OWNER $DB_USER;"
+# Create database, drop if exists
+print_progress "Creating database"
+docker exec ibrida psql -U "$DB_USER" -c "DROP DATABASE IF EXISTS \"$DB_NAME\";"
+docker exec ibrida psql -U "$DB_USER" -c "CREATE DATABASE \"$DB_NAME\" WITH TEMPLATE $DB_TEMPLATE OWNER $DB_USER;"
 
-# # Connect to the database and create tables
-# print_progress "Creating tables"
-# execute_sql "
-# BEGIN;
+# Connect to the database and create tables
+print_progress "Creating tables"
+execute_sql "
+BEGIN;
 
-# CREATE TABLE observations (
-#     observation_uuid uuid NOT NULL,
-#     observer_id integer,
-#     latitude numeric(15,10),
-#     longitude numeric(15,10),
-#     positional_accuracy integer,
-#     taxon_id integer,
-#     quality_grade character varying(255),
-#     observed_on date
-# );
+CREATE TABLE observations (
+    observation_uuid uuid NOT NULL,
+    observer_id integer,
+    latitude numeric(15,10),
+    longitude numeric(15,10),
+    positional_accuracy integer,
+    taxon_id integer,
+    quality_grade character varying(255),
+    observed_on date
+);
 
-# CREATE TABLE photos (
-#     photo_uuid uuid NOT NULL,
-#     photo_id integer NOT NULL,
-#     observation_uuid uuid NOT NULL,
-#     observer_id integer,
-#     extension character varying(5),
-#     license character varying(255),
-#     width smallint,
-#     height smallint,
-#     position smallint
-# );
+CREATE TABLE photos (
+    photo_uuid uuid NOT NULL,
+    photo_id integer NOT NULL,
+    observation_uuid uuid NOT NULL,
+    observer_id integer,
+    extension character varying(5),
+    license character varying(255),
+    width smallint,
+    height smallint,
+    position smallint
+);
 
-# CREATE TABLE taxa (
-#     taxon_id integer NOT NULL,
-#     ancestry character varying(255),
-#     rank_level double precision,
-#     rank character varying(255),
-#     name character varying(255),
-#     active boolean
-# );
+CREATE TABLE taxa (
+    taxon_id integer NOT NULL,
+    ancestry character varying(255),
+    rank_level double precision,
+    rank character varying(255),
+    name character varying(255),
+    active boolean
+);
 
-# CREATE TABLE observers (
-#     observer_id integer NOT NULL,
-#     login character varying(255),
-#     name character varying(255)
-# );
+CREATE TABLE observers (
+    observer_id integer NOT NULL,
+    login character varying(255),
+    name character varying(255)
+);
 
-# COMMIT;
-# "
+COMMIT;
+"
 
-# # Import data
-# print_progress "Importing data"
-# execute_sql "
-# BEGIN;
+# Import data
+print_progress "Importing data"
+execute_sql "
+BEGIN;
 
-# COPY observations FROM '/metadata/${SOURCE}/observations.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
-# COPY photos FROM '/metadata/${SOURCE}/photos.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
-# COPY taxa FROM '/metadata/${SOURCE}/taxa.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
-# COPY observers FROM '/metadata/${SOURCE}/observers.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
+COPY observations FROM '/metadata/${SOURCE}/observations.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
+COPY photos FROM '/metadata/${SOURCE}/photos.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
+COPY taxa FROM '/metadata/${SOURCE}/taxa.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
+COPY observers FROM '/metadata/${SOURCE}/observers.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
 
-# COMMIT;
-# "
+COMMIT;
+"
 
-# # Create indexes
-# print_progress "Creating indexes"
-# execute_sql "
-# BEGIN;
+# Create indexes
+print_progress "Creating indexes"
+execute_sql "
+BEGIN;
 
-# CREATE INDEX index_photos_photo_uuid ON photos USING btree (photo_uuid);
-# CREATE INDEX index_photos_observation_uuid ON photos USING btree (observation_uuid);
-# CREATE INDEX index_photos_position ON photos USING btree (position);
-# CREATE INDEX index_photos_photo_id ON photos USING btree (photo_id);
-# CREATE INDEX index_taxa_taxon_id ON taxa USING btree (taxon_id);
-# CREATE INDEX index_observers_observers_id ON observers USING btree (observer_id);
-# CREATE INDEX index_observations_observer_id ON observations USING btree (observer_id);
-# CREATE INDEX index_observations_quality ON observations USING btree (quality_grade);
-# CREATE INDEX index_observations_taxon_id ON observations USING btree (taxon_id);
-# CREATE INDEX index_taxa_active ON taxa USING btree (active);
-# CREATE INDEX index_observations_taxon_id ON observations USING btree (taxon_id);
+CREATE INDEX index_photos_photo_uuid ON photos USING btree (photo_uuid);
+CREATE INDEX index_photos_observation_uuid ON photos USING btree (observation_uuid);
+CREATE INDEX index_photos_position ON photos USING btree (position);
+CREATE INDEX index_photos_photo_id ON photos USING btree (photo_id);
+CREATE INDEX index_taxa_taxon_id ON taxa USING btree (taxon_id);
+CREATE INDEX index_observers_observers_id ON observers USING btree (observer_id);
+CREATE INDEX index_observations_observer_id ON observations USING btree (observer_id);
+CREATE INDEX index_observations_quality ON observations USING btree (quality_grade);
+CREATE INDEX index_observations_taxon_id ON observations USING btree (taxon_id);
+CREATE INDEX index_taxa_active ON taxa USING btree (active);
+CREATE INDEX index_observations_taxon_id ON observations USING btree (taxon_id);
 
-# COMMIT;
-# "
+COMMIT;
+"
 
-# # Add geom column (parallelized calculation using geom.sh)
-# print_progress "Adding geom column"
-# execute_sql "ALTER TABLE observations ADD COLUMN geom public.geometry;"
+# Add geom column (parallelized calculation using geom.sh)
+print_progress "Adding geom column"
+execute_sql "ALTER TABLE observations ADD COLUMN geom public.geometry;"
 
-# # Run parallel geom calculations
-# print_progress "Running parallel geom calculations"
-# "${BASE_DIR}/geom.sh" "$DB_NAME" "observations" "$NUM_PROCESSES" "$BASE_DIR"
+# Run parallel geom calculations
+print_progress "Running parallel geom calculations"
+"${BASE_DIR}/geom.sh" "$DB_NAME" "observations" "$NUM_PROCESSES" "$BASE_DIR"
 
-# # Create geom index
-# print_progress "Creating geom index"
-# execute_sql "
-# BEGIN;
+# Create geom index
+print_progress "Creating geom index"
+execute_sql "
+BEGIN;
 
-# CREATE INDEX observations_geom ON observations USING GIST (geom);
+CREATE INDEX observations_geom ON observations USING GIST (geom);
 
-# COMMIT;
-# "
+COMMIT;
+"
 
-# # Vacuum analyze
-# print_progress "Vacuum analyze"
-# execute_sql "VACUUM ANALYZE;"
+# Vacuum analyze
+print_progress "Vacuum analyze"
+execute_sql "VACUUM ANALYZE;"
 
 # Add origin and version columns in parallel
 print_progress "Adding origin and version columns"

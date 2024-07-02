@@ -1,4 +1,5 @@
 #!/bin/bash
+## dbTools/export/v0/cladistic.sh
 
 # Use the variables passed from the wrapper script
 DB_USER="${DB_USER}"
@@ -8,6 +9,11 @@ MIN_OBS="${MIN_OBS}"
 MAX_RN="${MAX_RN}"
 PRIMARY_ONLY="${PRIMARY_ONLY}"
 EXPORT_SUBDIR="${EXPORT_SUBDIR}"
+DB_CONTAINER="${DB_CONTAINER}"
+HOST_EXPORT_BASE_PATH="${HOST_EXPORT_BASE_PATH}"
+CONTAINER_EXPORT_BASE_PATH="${CONTAINER_EXPORT_BASE_PATH}"
+ORIGIN_VALUE="${ORIGIN_VALUE}"
+VERSION_VALUE="${VERSION_VALUE}"
 
 # Clades and their respective ancestry filters
 declare -A CLADES
@@ -23,7 +29,7 @@ CLADES=(
 # Function to execute SQL commands
 execute_sql() {
   local sql="$1"
-  docker exec ibrida psql -U "$DB_USER" -d "$DB_NAME" -c "$sql"
+  docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -c "$sql"
 }
 
 # Function to print progress
@@ -34,13 +40,26 @@ print_progress() {
   echo "======================================"
 }
 
+# Ensure export directory exists and is writable
+HOST_EXPORT_DIR="${HOST_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
+CONTAINER_EXPORT_DIR="${CONTAINER_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
+
+if [ ! -d "$HOST_EXPORT_DIR" ]; then
+  mkdir -p "$HOST_EXPORT_DIR"
+fi
+
+if [ ! -w "$HOST_EXPORT_DIR" ]; then
+  echo "Error: Directory $HOST_EXPORT_DIR is not writable."
+  exit 1
+fi
+
 # Function to process a clade
 process_clade() {
   local clade=$1
   local ancestry_filter=${CLADES[$clade]}
   local table_name="${REGION_TAG}_${clade}_min${MIN_OBS}all_cap${MAX_RN}"
   local photos_table_name="${table_name}_photos"
-  local export_path="/exports/${EXPORT_SUBDIR}/${photos_table_name}.csv"
+  local export_path="${CONTAINER_EXPORT_DIR}/${photos_table_name}.csv"
 
   if [ -z "$ancestry_filter" ]; then
     echo "Unknown clade: $clade"
@@ -52,6 +71,7 @@ process_clade() {
   execute_sql "DROP TABLE IF EXISTS ${photos_table_name};"
 
   # Create table for the clade
+  ## NOTE: Origin temporarily removed from export tables.
   print_progress "Creating table ${table_name}"
   execute_sql "
   CREATE TABLE ${table_name} AS (
@@ -64,7 +84,6 @@ process_clade() {
           taxon_id, 
           quality_grade,  
           observed_on,
-          origin,
           ROW_NUMBER() OVER (
               PARTITION BY taxon_id 
               ORDER BY RANDOM()
@@ -88,6 +107,7 @@ process_clade() {
   "
 
   # Create photos table for the clade
+  ## NOTE: Origin temporarily removed from export tables.
   print_progress "Creating table ${photos_table_name}"
   local photos_where_clause=""
   if [ "$PRIMARY_ONLY" = true ]; then
@@ -97,7 +117,7 @@ process_clade() {
   CREATE TABLE ${photos_table_name} AS
   SELECT  
       t1.observation_uuid, t1.latitude, t1.longitude, t1.positional_accuracy, t1.taxon_id,  
-      t1.observed_on, t1.origin, t2.photo_uuid, t2.photo_id, t2.extension, t2.width, t2.height, t2.position
+      t1.observed_on, t2.photo_uuid, t2.photo_id, t2.extension, t2.width, t2.height, t2.position
   FROM
       ${table_name} t1
       JOIN photos t2
@@ -126,14 +146,10 @@ process_clade() {
   VACUUM ANALYZE ${photos_table_name};
   "
 
-  # Create export directory if it doesn't exist
-  if [ ! -d "/exports/${EXPORT_SUBDIR}" ]; then
-    mkdir -p "/exports/${EXPORT_SUBDIR}"
-  fi
-
   # Export photos table to CSV
+  ## NOTE: Origin temporarily removed from export tables.
   print_progress "Exporting table ${photos_table_name} to CSV"
-  docker exec ibrida psql -U "$DB_USER" -d "$DB_NAME" -c "\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, origin, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM ${photos_table_name}) TO '${export_path}' DELIMITER ',' CSV HEADER;"
+  docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -c "\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM ${photos_table_name}) TO '${export_path}' DELIMITER ',' CSV HEADER;"
 }
 
 # Function to process the "other" clade
@@ -141,7 +157,7 @@ process_other_clade() {
   local clade="other"
   local table_name="${REGION_TAG}_${clade}_min${MIN_OBS}all_cap${MAX_RN}"
   local photos_table_name="${table_name}_photos"
-  local export_path="/exports/${EXPORT_SUBDIR}/${photos_table_name}.csv"
+  local export_path="${CONTAINER_EXPORT_DIR}/${photos_table_name}.csv"
 
   # Construct the exclusion filter for predefined clades
   local exclusion_filters=""
@@ -154,6 +170,7 @@ process_other_clade() {
   execute_sql "DROP TABLE IF EXISTS ${photos_table_name};"
 
   # Create table for the "other" clade
+  ## NOTE: Origin temporarily removed from export tables.
   print_progress "Creating table ${table_name}"
   execute_sql "
   CREATE TABLE ${table_name} AS (
@@ -166,7 +183,6 @@ process_other_clade() {
           taxon_id, 
           quality_grade,  
           observed_on,
-          origin,
           ROW_NUMBER() OVER (
               PARTITION BY taxon_id 
               ORDER BY RANDOM()
@@ -190,6 +206,7 @@ process_other_clade() {
   "
 
   # Create photos table for the "other" clade
+  ## NOTE: Origin temporarily removed from export tables.
   print_progress "Creating table ${photos_table_name}"
   local photos_where_clause=""
   if [ "$PRIMARY_ONLY" = true ]; then
@@ -199,7 +216,7 @@ process_other_clade() {
   CREATE TABLE ${photos_table_name} AS
   SELECT  
       t1.observation_uuid, t1.latitude, t1.longitude, t1.positional_accuracy, t1.taxon_id,  
-      t1.observed_on, t1.origin, t2.photo_uuid, t2.photo_id, t2.extension, t2.width, t2.height, t2.position
+      t1.observed_on, t2.photo_uuid, t2.photo_id, t2.extension, t2.width, t2.height, t2.position
   FROM
       ${table_name} t1
       JOIN photos t2
@@ -228,14 +245,10 @@ process_other_clade() {
   VACUUM ANALYZE ${photos_table_name};
   "
 
-  # Create export directory if it doesn't exist
-  if [ ! -d "/exports/${EXPORT_SUBDIR}" ]; then
-    mkdir -p "/exports/${EXPORT_SUBDIR}"
-  fi
-
   # Export photos table to CSV
+  ## NOTE: Origin temporarily removed from export tables.
   print_progress "Exporting table ${photos_table_name} to CSV"
-  docker exec ibrida psql -U "$DB_USER" -d "$DB_NAME" -c "\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, origin, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM ${photos_table_name}) TO '${export_path}' DELIMITER ',' CSV HEADER;"
+  docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -c "\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM ${photos_table_name}) TO '${export_path}' DELIMITER ',' CSV HEADER;"
 }
 
 # Process each clade
@@ -245,5 +258,47 @@ done
 
 # Process the "other" clade
 process_other_clade
+
+# Create the export summary file
+summary_file="${HOST_EXPORT_DIR}/export_summary.txt"
+
+{
+  echo "Export Summary"
+  echo "=============="
+  echo "DB_USER: ${DB_USER}"
+  echo "DB_NAME: ${DB_NAME}"
+  echo "REGION_TAG: ${REGION_TAG}"
+  echo "MIN_OBS: ${MIN_OBS}"
+  echo "MAX_RN: ${MAX_RN}"
+  echo "PRIMARY_ONLY: ${PRIMARY_ONLY}"
+  echo "EXPORT_SUBDIR: ${EXPORT_SUBDIR}"
+  echo "DB_CONTAINER: ${DB_CONTAINER}"
+  echo "HOST_EXPORT_BASE_PATH: ${HOST_EXPORT_BASE_PATH}"
+  echo "CONTAINER_EXPORT_BASE_PATH: ${CONTAINER_EXPORT_BASE_PATH}"
+  echo "ORIGIN_VALUE: ${ORIGIN_VALUE}"
+  echo "VERSION_VALUE: ${VERSION_VALUE}"
+  echo ""
+  echo "Table Row Counts:"
+  for clade in "${!CLADES[@]}"; do
+    table_name="${REGION_TAG}_${clade}_min${MIN_OBS}all_cap${MAX_RN}"
+    row_count=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT COUNT(*) FROM ${table_name};" | tr -d '[:space:]')
+    echo "${table_name}: ${row_count} rows"
+  done
+  table_name="${REGION_TAG}_other_min${MIN_OBS}all_cap${MAX_RN}"
+  row_count=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT COUNT(*) FROM ${table_name};" | tr -d '[:space:]')
+  echo "${table_name}: ${row_count} rows"
+  echo ""
+  echo "Column Names:"
+  for clade in "${!CLADES[@]}"; do
+    table_name="${REGION_TAG}_${clade}_min${MIN_OBS}all_cap${MAX_RN}_photos"
+    columns=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT column_name FROM information_schema.columns WHERE table_name = '${table_name}';" | tr -d '[:space:]' | paste -sd, -)
+    echo "${table_name}: ${columns}"
+  done
+  table_name="${REGION_TAG}_other_min${MIN_OBS}all_cap${MAX_RN}_photos"
+  columns=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT column_name FROM information_schema.columns WHERE table_name = '${table_name}';" | tr -d '[:space:]' | paste -sd, -)
+  echo "${table_name}: ${columns}"
+} > "$summary_file"
+
+print_progress "Export summary written to ${summary_file}"
 
 print_progress "All clades processed and exported"

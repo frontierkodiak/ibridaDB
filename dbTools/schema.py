@@ -5,6 +5,9 @@ from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
 
+# NOTE: Some tables do not include origin.
+# NOTE: Some tables also include a column for version.
+
 class Observations(Base):
     __tablename__ = 'observations'
     observation_uuid = Column(UUID(as_uuid=True), primary_key=True)

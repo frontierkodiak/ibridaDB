@@ -5,6 +5,7 @@ DB_USER="${DB_USER}"
 DB_NAME="${DB_NAME}"
 REGION_TAG="${REGION_TAG}"
 MIN_OBS="${MIN_OBS}"
+DB_CONTAINER="${DB_CONTAINER}"
 
 # Function to set region-specific coordinates
 set_region_coordinates() {
@@ -112,7 +113,7 @@ set_region_coordinates
 # Function to execute SQL commands
 execute_sql() {
   local sql="$1"
-  docker exec ibrida psql -U "$DB_USER" -d "$DB_NAME" -c "$sql"
+  docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -c "$sql"
 }
 
 # Function to print progress
@@ -162,7 +163,7 @@ WHERE
 COMMIT;
 "
 
-# Create table <REGION_TAG>_min<MIN_OBS>_all_taxa_obs
+# Create table <REGION_TAG>_min<MIN_OBS>_all_taxa_obs (NO VERSION, ORIGIN)
 print_progress "Creating table ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs"
 execute_sql "
 BEGIN;
@@ -170,7 +171,7 @@ BEGIN;
 CREATE TABLE ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs AS
 SELECT  
     observation_uuid, observer_id, latitude, longitude, positional_accuracy, taxon_id, quality_grade,  
-    observed_on, origin, version
+    observed_on
 FROM
     observations
 WHERE
@@ -183,3 +184,26 @@ COMMIT;
 "
 
 print_progress "Regional base tables created"
+
+# NOTE: Below is the original query that included version and origin.
+# # Create table <REGION_TAG>_min<MIN_OBS>_all_taxa_obs
+# print_progress "Creating table ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs"
+# execute_sql "
+# BEGIN;
+
+# CREATE TABLE ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs AS
+# SELECT  
+#     observation_uuid, observer_id, latitude, longitude, positional_accuracy, taxon_id, quality_grade,  
+#     observed_on, origin, version
+# FROM
+#     observations
+# WHERE
+#     taxon_id IN (
+#         SELECT taxon_id
+#         FROM ${REGION_TAG}_min${MIN_OBS}_all_taxa
+#     );
+
+# COMMIT;
+# "
+
+# print_progress "Regional base tables created"

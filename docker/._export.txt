@@ -1,0 +1,120 @@
+Export Configuration:
+{
+  "repo_root": ".",
+  "export_name": "._export.txt",
+  "delimiter": "---",
+  "dirs_to_traverse": [
+    "."
+  ],
+  "include_top_level_files": "all",
+  "included_extensions": "all",
+  "subdirs_to_exclude": [
+    "__pycache__"
+  ],
+  "files_to_exclude": [
+    "._export.txt"
+  ],
+  "depth": 10,
+  "exhaustive_dir_tree": false,
+  "blacklisted_dirs": [
+    "__pycache__"
+  ],
+  "files_to_include": [],
+  "output_file": "./._export.txt",
+  "exported_files_count": {},
+  "total_lines": 0
+}
+Directory tree, stemming from root ".":
+├── ._export.txt
+├── entrypoint.sh
+├── fast
+│   └── docker-compose.yml
+└── slow
+    │   └── docker-compose.yml
+
+---
+Full Path: entrypoint.sh
+
+# entrypoint.sh
+#!/bin/bash
+set -e
+
+echo "Running entrypoint.sh"
+
+# Adjust permissions
+chmod -R 777 /exports
+chown -R postgres:postgres /exports
+
+# Start PostgreSQL
+docker-entrypoint.sh postgres
+
+
+---
+Full Path: entrypoint.sh
+
+# entrypoint.sh
+#!/bin/bash
+set -e
+
+echo "Running entrypoint.sh"
+
+# Adjust permissions
+chmod -R 777 /exports
+chown -R postgres:postgres /exports
+
+# Start PostgreSQL
+docker-entrypoint.sh postgres
+
+
+---
+Full Path: slow/docker-compose.yml
+
+version: '3.8'
+services:
+  ibrida:
+    image: postgis/postgis:15-3.3
+    shm_size: '16g'
+    environment:
+      POSTGRES_PASSWORD: password
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_SHARED_BUFFERS: 8GB
+      POSTGRES_WORK_MEM: 2048MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 4GB
+    volumes:
+      - ~/repo/ibridaDB/dbTools:/tool
+      - ~/repo/ibridaDB/dbQueries:/query
+      - /ibrida/postgresql:/var/lib/postgresql/data
+      - /pond/Polli/ibridaExports:/exports
+      - /ibrida/metadata:/metadata
+      - ../entrypoint.sh:/docker-entrypoint-initdb.d/entrypoint.sh
+    ports:
+      - "5432:5432"
+    entrypoint: ["/bin/bash", "/docker-entrypoint-initdb.d/entrypoint.sh"]
+
+
+---
+Full Path: fast/docker-compose.yml
+
+version: '3.8'
+services:
+  ibrida:
+    image: postgis/postgis:15-3.3
+    shm_size: '16g'
+    environment:
+      POSTGRES_PASSWORD: password
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_SHARED_BUFFERS: 8GB
+      POSTGRES_WORK_MEM: 2048MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 4GB
+    volumes:
+      - ~/repo/ibridaDB/dbTools:/tool
+      - ~/repo/ibridaDB/dbQueries:/query
+      - /peach/ibrida2:/var/lib/postgresql/data
+      - /pond/Polli/ibridaExports:/exports
+      - /ibrida/metadata:/metadata
+      - ../entrypoint.sh:/docker-entrypoint-initdb.d/entrypoint.sh
+    ports:
+      - "5432:5432"
+    entrypoint: ["/bin/bash", "/docker-entrypoint-initdb.d/entrypoint.sh"]
+
+
