@@ -86,7 +86,6 @@ process_clade() {
   execute_sql "DROP TABLE IF EXISTS ${photos_table_name};"
 
   # Create table for the clade
-  ## NOTE: Origin temporarily removed from export tables.
   print_progress "Creating table ${table_name}"
   execute_sql "
   CREATE TABLE ${table_name} AS (
@@ -122,7 +121,6 @@ process_clade() {
   "
 
   # Create photos table for the clade
-  ## NOTE: Origin temporarily removed from export tables.
   print_progress "Creating table ${photos_table_name}"
   local photos_where_clause=""
   if [ "$PRIMARY_ONLY" = true ]; then
@@ -158,19 +156,18 @@ process_clade() {
   SET name = t2.name  
   FROM taxa t2  
   WHERE t1.taxon_id = t2.taxon_id;
-  VACUUM ANALYZE ${photos_table_name};
   "
-
   # Export photos table to CSV
-  ## NOTE: Origin temporarily removed from export tables.
   print_progress "Exporting table ${photos_table_name} to CSV"
   docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -c "\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM ${photos_table_name}) TO '${export_path}' DELIMITER ',' CSV HEADER;"
+
+  execute_sql "VACUUM ANALYZE ${photos_table_name};"
 }
 
 # Function to process the "other" clade
 process_other_clade() {
   local clade="other"
-  local table_name="${REGION_TAG}_${clade}_min${MIN_OBS}_all_cap${MAX_RN}"
+  local table_name="${clade}"
   local photos_table_name="${table_name}_photos"
   local export_path="${CONTAINER_EXPORT_DIR}/${photos_table_name}.csv"
 
@@ -185,7 +182,6 @@ process_other_clade() {
   execute_sql "DROP TABLE IF EXISTS ${photos_table_name};"
 
   # Create table for the "other" clade
-  ## NOTE: Origin temporarily removed from export tables.
   print_progress "Creating table ${table_name}"
   execute_sql "
   CREATE TABLE ${table_name} AS (
@@ -221,7 +217,6 @@ process_other_clade() {
   "
 
   # Create photos table for the "other" clade
-  ## NOTE: Origin temporarily removed from export tables.
   print_progress "Creating table ${photos_table_name}"
   local photos_where_clause=""
   if [ "$PRIMARY_ONLY" = true ]; then
@@ -257,13 +252,12 @@ process_other_clade() {
   SET name = t2.name  
   FROM taxa t2  
   WHERE t1.taxon_id = t2.taxon_id;
-  VACUUM ANALYZE ${photos_table_name};
   "
-
   # Export photos table to CSV
-  ## NOTE: Origin temporarily removed from export tables.
   print_progress "Exporting table ${photos_table_name} to CSV"
   docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -c "\copy (SELECT observation_uuid, latitude, longitude, positional_accuracy, taxon_id, observed_on, photo_uuid, photo_id, extension, width, height, position, ancestry, rank_level, rank, name FROM ${photos_table_name}) TO '${export_path}' DELIMITER ',' CSV HEADER;"
+
+  execute_sql "VACUUM ANALYZE ${photos_table_name};"
 }
 
 # Process each clade
@@ -295,21 +289,21 @@ summary_file="${HOST_EXPORT_DIR}/export_summary.txt"
   echo ""
   echo "Table Row Counts:"
   for clade in "${!CLADES[@]}"; do
-    table_name="${REGION_TAG}_${clade}_min${MIN_OBS}_all_cap${MAX_RN}"
+    table_name="${clade}"
     row_count=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT COUNT(*) FROM ${table_name};" | tr -d '[:space:]')
     echo "${table_name}: ${row_count} rows"
   done
-  table_name="${REGION_TAG}_other_min${MIN_OBS}_all_cap${MAX_RN}"
+  table_name="other"
   row_count=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT COUNT(*) FROM ${table_name};" | tr -d '[:space:]')
   echo "${table_name}: ${row_count} rows"
   echo ""
   echo "Column Names:"
   for clade in "${!CLADES[@]}"; do
-    table_name="${REGION_TAG}_${clade}_min${MIN_OBS}_all_cap${MAX_RN}_photos"
+    table_name="${clade}_photos"
     columns=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT column_name FROM information_schema.columns WHERE table_name = '${table_name}';" | tr -d '[:space:]' | paste -sd, -)
     echo "${table_name}: ${columns}"
   done
-  table_name="${REGION_TAG}_other_min${MIN_OBS}_all_cap${MAX_RN}_photos"
+  table_name="other_photos"
   columns=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT column_name FROM information_schema.columns WHERE table_name = '${table_name}';" | tr -d '[:space:]' | paste -sd, -)
   echo "${table_name}: ${columns}"
 } > "$summary_file"

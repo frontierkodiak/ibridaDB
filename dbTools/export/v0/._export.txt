@@ -259,6 +259,25 @@ MAX_RN="${MAX_RN}"
 PRIMARY_ONLY="${PRIMARY_ONLY}"
 EXPORT_SUBDIR="${EXPORT_SUBDIR}"
 DB_CONTAINER="${DB_CONTAINER}"
+HOST_EXPORT_BASE_PATH="${HOST_EXPORT_BASE_PATH}"
+CONTAINER_EXPORT_BASE_PATH="${CONTAINER_EXPORT_BASE_PATH}"
+ORIGIN_VALUE="${ORIGIN_VALUE}"
+VERSION_VALUE="${VERSION_VALUE}"
+
+# Debugging output
+echo "DB_USER: ${DB_USER}"
+echo "DB_NAME: ${DB_NAME}"
+echo "REGION_TAG: ${REGION_TAG}"
+echo "MIN_OBS: ${MIN_OBS}"
+echo "MAX_RN: ${MAX_RN}"
+echo "PRIMARY_ONLY: ${PRIMARY_ONLY}"
+echo "EXPORT_SUBDIR: ${EXPORT_SUBDIR}"
+echo "DB_CONTAINER: ${DB_CONTAINER}"
+echo "HOST_EXPORT_BASE_PATH: ${HOST_EXPORT_BASE_PATH}"
+echo "CONTAINER_EXPORT_BASE_PATH: ${CONTAINER_EXPORT_BASE_PATH}"
+echo "ORIGIN_VALUE: ${ORIGIN_VALUE}"
+echo "VERSION_VALUE: ${VERSION_VALUE}"
+echo "Parent obs table: ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs"
 
 # Clades and their respective ancestry filters
 declare -A CLADES
@@ -286,13 +305,15 @@ print_progress() {
 }
 
 # Ensure export directory exists and is writable
-EXPORT_DIR="/exports/${EXPORT_SUBDIR}"
-if [ ! -d "$EXPORT_DIR" ]; then
-  mkdir -p "$EXPORT_DIR"
+HOST_EXPORT_DIR="${HOST_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
+CONTAINER_EXPORT_DIR="${CONTAINER_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
+
+if [ ! -d "$HOST_EXPORT_DIR" ]; then
+  mkdir -p "$HOST_EXPORT_DIR"
 fi
 
-if [ ! -w "$EXPORT_DIR" ]; then
-  echo "Error: Directory $EXPORT_DIR is not writable."
+if [ ! -w "$HOST_EXPORT_DIR" ]; then
+  echo "Error: Directory $HOST_EXPORT_DIR is not writable."
   exit 1
 fi
 
@@ -300,9 +321,9 @@ fi
 process_clade() {
   local clade=$1
   local ancestry_filter=${CLADES[$clade]}
-  local table_name="${REGION_TAG}_${clade}_min${MIN_OBS}all_cap${MAX_RN}"
+  local table_name="${clade}"
   local photos_table_name="${table_name}_photos"
-  local export_path="${EXPORT_DIR}/${photos_table_name}.csv"
+  local export_path="${CONTAINER_EXPORT_DIR}/${photos_table_name}.csv"
 
   if [ -z "$ancestry_filter" ]; then
     echo "Unknown clade: $clade"
@@ -332,7 +353,7 @@ process_clade() {
               ORDER BY RANDOM()
           ) as rn
       FROM
-          ${REGION_TAG}_min${MIN_OBS}all_taxa_obs
+          ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs
       WHERE
           taxon_id IN (
               SELECT taxon_id
@@ -341,7 +362,7 @@ process_clade() {
           )
           AND taxon_id IN (
               SELECT taxon_id
-              FROM ${REGION_TAG}_min${MIN_OBS}all_taxa_obs
+              FROM ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs
               GROUP BY taxon_id
               HAVING COUNT(*) >= ${MIN_OBS}
           )
@@ -398,9 +419,9 @@ process_clade() {
 # Function to process the "other" clade
 process_other_clade() {
   local clade="other"
-  local table_name="${REGION_TAG}_${clade}_min${MIN_OBS}all_cap${MAX_RN}"
+  local table_name="${REGION_TAG}_${clade}_min${MIN_OBS}_all_cap${MAX_RN}"
   local photos_table_name="${table_name}_photos"
-  local export_path="${EXPORT_DIR}/${photos_table_name}.csv"
+  local export_path="${CONTAINER_EXPORT_DIR}/${photos_table_name}.csv"
 
   # Construct the exclusion filter for predefined clades
   local exclusion_filters=""
@@ -431,7 +452,7 @@ process_other_clade() {
               ORDER BY RANDOM()
           ) as rn
       FROM
-          ${REGION_TAG}_min${MIN_OBS}all_taxa_obs
+          ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs
       WHERE
           taxon_id IN (
               SELECT taxon_id
@@ -440,7 +461,7 @@ process_other_clade() {
           )
           AND taxon_id IN (
               SELECT taxon_id
-              FROM ${REGION_TAG}_min${MIN_OBS}all_taxa_obs
+              FROM ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs
               GROUP BY taxon_id
               HAVING COUNT(*) >= ${MIN_OBS}
           )
@@ -502,8 +523,49 @@ done
 # Process the "other" clade
 process_other_clade
 
-print_progress "All clades processed and exported"
+# Create the export summary file
+summary_file="${HOST_EXPORT_DIR}/export_summary.txt"
 
+{
+  echo "Export Summary"
+  echo "=============="
+  echo "DB_USER: ${DB_USER}"
+  echo "DB_NAME: ${DB_NAME}"
+  echo "REGION_TAG: ${REGION_TAG}"
+  echo "MIN_OBS: ${MIN_OBS}"
+  echo "MAX_RN: ${MAX_RN}"
+  echo "PRIMARY_ONLY: ${PRIMARY_ONLY}"
+  echo "EXPORT_SUBDIR: ${EXPORT_SUBDIR}"
+  echo "DB_CONTAINER: ${DB_CONTAINER}"
+  echo "HOST_EXPORT_BASE_PATH: ${HOST_EXPORT_BASE_PATH}"
+  echo "CONTAINER_EXPORT_BASE_PATH: ${CONTAINER_EXPORT_BASE_PATH}"
+  echo "ORIGIN_VALUE: ${ORIGIN_VALUE}"
+  echo "VERSION_VALUE: ${VERSION_VALUE}"
+  echo ""
+  echo "Table Row Counts:"
+  for clade in "${!CLADES[@]}"; do
+    table_name="${REGION_TAG}_${clade}_min${MIN_OBS}_all_cap${MAX_RN}"
+    row_count=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT COUNT(*) FROM ${table_name};" | tr -d '[:space:]')
+    echo "${table_name}: ${row_count} rows"
+  done
+  table_name="${REGION_TAG}_other_min${MIN_OBS}_all_cap${MAX_RN}"
+  row_count=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT COUNT(*) FROM ${table_name};" | tr -d '[:space:]')
+  echo "${table_name}: ${row_count} rows"
+  echo ""
+  echo "Column Names:"
+  for clade in "${!CLADES[@]}"; do
+    table_name="${REGION_TAG}_${clade}_min${MIN_OBS}_all_cap${MAX_RN}_photos"
+    columns=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT column_name FROM information_schema.columns WHERE table_name = '${table_name}';" | tr -d '[:space:]' | paste -sd, -)
+    echo "${table_name}: ${columns}"
+  done
+  table_name="${REGION_TAG}_other_min${MIN_OBS}_all_cap${MAX_RN}_photos"
+  columns=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT column_name FROM information_schema.columns WHERE table_name = '${table_name}';" | tr -d '[:space:]' | paste -sd, -)
+  echo "${table_name}: ${columns}"
+} > "$summary_file"
+
+print_progress "Export summary written to ${summary_file}"
+
+print_progress "All clades processed and exported"
 
 ---
 Full Path: wrapper.sh
@@ -513,13 +575,16 @@ Full Path: wrapper.sh
 # Define variables
 DB_USER="postgres"
 VERSION_VALUE="v0"
+ORIGIN_VALUE="iNat-June2024"
 DB_NAME="ibrida-${VERSION_VALUE}"
 REGION_TAG="NAfull"
 MIN_OBS=50
 MAX_RN=4000
 PRIMARY_ONLY=true  # Set this to true to select only primary photos (position == 0)
-EXPORT_SUBDIR="iNat-June2024/${VERSION_VALUE}/primary_only"  # Subdirectory for CSV exports
+EXPORT_SUBDIR="${ORIGIN_VALUE}/${VERSION_VALUE}/primary_only_${MIN_OBS}min_${MAX_RN}max"  # Subdirectory for CSV exports
 DB_CONTAINER="fast-ibrida-1"  # Update this to your container name
+HOST_EXPORT_BASE_PATH="/pond/Polli/ibridaExports"
+CONTAINER_EXPORT_BASE_PATH="/exports"
 
 # Paths to the scripts
 REGIONAL_BASE_SCRIPT="/home/caleb/repo/ibridaDB/dbTools/export/v0/regional_base.sh"
@@ -534,10 +599,14 @@ execute_script() {
   fi
 }
 
-# Export variables to be used by the child scripts
-export DB_USER VERSION_VALUE DB_NAME REGION_TAG MIN_OBS MAX_RN PRIMARY_ONLY EXPORT_SUBDIR DB_CONTAINER
+# Set permissions before running scripts
+docker exec "$DB_CONTAINER" bash -c "chmod -R 777 $CONTAINER_EXPORT_BASE_PATH && chown -R postgres:postgres $CONTAINER_EXPORT_BASE_PATH"
+echo "Permissions set for $CONTAINER_EXPORT_BASE_PATH"
 
-# # Execute the regional_base.sh script
+# Export variables to be used by the child scripts
+export DB_USER VERSION_VALUE ORIGIN_VALUE DB_NAME REGION_TAG MIN_OBS MAX_RN PRIMARY_ONLY EXPORT_SUBDIR DB_CONTAINER HOST_EXPORT_BASE_PATH CONTAINER_EXPORT_BASE_PATH
+
+# Execute the regional_base.sh script
 # NOTE: Commented as we already ran this successfully.
 # execute_script "$REGIONAL_BASE_SCRIPT"
 
@@ -779,6 +848,25 @@ MAX_RN="${MAX_RN}"
 PRIMARY_ONLY="${PRIMARY_ONLY}"
 EXPORT_SUBDIR="${EXPORT_SUBDIR}"
 DB_CONTAINER="${DB_CONTAINER}"
+HOST_EXPORT_BASE_PATH="${HOST_EXPORT_BASE_PATH}"
+CONTAINER_EXPORT_BASE_PATH="${CONTAINER_EXPORT_BASE_PATH}"
+ORIGIN_VALUE="${ORIGIN_VALUE}"
+VERSION_VALUE="${VERSION_VALUE}"
+
+# Debugging output
+echo "DB_USER: ${DB_USER}"
+echo "DB_NAME: ${DB_NAME}"
+echo "REGION_TAG: ${REGION_TAG}"
+echo "MIN_OBS: ${MIN_OBS}"
+echo "MAX_RN: ${MAX_RN}"
+echo "PRIMARY_ONLY: ${PRIMARY_ONLY}"
+echo "EXPORT_SUBDIR: ${EXPORT_SUBDIR}"
+echo "DB_CONTAINER: ${DB_CONTAINER}"
+echo "HOST_EXPORT_BASE_PATH: ${HOST_EXPORT_BASE_PATH}"
+echo "CONTAINER_EXPORT_BASE_PATH: ${CONTAINER_EXPORT_BASE_PATH}"
+echo "ORIGIN_VALUE: ${ORIGIN_VALUE}"
+echo "VERSION_VALUE: ${VERSION_VALUE}"
+echo "Parent obs table: ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs"
 
 # Clades and their respective ancestry filters
 declare -A CLADES
@@ -806,13 +894,15 @@ print_progress() {
 }
 
 # Ensure export directory exists and is writable
-EXPORT_DIR="/exports/${EXPORT_SUBDIR}"
-if [ ! -d "$EXPORT_DIR" ]; then
-  mkdir -p "$EXPORT_DIR"
+HOST_EXPORT_DIR="${HOST_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
+CONTAINER_EXPORT_DIR="${CONTAINER_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
+
+if [ ! -d "$HOST_EXPORT_DIR" ]; then
+  mkdir -p "$HOST_EXPORT_DIR"
 fi
 
-if [ ! -w "$EXPORT_DIR" ]; then
-  echo "Error: Directory $EXPORT_DIR is not writable."
+if [ ! -w "$HOST_EXPORT_DIR" ]; then
+  echo "Error: Directory $HOST_EXPORT_DIR is not writable."
   exit 1
 fi
 
@@ -820,9 +910,9 @@ fi
 process_clade() {
   local clade=$1
   local ancestry_filter=${CLADES[$clade]}
-  local table_name="${REGION_TAG}_${clade}_min${MIN_OBS}all_cap${MAX_RN}"
+  local table_name="${clade}"
   local photos_table_name="${table_name}_photos"
-  local export_path="${EXPORT_DIR}/${photos_table_name}.csv"
+  local export_path="${CONTAINER_EXPORT_DIR}/${photos_table_name}.csv"
 
   if [ -z "$ancestry_filter" ]; then
     echo "Unknown clade: $clade"
@@ -852,7 +942,7 @@ process_clade() {
               ORDER BY RANDOM()
           ) as rn
       FROM
-          ${REGION_TAG}_min${MIN_OBS}all_taxa_obs
+          ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs
       WHERE
           taxon_id IN (
               SELECT taxon_id
@@ -861,7 +951,7 @@ process_clade() {
           )
           AND taxon_id IN (
               SELECT taxon_id
-              FROM ${REGION_TAG}_min${MIN_OBS}all_taxa_obs
+              FROM ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs
               GROUP BY taxon_id
               HAVING COUNT(*) >= ${MIN_OBS}
           )
@@ -918,9 +1008,9 @@ process_clade() {
 # Function to process the "other" clade
 process_other_clade() {
   local clade="other"
-  local table_name="${REGION_TAG}_${clade}_min${MIN_OBS}all_cap${MAX_RN}"
+  local table_name="${REGION_TAG}_${clade}_min${MIN_OBS}_all_cap${MAX_RN}"
   local photos_table_name="${table_name}_photos"
-  local export_path="${EXPORT_DIR}/${photos_table_name}.csv"
+  local export_path="${CONTAINER_EXPORT_DIR}/${photos_table_name}.csv"
 
   # Construct the exclusion filter for predefined clades
   local exclusion_filters=""
@@ -951,7 +1041,7 @@ process_other_clade() {
               ORDER BY RANDOM()
           ) as rn
       FROM
-          ${REGION_TAG}_min${MIN_OBS}all_taxa_obs
+          ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs
       WHERE
           taxon_id IN (
               SELECT taxon_id
@@ -960,7 +1050,7 @@ process_other_clade() {
           )
           AND taxon_id IN (
               SELECT taxon_id
-              FROM ${REGION_TAG}_min${MIN_OBS}all_taxa_obs
+              FROM ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs
               GROUP BY taxon_id
               HAVING COUNT(*) >= ${MIN_OBS}
           )
@@ -1022,8 +1112,49 @@ done
 # Process the "other" clade
 process_other_clade
 
-print_progress "All clades processed and exported"
+# Create the export summary file
+summary_file="${HOST_EXPORT_DIR}/export_summary.txt"
 
+{
+  echo "Export Summary"
+  echo "=============="
+  echo "DB_USER: ${DB_USER}"
+  echo "DB_NAME: ${DB_NAME}"
+  echo "REGION_TAG: ${REGION_TAG}"
+  echo "MIN_OBS: ${MIN_OBS}"
+  echo "MAX_RN: ${MAX_RN}"
+  echo "PRIMARY_ONLY: ${PRIMARY_ONLY}"
+  echo "EXPORT_SUBDIR: ${EXPORT_SUBDIR}"
+  echo "DB_CONTAINER: ${DB_CONTAINER}"
+  echo "HOST_EXPORT_BASE_PATH: ${HOST_EXPORT_BASE_PATH}"
+  echo "CONTAINER_EXPORT_BASE_PATH: ${CONTAINER_EXPORT_BASE_PATH}"
+  echo "ORIGIN_VALUE: ${ORIGIN_VALUE}"
+  echo "VERSION_VALUE: ${VERSION_VALUE}"
+  echo ""
+  echo "Table Row Counts:"
+  for clade in "${!CLADES[@]}"; do
+    table_name="${REGION_TAG}_${clade}_min${MIN_OBS}_all_cap${MAX_RN}"
+    row_count=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT COUNT(*) FROM ${table_name};" | tr -d '[:space:]')
+    echo "${table_name}: ${row_count} rows"
+  done
+  table_name="${REGION_TAG}_other_min${MIN_OBS}_all_cap${MAX_RN}"
+  row_count=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT COUNT(*) FROM ${table_name};" | tr -d '[:space:]')
+  echo "${table_name}: ${row_count} rows"
+  echo ""
+  echo "Column Names:"
+  for clade in "${!CLADES[@]}"; do
+    table_name="${REGION_TAG}_${clade}_min${MIN_OBS}_all_cap${MAX_RN}_photos"
+    columns=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT column_name FROM information_schema.columns WHERE table_name = '${table_name}';" | tr -d '[:space:]' | paste -sd, -)
+    echo "${table_name}: ${columns}"
+  done
+  table_name="${REGION_TAG}_other_min${MIN_OBS}_all_cap${MAX_RN}_photos"
+  columns=$(docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT column_name FROM information_schema.columns WHERE table_name = '${table_name}';" | tr -d '[:space:]' | paste -sd, -)
+  echo "${table_name}: ${columns}"
+} > "$summary_file"
+
+print_progress "Export summary written to ${summary_file}"
+
+print_progress "All clades processed and exported"
 
 ---
 Full Path: wrapper.sh
@@ -1033,13 +1164,16 @@ Full Path: wrapper.sh
 # Define variables
 DB_USER="postgres"
 VERSION_VALUE="v0"
+ORIGIN_VALUE="iNat-June2024"
 DB_NAME="ibrida-${VERSION_VALUE}"
 REGION_TAG="NAfull"
 MIN_OBS=50
 MAX_RN=4000
 PRIMARY_ONLY=true  # Set this to true to select only primary photos (position == 0)
-EXPORT_SUBDIR="iNat-June2024/${VERSION_VALUE}/primary_only"  # Subdirectory for CSV exports
+EXPORT_SUBDIR="${ORIGIN_VALUE}/${VERSION_VALUE}/primary_only_${MIN_OBS}min_${MAX_RN}max"  # Subdirectory for CSV exports
 DB_CONTAINER="fast-ibrida-1"  # Update this to your container name
+HOST_EXPORT_BASE_PATH="/pond/Polli/ibridaExports"
+CONTAINER_EXPORT_BASE_PATH="/exports"
 
 # Paths to the scripts
 REGIONAL_BASE_SCRIPT="/home/caleb/repo/ibridaDB/dbTools/export/v0/regional_base.sh"
@@ -1054,10 +1188,14 @@ execute_script() {
   fi
 }
 
-# Export variables to be used by the child scripts
-export DB_USER VERSION_VALUE DB_NAME REGION_TAG MIN_OBS MAX_RN PRIMARY_ONLY EXPORT_SUBDIR DB_CONTAINER
+# Set permissions before running scripts
+docker exec "$DB_CONTAINER" bash -c "chmod -R 777 $CONTAINER_EXPORT_BASE_PATH && chown -R postgres:postgres $CONTAINER_EXPORT_BASE_PATH"
+echo "Permissions set for $CONTAINER_EXPORT_BASE_PATH"
 
-# # Execute the regional_base.sh script
+# Export variables to be used by the child scripts
+export DB_USER VERSION_VALUE ORIGIN_VALUE DB_NAME REGION_TAG MIN_OBS MAX_RN PRIMARY_ONLY EXPORT_SUBDIR DB_CONTAINER HOST_EXPORT_BASE_PATH CONTAINER_EXPORT_BASE_PATH
+
+# Execute the regional_base.sh script
 # NOTE: Commented as we already ran this successfully.
 # execute_script "$REGIONAL_BASE_SCRIPT"
 
