@@ -15,6 +15,8 @@
 # - The clade column is filled with the clade name
 # - The macroclade column is filled with the parent macroclade
 # - The metaclade column is NULL
+# FUTURE: subclades.
+# FUTURE: Consider using standard L<rank_level> clade syntax, defining clade as directed acyclic graph (DAG) stemming from a root node.
 #
 # When exporting a macroclade:
 # - The macroclade column is filled with the macroclade name
@@ -70,6 +72,7 @@ TAXA_HIERARCHY=(
     ["mammalia"]="macroclade:48460/1/2/355675/40151%:"
     ["amphibia"]="macroclade:48460/1/2/355675/20978%:"
     ["angiospermae"]="macroclade:48460/47126/211194/47125/%:"
+    [""]
 )
 
 # Function to execute SQL commands
