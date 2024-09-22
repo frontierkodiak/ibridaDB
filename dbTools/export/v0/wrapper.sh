@@ -45,9 +45,9 @@ PRIMARY_ONLY=true  # Set this to true to select only primary photos (position ==
 EXPORT_GROUP="primary_terrestrial_arthropoda"  # Metaclade to export
 PROCESS_OTHER=false  # Set to true if you want to process the 'other' group
 EXPORT_SUBDIR="${ORIGIN_VALUE}/${VERSION_VALUE}/primary_only_${MIN_OBS}min_${MAX_RN}max"  # Subdirectory for CSV exports
-DB_CONTAINER="fast-ibrida-1"  # Update this to your container name
-# HOST_EXPORT_BASE_PATH="/pond/Polli/ibridaExports"
-# CONTAINER_EXPORT_BASE_PATH="/exports"
+DB_CONTAINER="ibrida-noPond"  # Update this to your container name
+HOST_EXPORT_BASE_PATH="/banana/miniH5/ibrida_exports"
+CONTAINER_EXPORT_BASE_PATH="/exports"
 
 # Paths to the scripts
 REGIONAL_BASE_SCRIPT="/home/caleb/repo/ibridaDB/dbTools/export/v0/regional_base.sh"
