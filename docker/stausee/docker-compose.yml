@@ -1,6 +1,7 @@
 services:
   ibrida:
     image: postgis/postgis:15-3.3
+    user: "998:998"
     shm_size: '16g'
     environment:
       POSTGRES_PASSWORD: ooglyboogly69
@@ -14,8 +15,6 @@ services:
       - /database/ibridaDB:/var/lib/postgresql/data
       - /datasets/ibrida-data/exports:/exports
       - /datasets/ibrida-data/intake:/metadata
-      - ../entrypoint.sh:/docker-entrypoint-initdb.d/entrypoint.sh
     ports:
       - "5432:5432"
-    entrypoint: ["/bin/bash", "/docker-entrypoint-initdb.d/entrypoint.sh"]
     container_name: ibridaDB
