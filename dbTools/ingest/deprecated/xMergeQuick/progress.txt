@@ -1,0 +1,35 @@
+```
+caleb@blade:~$ cd /home/caleb/repo/ibridaDB/dbTools/ingest/xMergeQuick/ && ./xMergeQuick.sh
+Creating step1 SQL temp scripts...
+Running step1 observations and observers SQL scripts...
+BEGIN
+BEGIN
+psql:/tool/ingest/xMergeQuick/step1_observations_tmp.sql:6: NOTICE:  table "int_observations_partial" does not exist, skipping
+DROP TABLE
+DROP TABLE
+CREATE TABLE
+CREATE TABLE
+COPY 792419
+CREATE INDEX
+ALTER TABLE
+UPDATE 792419
+COMMIT
+COPY 137630906
+CREATE INDEX
+DELETE 108814438
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+ALTER TABLE
+UPDATE 28816468
+COMMIT
+Completed all step1 observations and observers SQL scripts.
+Running step1_photos SQL script...
+BEGIN
+psql:/tool/ingest/xMergeQuick/step1_photos_tmp.sql:6: NOTICE:  table "int_photos_partial" does not exist, skipping
+DROP TABLE
+CREATE TABLE
+COPY 240191833
+CREATE INDEX
+```
