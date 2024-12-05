@@ -10,6 +10,7 @@ positional_accuracy | The uncertainty in meters around the latitude and longitud
 taxon_id | The identifier of the associated axon the observation has been identified as
 quality_grade | `Casual` observations are missing certain data components (e.g. latitude) or may have flags associated with them not shown here (e.g. `location appears incorrect`). Observations flagged as not wild are also considered Casual. All other observations are either `Needs ID` or `Research Grade`. Generally, Research Grade observations have more than one agreeing identifications at the species level, or if there are disagreements at least ⅔ of the identifications are in agreement a the species level
 observed_on | The date at which the observation took place
+<NOTE> New column added in v0/r1 'anomaly_score' </NOTE>
 
 ### Observers
 Column | Description
