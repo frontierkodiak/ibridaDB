@@ -94,6 +94,8 @@ Make scripts executable:
 chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/common/main.sh
 chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/common/regional_base.sh
 chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/common/cladistic.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/common/functions.sh
+
 
 # Make wrapper scripts executable
 chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/r0/wrapper.sh

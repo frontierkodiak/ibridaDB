@@ -1,0 +1,1889 @@
+Directory tree, stemming from root "/home/caleb/repo/ibridaDB/dbTools":
+├── FLOW.md
+├── README.md
+├── __init__.py
+├── export
+│   ├── v0
+│   │   ├── common
+│   │   │   ├── cladistic.sh
+│   │   │   ├── functions.sh
+│   │   │   ├── main.sh
+│   │   │   └── regional_base.sh
+│   │   ├── r0
+│   │   │   └── wrapper.sh
+│   │   └── r1
+│   │       │   └── wrapper.sh
+│   └── v0_bak
+│       │   ├── README.md
+│       │   ├── regional_base.sh
+│       │   ├── wrapper_r0.sh
+│       │   └── wrapper_r1.sh
+├── ingest
+│   ├── deprecated
+│   │   ├── init.md
+│   │   ├── init.sh
+│   │   ├── v0x
+│   │   │   ├── geom.sh
+│   │   │   ├── init.md
+│   │   │   ├── init.sh
+│   │   │   └── init2.bak.md
+│   │   ├── xMerge
+│   │   │   ├── step1_observations.sql
+│   │   │   ├── step1_observers.sql
+│   │   │   ├── step1_photos.sql
+│   │   │   ├── step2_observations.sh
+│   │   │   ├── step3_observations.sql
+│   │   │   ├── step3_observers.sql
+│   │   │   ├── step3_photos.sql
+│   │   │   ├── xMerge.md
+│   │   │   └── xMerge.sh
+│   │   └── xMergeQuick
+│   │       │   ├── progress.txt
+│   │       │   ├── step1_observations.sql
+│   │       │   ├── step1_observers.sql
+│   │       │   ├── step1_pt1_photos.sql
+│   │       │   ├── step1_pt2_photos.sh
+│   │       │   ├── step1_pt3_photos.sql
+│   │       │   ├── step2_observations.sh
+│   │       │   ├── step3_observations.sh
+│   │       │   ├── step3_observers.sql
+│   │       │   ├── step3_photos.sh
+│   │       │   ├── xMergeQuick.sh
+│   │       │   └── xMergeQuick_master.sh
+│   └── v0
+│       │   ├── common
+│       │   │   ├── geom.sh
+│       │   │   ├── main.sh
+│       │   │   └── vers_origin.sh
+│       │   ├── r0
+│       │   │   ├── ingest.sh
+│       │   │   └── wrapper.sh
+│       │   ├── r1
+│       │   │   ├── structure.sql
+│       │   │   └── wrapper.sh
+│       │   ├── readme.md
+│       │   └── utils
+│       │       │   └── add_release.sh
+├── schema.md
+├── schema.py
+├── taxa
+│   ├── __init__.py
+│   ├── analysis_utils.py
+│   ├── analyze_diff.py
+│   ├── diffs
+│   │   └── May2024
+│   │       │   ├── L40_analysis.txt
+│   │       │   ├── L50_analysis.txt
+│   │       │   ├── L60_analysis.txt
+│   │       │   ├── active_status_changes.csv
+│   │       │   ├── changed_attributes.csv
+│   │       │   ├── deprecated_taxon_ids.csv
+│   │       │   ├── inactive_observations_count.csv
+│   │       │   ├── name_changes.csv
+│   │       │   ├── new_taxon_count.csv
+│   │       │   └── new_taxon_ids.csv
+│   ├── mappings
+│   └── reference.md
+└── taxa_expanded
+    │   ├── make.py
+    │   ├── model.py
+    │   └── taxa_expanded.md
+
+----
+Full Path: FLOW.md
+
+```mermaid
+flowchart TB
+    subgraph Input
+        inat[iNaturalist Open Data]
+        csv[CSV Files]
+    end
+
+    subgraph Ingest["Database Initialization (ingest/)"]
+        wrapper[Wrapper Script\nr0/wrapper.sh or r1/wrapper.sh]
+        main[Main Script\ncommon/main.sh]
+        geom[Geometry Processing\ncommon/geom.sh]
+        vers[Version/Origin Updates\ncommon/vers_origin.sh]
+        db[(PostgreSQL Database)]
+    end
+
+    subgraph Export["Data Export (export/)"]
+        exp_wrapper[Export Wrapper\nr0/wrapper.sh or r1/wrapper.sh]
+        exp_main[Export Main Script\ncommon/main.sh]
+        reg_base[Regional Base Tables\ncommon/regional_base.sh]
+        clad[Cladistic Filtering\ncommon/cladistic.sh]
+        csv_out[CSV Export Files]
+    end
+
+    inat --> csv
+    csv --> wrapper
+    wrapper --> main
+    main --> geom
+    main --> vers
+    geom --> db
+    vers --> db
+    db --> exp_wrapper
+    exp_wrapper --> exp_main
+    exp_main --> reg_base
+    reg_base --> clad
+    clad --> csv_out
+
+    style Ingest fill:#f9f,stroke:#333,stroke-width:2px
+    style Export fill:#bbf,stroke:#333,stroke-width:2px
+    style Input fill:#bfb,stroke:#333,stroke-width:2px
+```
+
+----
+Full Path: README.md
+
+# ibrida Database Reproduction Guide
+
+## Overview
+This guide documents the step-by-step process for reproducing the ibrida database from iNaturalist open data dumps. The database uses a versioning system with two components:
+- **Version (v#)**: Indicates structural changes to the database
+- **Release (r#)**: Indicates different data dumps using the same structure
+
+Current versions:
+- v0r0: June 2024 iNat data release
+- v0r1: December 2024 iNat data release (adds anomaly_score column to observations table)
+
+## System Architecture
+The process is divided into two main phases:
+1. Database Initialization (ingest/)
+2. Data Export (export/)
+
+Each phase uses a modular structure with:
+- Common scripts containing shared logic
+- Release-specific wrapper scripts containing parameters
+
+## Database Initialization
+### Directory Structure
+```
+dbTools/ingest/v0/
+├── common/                # Shared scripts
+│   ├── geom.sh           # Geometry calculations
+│   ├── vers_origin.sh    # Version/origin updates
+│   └── main.sh           # Core ingestion logic
+├── r0/
+│   ├── wrapper.sh        # June 2024 release parameters
+│   └── structure.sql     # Database schema for r0
+└── r1/
+    ├── wrapper.sh        # December 2024 release parameters
+    └── structure.sql     # Database schema for r1 (includes anomaly_score)
+```
+
+### Running the Ingestion Process
+Make scripts executable:
+```bash
+# Make common scripts executable
+chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/common/main.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/common/geom.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/common/vers_origin.sh
+
+# Make wrapper scripts executable
+chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/r0/wrapper.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/r1/wrapper.sh
+```
+
+Run ingest:
+```bash
+# For June 2024 data (r0)
+/home/caleb/repo/ibridaDB/dbTools/ingest/v0/r0/wrapper.sh
+
+# For December 2024 data (r1)
+/home/caleb/repo/ibridaDB/dbTools/ingest/v0/r1/wrapper.sh
+```
+
+## Data Export
+### Directory Structure
+```
+dbTools/export/v0/
+├── common/
+│   ├── main.sh           # Core export logic
+│   ├── regional_base.sh  # Region-specific filtering
+│   └── cladistic.sh      # Taxonomic filtering
+├── r0/
+│   └── wrapper.sh        # June 2024 parameters
+└── r1/
+    └── wrapper.sh        # December 2024 parameters
+```
+
+### Export Process Steps
+1. Regional base table creation:
+   - Filters observations by geographic region
+   - Applies minimum observation thresholds
+   - Creates base tables for further filtering
+
+2. Cladistic filtering:
+   - Applies taxonomic filters based on metaclades
+   - Handles special cases (e.g., excluding aquatic insects)
+   - Creates filtered observation tables
+
+3. CSV export:
+   - Creates directory structure if needed
+   - Sets appropriate permissions
+   - Exports filtered data with photo restrictions
+   - Generates export statistics and summaries
+
+### Running the Export Process
+Make scripts executable:
+```bash
+# Make common scripts executable
+chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/common/main.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/common/regional_base.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/common/cladistic.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/common/functions.sh
+
+
+# Make wrapper scripts executable
+chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/r0/wrapper.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/r1/wrapper.sh
+```
+
+Run exports:
+```bash
+# For June 2024 data (r0)
+/home/caleb/repo/ibridaDB/dbTools/export/v0/r0/wrapper.sh
+
+# For December 2024 data (r1)
+/home/caleb/repo/ibridaDB/dbTools/export/v0/r1/wrapper.sh
+```
+
+### Export Directory Structure
+Exports are organized by version and release:
+```
+/datasets/ibrida-data/exports/
+├── v0/
+│   ├── r0/
+│   │   └── primary_only_50min_3000max/
+│   │       ├── primary_terrestrial_arthropoda_photos.csv
+│   │       └── export_summary.txt
+│   └── r1/
+│       └── primary_only_50min_4000max/
+│           ├── primary_terrestrial_arthropoda_photos.csv
+│           └── export_summary.txt
+```
+
+### Available Export Groups
+The system supports several predefined export groups:
+1. primary_terrestrial_arthropoda
+   - Includes Insecta and Arachnida
+   - Excludes aquatic groups (Ephemeroptera, Plecoptera, Trichoptera, Odonata)
+   - Parameters: MIN_OBS=50, MAX_RN=4000 (r1)
+
+2. amphibia
+   - Includes all Amphibia taxa
+   - Parameters: MIN_OBS=400, MAX_RN=1000
+
+## Schema Notes
+### Release-Specific Changes
+- v0r1 adds `anomaly_score numeric(15,6)` to observations table
+- Export scripts automatically handle presence/absence of this column
+
+### Metadata Columns
+All tables include:
+- `version`: Database structure version (e.g., "v0")
+- `release`: Data release identifier (e.g., "r0", "r1")
+- `origin`: Source and date of the data (e.g., "iNat-Dec2024")
+
+----
+Full Path: schema.md
+
+```markdown
+### Observations
+Column | Description
+-------|------------
+observation_uuid | A unique identifier associated with each observation also available at iNaturalist.org via URLs constructed like this https://www.inaturalist.org/observations/c075c500-b566-44aa-847c-95da8fb8b3c9
+observer_id | The identifier of the associated iNaturalist user who recorded the observation
+latitude | The latitude where the organism was encountered
+longitude | The longitude where the organism was encountered
+positional_accuracy | The uncertainty in meters around the latitude and longitude
+taxon_id | The identifier of the associated axon the observation has been identified as
+quality_grade | `Casual` observations are missing certain data components (e.g. latitude) or may have flags associated with them not shown here (e.g. `location appears incorrect`). Observations flagged as not wild are also considered Casual. All other observations are either `Needs ID` or `Research Grade`. Generally, Research Grade observations have more than one agreeing identifications at the species level, or if there are disagreements at least ⅔ of the identifications are in agreement a the species level
+observed_on | The date at which the observation took place
+<NOTE> New column added in v0/r1 'anomaly_score' </NOTE>
+
+### Observers
+Column | Description
+-------|------------
+observer_id | A unique identifier associated with each observer also available on https://www.inaturalist.org via URLs constructed like this: https://www.inaturalist.org/users/1
+login | A unique login associated with each observer
+name | Personal name of the observer, if provided
+
+### Photos
+Column | Description
+-------|------------
+photo_uuid | A unique identifier associated with each photo. Note that photo_uuid can be non-unique across different observations.
+photo_id | A photo identifier used on iNaturalist and available on iNaturalist.org via URLs constructed like this https://www.inaturalist.org/photos/113756411
+observation_uuid | The identifier of the associated observation
+observer_id | The identifier of the associated observer who took the photo
+extension | The image file format, e.g. `jpeg`
+license | All photos in the dataset have open licenses (e.g. Creative Commons) and unlicensed (CC0 / public domain)
+width | The width of the photo in pixels
+height | The height of the photo in pixels
+position | When observations have multiple photos the user can set the position in which the photos should appear. Lower numbers are meant to appear first
+>The issue is that some observations include more than one photo, and photos associated with observations that have >1 photo share a photo_id and photo_uuid, which I did not expect. These additional photos (which have their own rows in the 'photos' table) are denoted by the 'position' field, where position ==0 indicates that the photo is the primary photo for the record. If an observation only has one photo, then the associated 'photos' record will have position == 0. Therefore. I'm pretty sure that a composite key of photo_id ++ photo_uuid ++ position will function as a primary key. 
+
+### Taxa
+Column | Description
+-------|------------
+taxon_id | A unique identifier associated with each node in the iNaturalist taxonomy hierarchy. Also available on iNaturalist.org via URLs constructed like this https://www.inaturalist.org/taxa/47219
+ancestry | The taxon_ids of ancestry of the taxon ordered from the root of the tree to the taxon concatenated together with `\`
+rank_level | A number associated with the rank. Taxon rank_levels must be less than the rank level of their parent. For example, a taxon with rank genus and rank_level 20 cannot descend from a taxon of rank species and rank_level 10
+rank | A constrained set of labels associated with nodes on the hierarchy. These include the standard Linnaean ranks: Kingdom, Phylum, Class, Order, Family, Genus, Species, and a number of internodes such as Subfamily
+name | The scientific name for the taxon
+active | When the taxonomy changes, generally taxa aren’t deleted on iNaturalist to avoid breaking links. Instead taxa are made inactive and observations are moved to new active nodes. Occasionally, observations linger on inactive taxa which are no longer active parts of the iNaturalist taxonomy
+```
+
+----
+Full Path: ingest/v0/readme.md
+
+```markdown
+dbTools/ingest/v0/
+├── common/
+│   ├── geom.sh           # Geometry calculations
+│   ├── vers_origin.sh    # Version/origin updates
+│   └── main.sh           # Core ingestion logic
+├── r0/
+│   └── wrapper.sh        # r0-specific parameters
+└── r1/
+    └── wrapper.sh        # r1-specific parameters
+```
+
+# ibrida Database Reproduction Guide
+
+## Overview
+This guide documents the step-by-step process for reproducing the ibrida database from iNaturalist open data dumps. The database uses a versioning system with two components:
+- **Version (v#)**: Indicates structural changes to the database
+- **Release (r#)**: Indicates different data dumps using the same structure
+
+Current versions:
+- v0r0: June 2024 iNat data release
+- v0r1: December 2024 iNat data release (adds anomaly_score column to observations table)
+
+## Directory Structure
+```
+dbTools/ingest/v0/
+├── common/                # Shared scripts
+│   ├── geom.sh           # Geometry calculations
+│   ├── vers_origin.sh    # Version/origin updates
+│   └── main.sh           # Core ingestion logic
+├── r0/
+│   └── wrapper.sh        # June 2024 release parameters
+└── r1/
+    └── wrapper.sh        # December 2024 release parameters
+```
+
+## Database Initialization and Data Ingestion
+The initialization and ingestion process uses a modular system with wrapper scripts for version-specific parameters and common scripts for shared logic.
+
+### Setup Release-Specific Parameters
+Each release has its own wrapper script that defines:
+- Database name (e.g., `ibrida-v0r1`)
+- Source information
+- Version and release values
+- Input/output paths
+
+### Running the Ingestion Process
+```bash
+# Make scripts executable
+chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/common/main.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/common/geom.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/common/vers_origin.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/r1/wrapper.sh
+
+# Run ingest process for latest release
+/home/caleb/repo/ibridaDB/dbTools/ingest/v0/r1/wrapper.sh
+```
+
+### Ingestion Process Steps
+1. `wrapper.sh` sets release-specific parameters
+2. `main.sh` executes the core ingestion logic:
+   - Creates the database
+   - Sets up tables and indexes
+   - Imports data from CSV files
+   - Adds and calculates geometry columns (via `geom.sh`)
+   - Sets version, release, and origin information (via `vers_origin.sh`)
+3. Parallel processing is used for geometry calculations and metadata updates
+
+### Database Schema
+Each table includes these metadata columns:
+- `version`: Database structure version (e.g., "v0")
+- `release`: Data release identifier (e.g., "r0", "r1")
+- `origin`: Source and date of the data (e.g., "iNat-Dec2024")
+
+### Important Indices
+Core indices:
+- Primary key indices on all tables
+- Geospatial index on observations (`observations_geom`)
+- Foreign key indices for joins
+- Full-text search indices for metadata columns
+- Composite index for version/release queries (`idx_obs_version_release`)
+
+## Adding a New Release
+To add a new release:
+
+1. Create a new release directory and wrapper script:
+```bash
+mkdir -p /home/caleb/repo/ibridaDB/dbTools/ingest/v0/r{N}
+cp /home/caleb/repo/ibridaDB/dbTools/ingest/v0/r1/wrapper.sh /home/caleb/repo/ibridaDB/dbTools/ingest/v0/r{N}/
+```
+
+2. Update parameters in the new wrapper script:
+- SOURCE
+- RELEASE_VALUE
+- Other release-specific paths/values
+
+3. Run the ingestion process as described above
+
+## Export Process
+[To be added as we implement the export steps...]
+
+----
+Full Path: ingest/v0/r0/ingest.sh
+
+#!/bin/bash
+### DEV: DEPRECATED, REMOVE ONCE WRAPPER/MAIN IS TESTED/VERIFIED
+### DEV: Reference for functionality to port to new modularized system
+
+# Database and user variables
+DB_USER="postgres"
+DB_TEMPLATE="template_postgis"
+NUM_PROCESSES=16
+BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/ingest/v0"
+
+# Source variable
+SOURCE="June2024"
+
+# Construct origin value based on source
+ORIGIN_VALUE="iNat-${SOURCE}"
+
+# Version variable
+VERSION_VALUE="v0"
+
+# Construct database name
+DB_NAME="ibrida-${VERSION_VALUE}"
+
+# Function to execute SQL commands
+execute_sql() {
+  local sql="$1"
+  docker exec ibrida psql -U "$DB_USER" -d "$DB_NAME" -c "$sql"
+}
+
+# Function to print progress
+print_progress() {
+  local message="$1"
+  echo "======================================"
+  echo "$message"
+  echo "======================================"
+}
+
+# Create database, drop if exists
+print_progress "Creating database"
+docker exec ibrida psql -U "$DB_USER" -c "DROP DATABASE IF EXISTS \"$DB_NAME\";"
+docker exec ibrida psql -U "$DB_USER" -c "CREATE DATABASE \"$DB_NAME\" WITH TEMPLATE $DB_TEMPLATE OWNER $DB_USER;"
+
+# Connect to the database and create tables
+print_progress "Creating tables"
+execute_sql "
+BEGIN;
+
+CREATE TABLE observations (
+    observation_uuid uuid NOT NULL,
+    observer_id integer,
+    latitude numeric(15,10),
+    longitude numeric(15,10),
+    positional_accuracy integer,
+    taxon_id integer,
+    quality_grade character varying(255),
+    observed_on date
+);
+
+CREATE TABLE photos (
+    photo_uuid uuid NOT NULL,
+    photo_id integer NOT NULL,
+    observation_uuid uuid NOT NULL,
+    observer_id integer,
+    extension character varying(5),
+    license character varying(255),
+    width smallint,
+    height smallint,
+    position smallint
+);
+
+CREATE TABLE taxa (
+    taxon_id integer NOT NULL,
+    ancestry character varying(255),
+    rank_level double precision,
+    rank character varying(255),
+    name character varying(255),
+    active boolean
+);
+
+CREATE TABLE observers (
+    observer_id integer NOT NULL,
+    login character varying(255),
+    name character varying(255)
+);
+
+COMMIT;
+"
+
+# Import data
+print_progress "Importing data"
+execute_sql "
+BEGIN;
+
+COPY observations FROM '/metadata/${SOURCE}/observations.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
+COPY photos FROM '/metadata/${SOURCE}/photos.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
+COPY taxa FROM '/metadata/${SOURCE}/taxa.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
+COPY observers FROM '/metadata/${SOURCE}/observers.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
+
+COMMIT;
+"
+
+# Create indexes
+print_progress "Creating indexes"
+execute_sql "
+BEGIN;
+
+CREATE INDEX index_photos_photo_uuid ON photos USING btree (photo_uuid);
+CREATE INDEX index_photos_observation_uuid ON photos USING btree (observation_uuid);
+CREATE INDEX index_photos_position ON photos USING btree (position);
+CREATE INDEX index_photos_photo_id ON photos USING btree (photo_id);
+CREATE INDEX index_taxa_taxon_id ON taxa USING btree (taxon_id);
+CREATE INDEX index_observers_observers_id ON observers USING btree (observer_id);
+CREATE INDEX index_observations_observer_id ON observations USING btree (observer_id);
+CREATE INDEX index_observations_quality ON observations USING btree (quality_grade);
+CREATE INDEX index_observations_taxon_id ON observations USING btree (taxon_id);
+CREATE INDEX index_taxa_active ON taxa USING btree (active);
+CREATE INDEX index_observations_taxon_id ON observations USING btree (taxon_id);
+
+COMMIT;
+"
+
+# Add geom column (parallelized calculation using geom.sh)
+print_progress "Adding geom column"
+execute_sql "ALTER TABLE observations ADD COLUMN geom public.geometry;"
+
+# Run parallel geom calculations
+print_progress "Running parallel geom calculations"
+"${BASE_DIR}/geom.sh" "$DB_NAME" "observations" "$NUM_PROCESSES" "$BASE_DIR"
+
+# Create geom index
+print_progress "Creating geom index"
+execute_sql "
+BEGIN;
+
+CREATE INDEX observations_geom ON observations USING GIST (geom);
+
+COMMIT;
+"
+
+# Vacuum analyze
+print_progress "Vacuum analyze"
+execute_sql "VACUUM ANALYZE;"
+
+# Add origin and version columns in parallel
+print_progress "Adding origin and version columns"
+execute_sql "
+BEGIN;
+
+ALTER TABLE taxa ADD COLUMN origin VARCHAR(255);
+ALTER TABLE observers ADD COLUMN origin VARCHAR(255);
+ALTER TABLE observations ADD COLUMN origin VARCHAR(255);
+ALTER TABLE photos ADD COLUMN origin VARCHAR(255);
+ALTER TABLE photos ADD COLUMN version VARCHAR(255);
+ALTER TABLE observations ADD COLUMN version VARCHAR(255);
+ALTER TABLE observers ADD COLUMN version VARCHAR(255);
+ALTER TABLE taxa ADD COLUMN version VARCHAR(255);
+
+COMMIT;
+"
+
+# Run parallel updates for origin and version columns
+print_progress "Running parallel updates for origin and version columns"
+"${BASE_DIR}/vers_origin.sh" "$DB_NAME" "$NUM_PROCESSES" "$ORIGIN_VALUE" "$VERSION_VALUE"
+
+# Create indexes for origin and version columns
+print_progress "Creating indexes for origin and version columns"
+execute_sql "
+BEGIN;
+
+CREATE INDEX index_taxa_origins ON taxa USING GIN (to_tsvector('simple', origin));
+CREATE INDEX index_taxa_name ON taxa USING GIN (to_tsvector('simple', name));
+CREATE INDEX index_observers_origins ON observers USING GIN (to_tsvector('simple', origin));
+CREATE INDEX index_observations_origins ON observations USING GIN (to_tsvector('simple', origin));
+CREATE INDEX index_photos_origins ON photos USING GIN (to_tsvector('simple', origin));
+CREATE INDEX index_photos_version ON photos USING GIN (to_tsvector('simple', version));
+CREATE INDEX index_observations_version ON observations USING GIN (to_tsvector('simple', version));
+CREATE INDEX index_observers_version ON observers USING GIN (to_tsvector('simple', version));
+CREATE INDEX index_taxa_version ON taxa USING GIN (to_tsvector('simple', version));
+
+COMMIT;
+"
+
+print_progress "Database setup complete"
+
+
+----
+Full Path: ingest/v0/r0/wrapper.sh
+
+#!/bin/bash
+
+# Database and user variables
+export DB_USER="postgres"
+export DB_TEMPLATE="template_postgis"
+export NUM_PROCESSES=16
+export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/ingest/v0"
+
+# Source variable
+export SOURCE="June2024"
+export METADATA_PATH="/metadata/${SOURCE}"
+
+# Version and origin values
+export ORIGIN_VALUE="iNat-${SOURCE}"
+export VERSION_VALUE="v0"
+export RELEASE_VALUE="r0"
+export DB_NAME="ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"
+export DB_CONTAINER="ibridaDB"
+export STRUCTURE_SQL="${BASE_DIR}/r0/structure.sql"
+
+# Execute main script
+"${BASE_DIR}/common/main.sh"    
+
+----
+Full Path: ingest/v0/common/main.sh
+
+#!/bin/bash
+
+# This script expects the following variables to be set by the wrapper:
+# - DB_USER
+# - DB_TEMPLATE
+# - NUM_PROCESSES
+# - BASE_DIR
+# - SOURCE
+# - ORIGIN_VALUE
+# - VERSION_VALUE
+# - RELEASE_VALUE
+# - DB_NAME
+# - DB_CONTAINER
+# - METADATA_PATH
+# - STRUCTURE_SQL
+
+# Validate required variables
+required_vars=(
+    "DB_USER" "DB_TEMPLATE" "NUM_PROCESSES" "BASE_DIR" 
+    "SOURCE" "ORIGIN_VALUE" "VERSION_VALUE" "DB_NAME" 
+    "DB_CONTAINER" "METADATA_PATH" "STRUCTURE_SQL"
+)
+
+for var in "${required_vars[@]}"; do
+    if [ -z "${!var}" ]; then
+        echo "Error: Required variable $var is not set"
+        exit 1
+    fi
+done
+
+# Function to execute SQL commands
+execute_sql() {
+    local sql="$1"
+    docker exec ${DB_CONTAINER} psql -U ${DB_USER} -d "${DB_NAME}" -c "$sql"
+}
+
+# Function to execute SQL commands on default postgres database
+execute_sql_postgres() {
+    local sql="$1"
+    docker exec ${DB_CONTAINER} psql -U ${DB_USER} -c "$sql"
+}
+
+# Function to print progress
+print_progress() {
+    echo "======================================"
+    echo "$1"
+    echo "======================================"
+}
+
+# Create database
+print_progress "Creating database"
+execute_sql_postgres "DROP DATABASE IF EXISTS \"$DB_NAME\";"
+execute_sql_postgres "CREATE DATABASE \"$DB_NAME\" WITH TEMPLATE $DB_TEMPLATE OWNER $DB_USER;"
+
+# Create tables from structure file
+print_progress "Creating tables"
+cat "${STRUCTURE_SQL}" | docker exec -i ${DB_CONTAINER} psql -U ${DB_USER} -d "${DB_NAME}"
+
+# Import data
+print_progress "Importing data"
+execute_sql "
+BEGIN;
+
+COPY observations FROM '${METADATA_PATH}/observations.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
+COPY photos FROM '${METADATA_PATH}/photos.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
+COPY taxa FROM '${METADATA_PATH}/taxa.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
+COPY observers FROM '${METADATA_PATH}/observers.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
+
+COMMIT;
+"
+
+# Create indexes
+print_progress "Creating indexes"
+execute_sql "
+BEGIN;
+
+CREATE INDEX index_photos_photo_uuid ON photos USING btree (photo_uuid);
+CREATE INDEX index_photos_observation_uuid ON photos USING btree (observation_uuid);
+CREATE INDEX index_photos_position ON photos USING btree (position);
+CREATE INDEX index_photos_photo_id ON photos USING btree (photo_id);
+CREATE INDEX index_taxa_taxon_id ON taxa USING btree (taxon_id);
+CREATE INDEX index_observers_observers_id ON observers USING btree (observer_id);
+CREATE INDEX index_observations_observer_id ON observations USING btree (observer_id);
+CREATE INDEX index_observations_quality ON observations USING btree (quality_grade);
+CREATE INDEX index_observations_taxon_id ON observations USING btree (taxon_id);
+CREATE INDEX index_taxa_active ON taxa USING btree (active);
+
+COMMIT;
+"
+
+# Create conditional index for anomaly_score if it exists
+execute_sql "
+DO \$\$
+BEGIN
+    IF EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_name = 'observations' 
+        AND column_name = 'anomaly_score'
+    ) THEN
+        CREATE INDEX idx_observations_anomaly ON observations (anomaly_score);
+    END IF;
+END \$\$;"
+
+# Add geom column
+print_progress "Adding geom column"
+execute_sql "ALTER TABLE observations ADD COLUMN geom public.geometry;"
+
+# Run parallel geom calculations
+print_progress "Running parallel geom calculations"
+"${BASE_DIR}/common/geom.sh" "$DB_NAME" "observations" "$NUM_PROCESSES" "$BASE_DIR"
+
+# Create geom index
+print_progress "Creating geom index"
+execute_sql "
+BEGIN;
+CREATE INDEX observations_geom ON observations USING GIST (geom);
+COMMIT;
+"
+
+# Vacuum analyze
+print_progress "Vacuum analyze"
+execute_sql "VACUUM ANALYZE;"
+
+# Add origin and version columns in parallel
+print_progress "Adding origin, version, and release columns"
+execute_sql "
+BEGIN;
+
+ALTER TABLE taxa ADD COLUMN origin VARCHAR(255);
+ALTER TABLE observers ADD COLUMN origin VARCHAR(255);
+ALTER TABLE observations ADD COLUMN origin VARCHAR(255);
+ALTER TABLE photos ADD COLUMN origin VARCHAR(255);
+ALTER TABLE photos ADD COLUMN version VARCHAR(255);
+ALTER TABLE observations ADD COLUMN version VARCHAR(255);
+ALTER TABLE observers ADD COLUMN version VARCHAR(255);
+ALTER TABLE taxa ADD COLUMN version VARCHAR(255);
+ALTER TABLE photos ADD COLUMN release VARCHAR(255);
+ALTER TABLE observations ADD COLUMN release VARCHAR(255);
+ALTER TABLE observers ADD COLUMN release VARCHAR(255);
+ALTER TABLE taxa ADD COLUMN release VARCHAR(255);
+
+COMMIT;
+"
+
+# Run parallel updates for origin and version columns
+print_progress "Running parallel updates for origin and version columns"
+"${BASE_DIR}/common/vers_origin.sh" "$DB_NAME" "$NUM_PROCESSES" "$ORIGIN_VALUE" "$VERSION_VALUE" "$RELEASE_VALUE"
+
+# Create indexes for origin and version columns
+print_progress "Creating indexes for origin, version, and release columns"
+execute_sql "
+BEGIN;
+
+CREATE INDEX index_taxa_origins ON taxa USING GIN (to_tsvector('simple', origin));
+CREATE INDEX index_taxa_name ON taxa USING GIN (to_tsvector('simple', name));
+CREATE INDEX index_observers_origins ON observers USING GIN (to_tsvector('simple', origin));
+CREATE INDEX index_observations_origins ON observations USING GIN (to_tsvector('simple', origin));
+CREATE INDEX index_photos_origins ON photos USING GIN (to_tsvector('simple', origin));
+CREATE INDEX index_photos_version ON photos USING GIN (to_tsvector('simple', version));
+CREATE INDEX index_observations_version ON observations USING GIN (to_tsvector('simple', version));
+CREATE INDEX index_observers_version ON observers USING GIN (to_tsvector('simple', version));
+CREATE INDEX index_taxa_version ON taxa USING GIN (to_tsvector('simple', version));
+CREATE INDEX index_photos_release ON photos USING GIN (to_tsvector('simple', release));
+CREATE INDEX index_observations_release ON observations USING GIN (to_tsvector('simple', release));
+CREATE INDEX index_observers_release ON observers USING GIN (to_tsvector('simple', release));
+CREATE INDEX index_taxa_release ON taxa USING GIN (to_tsvector('simple', release));
+
+COMMIT;
+"
+
+print_progress "Database setup complete"
+
+----
+Full Path: ingest/v0/common/vers_origin.sh
+
+#!/bin/bash
+
+# Function to run the update in parallel
+run_update() {
+  local TABLE_NAME=$1
+  local COLUMN_NAME=$2
+  local VALUE=$3
+  local OFFSET=$4
+  local LIMIT=$5
+  local DB_NAME=$6
+  local DB_CONTAINER=$7
+
+  docker exec ${DB_CONTAINER} psql -U postgres -d "${DB_NAME}" -c "
+  UPDATE ${TABLE_NAME}
+  SET ${COLUMN_NAME} = '${VALUE}'
+  WHERE ctid IN (
+    SELECT ctid
+    FROM ${TABLE_NAME}
+    ORDER BY ctid
+    OFFSET ${OFFSET}
+    LIMIT ${LIMIT}
+  );"
+}
+
+# Check if correct number of arguments are provided
+if [ "$#" -ne 4 ]; then
+  echo "Usage: $0 <database_name> <num_workers> <origin_value> <version_value>"
+  exit 1
+fi
+
+# Define arguments
+DB_NAME=$1
+NUM_PROCESSES=$2
+ORIGIN_VALUE=$3
+VERSION_VALUE=$4
+
+# Use container name from environment or default
+DB_CONTAINER=${DB_CONTAINER:-"ibridaDB"}
+
+# Tables and their columns to update
+declare -A TABLES_COLUMNS
+TABLES_COLUMNS=(
+  ["taxa"]="origin,version"
+  ["observers"]="origin,version"
+  ["observations"]="origin,version"
+  ["photos"]="origin,version"
+)
+
+# Function to update columns in parallel
+update_columns_in_parallel() {
+  local TABLE_NAME=$1
+  local COLUMN_NAME=$2
+  local VALUE=$3
+  local TOTAL_ROWS
+  TOTAL_ROWS=$(docker exec ${DB_CONTAINER} psql -U postgres -d "${DB_NAME}" -t -c "SELECT COUNT(*) FROM ${TABLE_NAME};")
+  local BATCH_SIZE=$((TOTAL_ROWS / NUM_PROCESSES))
+
+  for ((i=0; i<NUM_PROCESSES; i++)); do
+    local OFFSET=$((i * BATCH_SIZE))
+    run_update ${TABLE_NAME} ${COLUMN_NAME} ${VALUE} ${OFFSET} ${BATCH_SIZE} ${DB_NAME} ${DB_CONTAINER} &
+  done
+}
+
+# Update columns in parallel
+for TABLE_NAME in "${!TABLES_COLUMNS[@]}"; do
+  IFS=',' read -ra COLUMNS <<< "${TABLES_COLUMNS[$TABLE_NAME]}"
+  for COLUMN in "${COLUMNS[@]}"; do
+    if [ "$COLUMN" == "origin" ]; then
+      update_columns_in_parallel "$TABLE_NAME" "$COLUMN" "$ORIGIN_VALUE"
+    elif [ "$COLUMN" == "version" ]; then
+      update_columns_in_parallel "$TABLE_NAME" "$COLUMN" "$VERSION_VALUE"
+    fi
+  done
+done
+
+# Wait for all processes to finish
+wait
+echo "All updates completed."
+
+----
+Full Path: ingest/v0/common/geom.sh
+
+#!/bin/bash
+
+# Function to run the update in parallel
+run_update() {
+  local OFFSET=$1
+  local LIMIT=$2
+  local DB_NAME=$3
+  local TABLE_NAME=$4
+  local DB_CONTAINER=$5
+
+  docker exec ${DB_CONTAINER} psql -U postgres -d "${DB_NAME}" -c "
+  UPDATE ${TABLE_NAME}
+  SET geom = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::public.geometry
+  WHERE observation_uuid IN (
+    SELECT observation_uuid
+    FROM ${TABLE_NAME}
+    ORDER BY observation_uuid
+    OFFSET ${OFFSET}
+    LIMIT ${LIMIT}
+  );"
+}
+
+# Check if correct number of arguments are provided
+if [ "$#" -ne 4 ]; then
+  echo "Usage: $0 <database_name> <table_name> <num_workers> <base_dir>"
+  exit 1
+fi
+
+# Define arguments
+DB_NAME=$1
+TABLE_NAME=$2
+NUM_PROCESSES=$3
+BASE_DIR=$4
+
+# Use container name from environment or default
+DB_CONTAINER=${DB_CONTAINER:-"ibridaDB"}
+
+# Calculate total rows and batch size
+TOTAL_ROWS=$(docker exec ${DB_CONTAINER} psql -U postgres -d "${DB_NAME}" -t -c "SELECT COUNT(*) FROM ${TABLE_NAME};")
+BATCH_SIZE=$((TOTAL_ROWS / NUM_PROCESSES))
+
+# Run updates in parallel
+for ((i=0; i<NUM_PROCESSES; i++)); do
+  OFFSET=$((i * BATCH_SIZE))
+  run_update ${OFFSET} ${BATCH_SIZE} ${DB_NAME} ${TABLE_NAME} ${DB_CONTAINER} &
+done
+
+# Wait for all processes to finish
+wait
+echo "All updates completed."
+
+----
+Full Path: ingest/v0/r1/structure.sql
+
+-- Structure for v0r1 (December 2024 release)
+-- Note: anomaly_score column added in r1, not present in r0
+
+CREATE TABLE observations (
+    observation_uuid uuid NOT NULL,
+    observer_id integer,
+    latitude numeric(15,10),
+    longitude numeric(15,10),
+    positional_accuracy integer,
+    taxon_id integer,
+    quality_grade character varying(255),
+    observed_on date,
+    anomaly_score numeric(15,6)  -- New column in r1
+);
+
+CREATE TABLE photos (
+    photo_uuid uuid NOT NULL,
+    photo_id integer NOT NULL,
+    observation_uuid uuid NOT NULL,
+    observer_id integer,
+    extension character varying(5),
+    license character varying(255),
+    width smallint,
+    height smallint,
+    position smallint
+);
+
+CREATE TABLE taxa (
+    taxon_id integer NOT NULL,
+    ancestry character varying(255),
+    rank_level double precision,
+    rank character varying(255),
+    name character varying(255),
+    active boolean
+);
+
+CREATE TABLE observers (
+    observer_id integer NOT NULL,
+    login character varying(255),
+    name character varying(255)
+);
+
+-- Note: The following columns are added by our ingestion process:
+-- All tables:
+--   origin VARCHAR(255)
+--   version VARCHAR(255)
+--   release VARCHAR(255)
+-- Observations table:
+--   geom public.geometry
+
+----
+Full Path: ingest/v0/r1/wrapper.sh
+
+#!/bin/bash
+
+# Database and user variables
+export DB_USER="postgres"
+export DB_TEMPLATE="template_postgis"
+export NUM_PROCESSES=16
+export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/ingest/v0"
+
+# Source variable
+export SOURCE="Dec2024"
+export METADATA_PATH="/metadata/${SOURCE}"
+
+# Version and origin values
+export ORIGIN_VALUE="iNat-${SOURCE}"
+export VERSION_VALUE="v0"
+export RELEASE_VALUE="r1"
+export DB_NAME="ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"
+export DB_CONTAINER="ibridaDB"
+export STRUCTURE_SQL="${BASE_DIR}/r1/structure.sql"
+
+# Execute main script
+"${BASE_DIR}/common/main.sh"
+
+----
+Full Path: ingest/v0/utils/add_release.sh
+
+#!/bin/bash
+
+# Database variables
+DB_USER="postgres"
+DB_NAME="ibrida-v0"  # The existing database name
+DB_CONTAINER="ibridaDB"
+RELEASE_VALUE="r0"
+
+# Function to execute SQL commands
+execute_sql() {
+    local sql="$1"
+    docker exec ${DB_CONTAINER} psql -U ${DB_USER} -d "${DB_NAME}" -c "$sql"
+}
+
+# Function to print progress
+print_progress() {
+    echo "======================================"
+    echo "$1"
+    echo "======================================"
+}
+
+# Add release column to all tables
+print_progress "Adding release column to tables"
+execute_sql "
+BEGIN;
+ALTER TABLE taxa ADD COLUMN release VARCHAR(255);
+ALTER TABLE observers ADD COLUMN release VARCHAR(255);
+ALTER TABLE observations ADD COLUMN release VARCHAR(255);
+ALTER TABLE photos ADD COLUMN release VARCHAR(255);
+COMMIT;
+"
+
+# Set release values
+print_progress "Setting release values"
+execute_sql "
+BEGIN;
+UPDATE taxa SET release = '${RELEASE_VALUE}';
+UPDATE observers SET release = '${RELEASE_VALUE}';
+UPDATE observations SET release = '${RELEASE_VALUE}';
+UPDATE photos SET release = '${RELEASE_VALUE}';
+COMMIT;
+"
+
+# Create indexes for release column
+print_progress "Creating indexes for release column"
+execute_sql "
+BEGIN;
+CREATE INDEX index_taxa_release ON taxa USING GIN (to_tsvector('simple', release));
+CREATE INDEX index_observers_release ON observers USING GIN (to_tsvector('simple', release));
+CREATE INDEX index_observations_release ON observations USING GIN (to_tsvector('simple', release));
+CREATE INDEX index_photos_release ON photos USING GIN (to_tsvector('simple', release));
+COMMIT;
+"
+
+print_progress "Release column added and populated successfully"
+
+----
+Full Path: export/v0/r0/wrapper.sh
+
+#!/bin/bash
+
+# Database config
+export DB_USER="postgres"
+export VERSION_VALUE="v0"
+export RELEASE_VALUE="r0"
+export ORIGIN_VALUE="iNat-June2024"
+export DB_NAME="ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"
+export DB_CONTAINER="ibridaDB"
+
+# Base paths
+export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/export/v0"
+export HOST_EXPORT_BASE_PATH="/datasets/ibrida-data/exports"
+export CONTAINER_EXPORT_BASE_PATH="/exports"
+
+### Primary Terrestrial Arthropoda Export Parameters
+export REGION_TAG="NAfull"
+export MIN_OBS=50
+export MAX_RN=3000
+export PRIMARY_ONLY=true
+export EXPORT_GROUP="primary_terrestrial_arthropoda"
+export PROCESS_OTHER=false
+export EXPORT_SUBDIR="${VERSION_VALUE}/${RELEASE_VALUE}/primary_only_${MIN_OBS}min_${MAX_RN}max"
+
+### Amphibia Export Parameters (commented out)
+# export REGION_TAG="NAfull"
+# export MIN_OBS=400
+# export MAX_RN=1000
+# export PRIMARY_ONLY=true
+# export EXPORT_GROUP="amphibia"
+# export PROCESS_OTHER=false
+# export EXPORT_SUBDIR="${VERSION_VALUE}/${RELEASE_VALUE}/primary_only_${MIN_OBS}min_${MAX_RN}max"
+
+# Execute main script
+"${BASE_DIR}/common/main.sh"
+
+----
+Full Path: export/v0/common/main.sh
+
+#!/bin/bash
+
+# Source common functions
+source "${BASE_DIR}/common/functions.sh"
+
+# Validate required variables
+required_vars=(
+    "DB_USER" "VERSION_VALUE" "RELEASE_VALUE" "ORIGIN_VALUE" 
+    "DB_NAME" "REGION_TAG" "MIN_OBS" "MAX_RN" 
+    "DB_CONTAINER" "HOST_EXPORT_BASE_PATH" "CONTAINER_EXPORT_BASE_PATH"
+    "EXPORT_GROUP"
+)
+
+for var in "${required_vars[@]}"; do
+    if [ -z "${!var}" ]; then
+        echo "Error: Required variable $var is not set"
+        exit 1
+    fi
+done
+
+# Create export directory structure
+print_progress "Creating export directory structure"
+EXPORT_DIR="${CONTAINER_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
+HOST_EXPORT_DIR="${HOST_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
+
+# Create host directory with proper permissions
+ensure_directory "${HOST_EXPORT_DIR}"
+
+# Create PostgreSQL extension and role if needed
+execute_sql "
+DO \$\$
+BEGIN
+    CREATE EXTENSION IF NOT EXISTS dblink;
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'exportuser') THEN
+        CREATE ROLE exportuser;
+    END IF;
+END \$\$;"
+
+# Run regional base creation (source functions first)
+print_progress "Creating regional base tables"
+source "${BASE_DIR}/common/regional_base.sh"
+
+# Run cladistic filtering
+print_progress "Applying cladistic filters"
+source "${BASE_DIR}/common/cladistic.sh"
+
+# Export summary
+print_progress "Creating export summary"
+cat > "${HOST_EXPORT_DIR}/export_summary.txt" << EOL
+Export Summary
+Version: ${VERSION_VALUE}
+Release: ${RELEASE_VALUE}
+Region: ${REGION_TAG}
+Minimum Observations: ${MIN_OBS}
+Maximum Random Number: ${MAX_RN}
+Export Group: ${EXPORT_GROUP}
+Date: $(date)
+EOL
+
+print_progress "Export process complete"
+
+----
+Full Path: export/v0/common/regional_base.sh
+
+#!/bin/bash
+
+# Note: functions are sourced from main.sh
+
+# Function to set region-specific coordinates
+set_region_coordinates() {
+  case "$REGION_TAG" in
+    "NAfull")
+      XMIN=-169.453125
+      YMIN=12.211180
+      XMAX=-23.554688
+      YMAX=84.897147
+      ;;
+    "EURwest")
+      XMIN=-12.128906
+      YMIN=40.245992
+      XMAX=12.480469
+      YMAX=60.586967
+      ;;
+    "EURnorth")
+      XMIN=-25.927734
+      YMIN=54.673831
+      XMAX=45.966797
+      YMAX=71.357067
+      ;;
+    "EUReast")
+      XMIN=10.722656
+      YMIN=41.771312
+      XMAX=39.550781
+      YMAX=59.977005
+      ;;
+    "EURfull")
+      XMIN=-30.761719
+      YMIN=33.284620
+      XMAX=43.593750
+      YMAX=72.262310
+      ;;
+    "MED")
+      XMIN=-16.259766
+      YMIN=29.916852
+      XMAX=36.474609
+      YMAX=46.316584
+      ;;
+    "AUSfull")
+      XMIN=111.269531
+      YMIN=-47.989922
+      XMAX=181.230469
+      YMAX=-9.622414
+      ;;
+    "ASIAse")
+      XMIN=82.441406
+      YMIN=-11.523088
+      XMAX=153.457031
+      YMAX=28.613459
+      ;;
+    "ASIAeast")
+      XMIN=462.304688
+      YMIN=23.241346
+      XMAX=550.195313
+      YMAX=78.630006
+      ;;
+    "ASIAcentral")
+      XMIN=408.515625
+      YMIN=36.031332
+      XMAX=467.753906
+      YMAX=76.142958
+      ;;
+    "ASIAsouth")
+      XMIN=420.468750
+      YMIN=1.581830
+      XMAX=455.097656
+      YMAX=39.232253
+      ;;
+    "ASIAsw")
+      XMIN=386.718750
+      YMIN=12.897489
+      XMAX=423.281250
+      YMAX=48.922499
+      ;;
+    "ASIA_nw")
+      XMIN=393.046875
+      YMIN=46.800059
+      XMAX=473.203125
+      YMAX=81.621352
+      ;;
+    "SAfull")
+      XMIN=271.230469
+      YMIN=-57.040730
+      XMAX=330.644531
+      YMAX=15.114553
+      ;;
+    "AFRfull")
+      XMIN=339.082031
+      YMIN=-37.718590
+      XMAX=421.699219
+      YMAX=39.232253
+      ;;
+    *)
+      echo "Unknown REGION_TAG: $REGION_TAG"
+      exit 1
+      ;;
+  esac
+}
+
+
+# Set region coordinates
+set_region_coordinates
+
+# Debug: Check version and release values
+print_progress "Debugging database parameters"
+execute_sql "
+SELECT DISTINCT version, release, count(*)
+FROM observations
+GROUP BY version, release;"
+
+# Debug: Check coordinate bounds
+print_progress "Checking observations within coordinate bounds"
+execute_sql "
+SELECT COUNT(*)
+FROM observations
+WHERE latitude BETWEEN ${YMIN} AND ${YMAX}
+AND longitude BETWEEN ${XMIN} AND ${XMAX};"
+
+# Debug: Check quality grade distribution
+print_progress "Checking quality grade distribution"
+execute_sql "
+SELECT quality_grade, COUNT(*)
+FROM observations
+WHERE version = '${VERSION_VALUE}'
+AND release = '${RELEASE_VALUE}'
+GROUP BY quality_grade;"
+
+# Drop existing tables if they exist
+print_progress "Dropping existing tables"
+execute_sql "DROP TABLE IF EXISTS ${REGION_TAG}_min${MIN_OBS}_all_taxa CASCADE;"
+execute_sql "DROP TABLE IF EXISTS ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs CASCADE;"
+
+# Create table with debug output
+print_progress "Creating table ${REGION_TAG}_min${MIN_OBS}_all_taxa with debug"
+execute_sql "
+CREATE TABLE ${REGION_TAG}_min${MIN_OBS}_all_taxa AS
+WITH debug_counts AS (
+    SELECT COUNT(*) as total_obs,
+           COUNT(DISTINCT taxon_id) as unique_taxa
+    FROM observations
+    WHERE version = '${VERSION_VALUE}'
+    AND release = '${RELEASE_VALUE}'
+    AND latitude BETWEEN ${YMIN} AND ${YMAX}
+    AND longitude BETWEEN ${XMIN} AND ${XMAX}
+)
+SELECT * FROM debug_counts;
+
+SELECT DISTINCT observations.taxon_id
+FROM observations
+JOIN taxa ON observations.taxon_id = taxa.taxon_id
+WHERE 
+    observations.version = '${VERSION_VALUE}'
+    AND observations.release = '${RELEASE_VALUE}'
+    AND NOT (taxa.rank_level = 10 AND observations.quality_grade != 'research')
+    AND observations.latitude BETWEEN ${YMIN} AND ${YMAX}
+    AND observations.longitude BETWEEN ${XMIN} AND ${XMAX}
+    AND observations.taxon_id IN (
+        SELECT observations.taxon_id
+        FROM observations
+        WHERE version = '${VERSION_VALUE}'
+        AND release = '${RELEASE_VALUE}'
+        GROUP BY observations.taxon_id
+        HAVING COUNT(observation_uuid) >= ${MIN_OBS}
+    );"
+
+# Create table <REGION_TAG>_min<MIN_OBS>_all_taxa_obs with dynamic columns
+print_progress "Creating table ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs"
+OBS_COLUMNS=$(get_obs_columns)
+
+# Debug: show the columns being used
+echo "Using columns: ${OBS_COLUMNS}"
+
+execute_sql "
+CREATE TABLE ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs AS
+SELECT ${OBS_COLUMNS}
+FROM observations
+WHERE 
+    version = '${VERSION_VALUE}'
+    AND release = '${RELEASE_VALUE}'
+    AND taxon_id IN (
+        SELECT taxon_id
+        FROM ${REGION_TAG}_min${MIN_OBS}_all_taxa
+    );"
+
+print_progress "Regional base tables created"
+
+----
+Full Path: export/v0/common/functions.sh
+
+#!/bin/bash
+
+# Common functions used across export scripts
+
+# Function to execute SQL commands
+execute_sql() {
+    local sql="$1"
+    docker exec ${DB_CONTAINER} psql -U ${DB_USER} -d "${DB_NAME}" -c "$sql"
+}
+
+# Function to print progress
+print_progress() {
+    echo "======================================"
+    echo "$1"
+    echo "======================================"
+}
+
+# Function to get observation columns based on release
+get_obs_columns() {
+    # Start with standard columns
+    local cols="observation_uuid, observer_id, latitude, longitude, positional_accuracy, taxon_id, quality_grade, observed_on"
+    
+    # Add version tracking columns
+    cols="${cols}, origin, version, release"
+    
+    # Check if anomaly_score exists in this release
+    if [[ "${RELEASE_VALUE}" == "r1" ]]; then
+        cols="${cols}, anomaly_score"
+    fi
+    
+    echo "$cols"
+}
+
+# Function to ensure directory exists with proper permissions
+ensure_directory() {
+    local dir="$1"
+    mkdir -p "${dir}"
+    chmod -R 777 "${dir}"
+}
+
+# Export the functions
+export -f execute_sql
+export -f print_progress
+export -f get_obs_columns
+export -f ensure_directory
+
+----
+Full Path: export/v0/common/cladistic.sh
+
+#!/bin/bash
+
+# Note: functions.sh is already sourced from main.sh
+
+# Function to get taxa IDs for a given metaclade
+get_metaclade_taxa() {
+    local metaclade=$1
+    case $metaclade in
+        "primary_terrestrial_arthropoda")
+            # Include Insecta and Arachnida, exclude aquatic groups
+            execute_sql "
+                WITH RECURSIVE taxonomy AS (
+                    SELECT taxon_id, ancestry, rank, name, active
+                    FROM taxa
+                    WHERE name IN ('Insecta', 'Arachnida')
+                    UNION ALL
+                    SELECT t.taxon_id, t.ancestry, t.rank, t.name, t.active
+                    FROM taxa t
+                    INNER JOIN taxonomy tax ON t.ancestry LIKE tax.ancestry || '/%'
+                        OR t.ancestry = tax.ancestry
+                    WHERE t.active = true
+                )
+                SELECT DISTINCT taxon_id 
+                FROM taxonomy
+                WHERE active = true
+                AND taxon_id NOT IN (
+                    SELECT DISTINCT t.taxon_id
+                    FROM taxa t
+                    WHERE t.name IN ('Ephemeroptera', 'Plecoptera', 'Trichoptera', 'Odonata')
+                    OR t.ancestry LIKE '%/48549%'  -- Exclude aquatic insects
+                );"
+            ;;
+        "amphibia")
+            execute_sql "
+                WITH RECURSIVE taxonomy AS (
+                    SELECT taxon_id, ancestry, rank, name, active
+                    FROM taxa
+                    WHERE name = 'Amphibia'
+                    UNION ALL
+                    SELECT t.taxon_id, t.ancestry, t.rank, t.name, t.active
+                    FROM taxa t
+                    INNER JOIN taxonomy tax ON t.ancestry LIKE tax.ancestry || '/%'
+                        OR t.ancestry = tax.ancestry
+                    WHERE t.active = true
+                )
+                SELECT DISTINCT taxon_id 
+                FROM taxonomy
+                WHERE active = true;"
+            ;;
+        *)
+            echo "Unknown metaclade: $metaclade"
+            exit 1
+            ;;
+    esac
+}
+
+# Create filtered tables based on metaclade
+print_progress "Creating filtered tables for ${EXPORT_GROUP}"
+execute_sql "
+CREATE TEMPORARY TABLE metaclade_taxa AS
+$(get_metaclade_taxa ${EXPORT_GROUP});
+
+CREATE TABLE ${EXPORT_GROUP}_observations AS
+SELECT ${OBS_COLUMNS}
+FROM ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs obs
+WHERE obs.taxon_id IN (SELECT taxon_id FROM metaclade_taxa);"
+
+# Export filtered observations
+print_progress "Exporting filtered observations"
+if [ "$PRIMARY_ONLY" = true ]; then
+    execute_sql "\COPY (
+        SELECT o.*, 
+               p.photo_uuid,
+               p.photo_id,
+               p.extension,
+               p.license,
+               p.width,
+               p.height,
+               p.position
+        FROM ${EXPORT_GROUP}_observations o
+        JOIN photos p ON o.observation_uuid = p.observation_uuid
+        WHERE p.position = 0
+        AND o.quality_grade = 'research'
+        ORDER BY random()
+        LIMIT ${MAX_RN}
+    ) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv' WITH CSV HEADER DELIMITER E'\t';"
+else
+    execute_sql "\COPY (
+        SELECT o.*, 
+               p.photo_uuid,
+               p.photo_id,
+               p.extension,
+               p.license,
+               p.width,
+               p.height,
+               p.position
+        FROM ${EXPORT_GROUP}_observations o
+        JOIN photos p ON o.observation_uuid = p.observation_uuid
+        WHERE o.quality_grade = 'research'
+        ORDER BY random()
+        LIMIT ${MAX_RN}
+    ) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv' WITH CSV HEADER DELIMITER E'\t';"
+fi
+
+# Create summary of exported data
+print_progress "Creating export statistics"
+STATS=$(execute_sql "
+WITH export_stats AS (
+    SELECT 
+        COUNT(DISTINCT observation_uuid) as num_observations,
+        COUNT(DISTINCT taxon_id) as num_taxa,
+        COUNT(DISTINCT observer_id) as num_observers
+    FROM ${EXPORT_GROUP}_observations
+)
+SELECT format(
+    'Exported Data Statistics:
+    Observations: %s
+    Unique Taxa: %s
+    Unique Observers: %s',
+    num_observations, num_taxa, num_observers
+)
+FROM export_stats;")
+
+echo "${STATS}" >> "${HOST_EXPORT_DIR}/export_summary.txt"
+
+print_progress "Cladistic filtering complete"
+
+----
+Full Path: export/v0/r1/wrapper.sh
+
+#!/bin/bash
+
+# Database config
+export DB_USER="postgres"
+export VERSION_VALUE="v0"
+export RELEASE_VALUE="r1"
+export ORIGIN_VALUE="iNat-Dec2024"
+export DB_NAME="ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"
+
+# Export parameters
+export REGION_TAG="NAfull"
+export MIN_OBS=50
+export MAX_RN=4000
+export PRIMARY_ONLY=true
+export EXPORT_GROUP="primary_terrestrial_arthropoda"
+export PROCESS_OTHER=false
+
+# Paths
+export DB_CONTAINER="ibridaDB"
+export HOST_EXPORT_BASE_PATH="/datasets/ibrida-data/exports"
+export CONTAINER_EXPORT_BASE_PATH="/exports"
+export EXPORT_SUBDIR="${VERSION_VALUE}/${RELEASE_VALUE}/primary_only_${MIN_OBS}min_${MAX_RN}max"
+export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/export/v0"
+
+# Execute main script
+"${BASE_DIR}/common/main.sh"
+
+----
+Full Path: /home/caleb/repo/ibridaDB/docker/stausee/docker-compose.yml
+
+services:
+  ibrida:
+    image: postgis/postgis:15-3.3
+    user: "998:998"
+    shm_size: '16g'
+    environment:
+      POSTGRES_PASSWORD: ooglyboogly69
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_SHARED_BUFFERS: 8GB
+      POSTGRES_WORK_MEM: 2048MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 4GB
+    volumes:
+      - ~/repo/ibridaDB/dbTools:/tool
+      - ~/repo/ibridaDB/dbQueries:/query
+      - /database/ibridaDB:/var/lib/postgresql/data
+      - /datasets/ibrida-data/exports:/exports
+      - /datasets/ibrida-data/intake:/metadata
+    ports:
+      - "5432:5432"
+    container_name: ibridaDB
+
+----
+Full Path: /home/caleb/repo/ibridaDB/docker/stausee/entrypoint.sh
+
+#!/bin/bash
+set -e
+
+# Just log and exit - let Docker's default entrypoint handle PostgreSQL
+echo "Entrypoint script executed at $(date)"
+
+----
+Full Path: /home/caleb/repo/ibridaDB/dbTools/README.md
+
+# ibrida Database Reproduction Guide
+
+## Overview
+This guide documents the step-by-step process for reproducing the ibrida database from iNaturalist open data dumps. The database uses a versioning system with two components:
+- **Version (v#)**: Indicates structural changes to the database
+- **Release (r#)**: Indicates different data dumps using the same structure
+
+Current versions:
+- v0r0: June 2024 iNat data release
+- v0r1: December 2024 iNat data release (adds anomaly_score column to observations table)
+
+## System Architecture
+The process is divided into two main phases:
+1. Database Initialization (ingest/)
+2. Data Export (export/)
+
+Each phase uses a modular structure with:
+- Common scripts containing shared logic
+- Release-specific wrapper scripts containing parameters
+
+## Database Initialization
+### Directory Structure
+```
+dbTools/ingest/v0/
+├── common/                # Shared scripts
+│   ├── geom.sh           # Geometry calculations
+│   ├── vers_origin.sh    # Version/origin updates
+│   └── main.sh           # Core ingestion logic
+├── r0/
+│   ├── wrapper.sh        # June 2024 release parameters
+│   └── structure.sql     # Database schema for r0
+└── r1/
+    ├── wrapper.sh        # December 2024 release parameters
+    └── structure.sql     # Database schema for r1 (includes anomaly_score)
+```
+
+### Running the Ingestion Process
+Make scripts executable:
+```bash
+# Make common scripts executable
+chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/common/main.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/common/geom.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/common/vers_origin.sh
+
+# Make wrapper scripts executable
+chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/r0/wrapper.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/r1/wrapper.sh
+```
+
+Run ingest:
+```bash
+# For June 2024 data (r0)
+/home/caleb/repo/ibridaDB/dbTools/ingest/v0/r0/wrapper.sh
+
+# For December 2024 data (r1)
+/home/caleb/repo/ibridaDB/dbTools/ingest/v0/r1/wrapper.sh
+```
+
+## Data Export
+### Directory Structure
+```
+dbTools/export/v0/
+├── common/
+│   ├── main.sh           # Core export logic
+│   ├── regional_base.sh  # Region-specific filtering
+│   └── cladistic.sh      # Taxonomic filtering
+├── r0/
+│   └── wrapper.sh        # June 2024 parameters
+└── r1/
+    └── wrapper.sh        # December 2024 parameters
+```
+
+### Export Process Steps
+1. Regional base table creation:
+   - Filters observations by geographic region
+   - Applies minimum observation thresholds
+   - Creates base tables for further filtering
+
+2. Cladistic filtering:
+   - Applies taxonomic filters based on metaclades
+   - Handles special cases (e.g., excluding aquatic insects)
+   - Creates filtered observation tables
+
+3. CSV export:
+   - Creates directory structure if needed
+   - Sets appropriate permissions
+   - Exports filtered data with photo restrictions
+   - Generates export statistics and summaries
+
+### Running the Export Process
+Make scripts executable:
+```bash
+# Make common scripts executable
+chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/common/main.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/common/regional_base.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/common/cladistic.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/common/functions.sh
+
+
+# Make wrapper scripts executable
+chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/r0/wrapper.sh
+chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/r1/wrapper.sh
+```
+
+Run exports:
+```bash
+# For June 2024 data (r0)
+/home/caleb/repo/ibridaDB/dbTools/export/v0/r0/wrapper.sh
+
+# For December 2024 data (r1)
+/home/caleb/repo/ibridaDB/dbTools/export/v0/r1/wrapper.sh
+```
+
+### Export Directory Structure
+Exports are organized by version and release:
+```
+/datasets/ibrida-data/exports/
+├── v0/
+│   ├── r0/
+│   │   └── primary_only_50min_3000max/
+│   │       ├── primary_terrestrial_arthropoda_photos.csv
+│   │       └── export_summary.txt
+│   └── r1/
+│       └── primary_only_50min_4000max/
+│           ├── primary_terrestrial_arthropoda_photos.csv
+│           └── export_summary.txt
+```
+
+### Available Export Groups
+The system supports several predefined export groups:
+1. primary_terrestrial_arthropoda
+   - Includes Insecta and Arachnida
+   - Excludes aquatic groups (Ephemeroptera, Plecoptera, Trichoptera, Odonata)
+   - Parameters: MIN_OBS=50, MAX_RN=4000 (r1)
+
+2. amphibia
+   - Includes all Amphibia taxa
+   - Parameters: MIN_OBS=400, MAX_RN=1000
+
+## Schema Notes
+### Release-Specific Changes
+- v0r1 adds `anomaly_score numeric(15,6)` to observations table
+- Export scripts automatically handle presence/absence of this column
+
+### Metadata Columns
+All tables include:
+- `version`: Database structure version (e.g., "v0")
+- `release`: Data release identifier (e.g., "r0", "r1")
+- `origin`: Source and date of the data (e.g., "iNat-Dec2024")
+
+----
+Full Path: /home/caleb/repo/ibridaDB/dbTools/FLOW.md
+
+```mermaid
+flowchart TB
+    subgraph Input
+        inat[iNaturalist Open Data]
+        csv[CSV Files]
+    end
+
+    subgraph Ingest["Database Initialization (ingest/)"]
+        wrapper[Wrapper Script\nr0/wrapper.sh or r1/wrapper.sh]
+        main[Main Script\ncommon/main.sh]
+        geom[Geometry Processing\ncommon/geom.sh]
+        vers[Version/Origin Updates\ncommon/vers_origin.sh]
+        db[(PostgreSQL Database)]
+    end
+
+    subgraph Export["Data Export (export/)"]
+        exp_wrapper[Export Wrapper\nr0/wrapper.sh or r1/wrapper.sh]
+        exp_main[Export Main Script\ncommon/main.sh]
+        reg_base[Regional Base Tables\ncommon/regional_base.sh]
+        clad[Cladistic Filtering\ncommon/cladistic.sh]
+        csv_out[CSV Export Files]
+    end
+
+    inat --> csv
+    csv --> wrapper
+    wrapper --> main
+    main --> geom
+    main --> vers
+    geom --> db
+    vers --> db
+    db --> exp_wrapper
+    exp_wrapper --> exp_main
+    exp_main --> reg_base
+    reg_base --> clad
+    clad --> csv_out
+
+    style Ingest fill:#f9f,stroke:#333,stroke-width:2px
+    style Export fill:#bbf,stroke:#333,stroke-width:2px
+    style Input fill:#bfb,stroke:#333,stroke-width:2px
+```
+
+----
+Full Path: /home/caleb/repo/ibridaDB/dbTools/schema.md
+
+```markdown
+### Observations
+Column | Description
+-------|------------
+observation_uuid | A unique identifier associated with each observation also available at iNaturalist.org via URLs constructed like this https://www.inaturalist.org/observations/c075c500-b566-44aa-847c-95da8fb8b3c9
+observer_id | The identifier of the associated iNaturalist user who recorded the observation
+latitude | The latitude where the organism was encountered
+longitude | The longitude where the organism was encountered
+positional_accuracy | The uncertainty in meters around the latitude and longitude
+taxon_id | The identifier of the associated axon the observation has been identified as
+quality_grade | `Casual` observations are missing certain data components (e.g. latitude) or may have flags associated with them not shown here (e.g. `location appears incorrect`). Observations flagged as not wild are also considered Casual. All other observations are either `Needs ID` or `Research Grade`. Generally, Research Grade observations have more than one agreeing identifications at the species level, or if there are disagreements at least ⅔ of the identifications are in agreement a the species level
+observed_on | The date at which the observation took place
+<NOTE> New column added in v0/r1 'anomaly_score' </NOTE>
+
+### Observers
+Column | Description
+-------|------------
+observer_id | A unique identifier associated with each observer also available on https://www.inaturalist.org via URLs constructed like this: https://www.inaturalist.org/users/1
+login | A unique login associated with each observer
+name | Personal name of the observer, if provided
+
+### Photos
+Column | Description
+-------|------------
+photo_uuid | A unique identifier associated with each photo. Note that photo_uuid can be non-unique across different observations.
+photo_id | A photo identifier used on iNaturalist and available on iNaturalist.org via URLs constructed like this https://www.inaturalist.org/photos/113756411
+observation_uuid | The identifier of the associated observation
+observer_id | The identifier of the associated observer who took the photo
+extension | The image file format, e.g. `jpeg`
+license | All photos in the dataset have open licenses (e.g. Creative Commons) and unlicensed (CC0 / public domain)
+width | The width of the photo in pixels
+height | The height of the photo in pixels
+position | When observations have multiple photos the user can set the position in which the photos should appear. Lower numbers are meant to appear first
+>The issue is that some observations include more than one photo, and photos associated with observations that have >1 photo share a photo_id and photo_uuid, which I did not expect. These additional photos (which have their own rows in the 'photos' table) are denoted by the 'position' field, where position ==0 indicates that the photo is the primary photo for the record. If an observation only has one photo, then the associated 'photos' record will have position == 0. Therefore. I'm pretty sure that a composite key of photo_id ++ photo_uuid ++ position will function as a primary key. 
+
+### Taxa
+Column | Description
+-------|------------
+taxon_id | A unique identifier associated with each node in the iNaturalist taxonomy hierarchy. Also available on iNaturalist.org via URLs constructed like this https://www.inaturalist.org/taxa/47219
+ancestry | The taxon_ids of ancestry of the taxon ordered from the root of the tree to the taxon concatenated together with `\`
+rank_level | A number associated with the rank. Taxon rank_levels must be less than the rank level of their parent. For example, a taxon with rank genus and rank_level 20 cannot descend from a taxon of rank species and rank_level 10
+rank | A constrained set of labels associated with nodes on the hierarchy. These include the standard Linnaean ranks: Kingdom, Phylum, Class, Order, Family, Genus, Species, and a number of internodes such as Subfamily
+name | The scientific name for the taxon
+active | When the taxonomy changes, generally taxa aren’t deleted on iNaturalist to avoid breaking links. Instead taxa are made inactive and observations are moved to new active nodes. Occasionally, observations linger on inactive taxa which are no longer active parts of the iNaturalist taxonomy
+```
+

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# Note: functions are sourced from main.sh
+
 # Function to set region-specific coordinates
 set_region_coordinates() {
   case "$REGION_TAG" in
@@ -100,18 +102,54 @@ set_region_coordinates() {
   esac
 }
 
+
 # Set region coordinates
 set_region_coordinates
 
+# Debug: Check version and release values
+print_progress "Debugging database parameters"
+execute_sql "
+SELECT DISTINCT version, release, count(*)
+FROM observations
+GROUP BY version, release;"
+
+# Debug: Check coordinate bounds
+print_progress "Checking observations within coordinate bounds"
+execute_sql "
+SELECT COUNT(*)
+FROM observations
+WHERE latitude BETWEEN ${YMIN} AND ${YMAX}
+AND longitude BETWEEN ${XMIN} AND ${XMAX};"
+
+# Debug: Check quality grade distribution
+print_progress "Checking quality grade distribution"
+execute_sql "
+SELECT quality_grade, COUNT(*)
+FROM observations
+WHERE version = '${VERSION_VALUE}'
+AND release = '${RELEASE_VALUE}'
+GROUP BY quality_grade;"
+
 # Drop existing tables if they exist
 print_progress "Dropping existing tables"
-execute_sql "DROP TABLE IF EXISTS ${REGION_TAG}_min${MIN_OBS}_all_taxa;"
-execute_sql "DROP TABLE IF EXISTS ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs;"
+execute_sql "DROP TABLE IF EXISTS ${REGION_TAG}_min${MIN_OBS}_all_taxa CASCADE;"
+execute_sql "DROP TABLE IF EXISTS ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs CASCADE;"
 
-# Create table <REGION_TAG>_min<MIN_OBS>_all_taxa
-print_progress "Creating table ${REGION_TAG}_min${MIN_OBS}_all_taxa"
+# Create table with debug output
+print_progress "Creating table ${REGION_TAG}_min${MIN_OBS}_all_taxa with debug"
 execute_sql "
 CREATE TABLE ${REGION_TAG}_min${MIN_OBS}_all_taxa AS
+WITH debug_counts AS (
+    SELECT COUNT(*) as total_obs,
+           COUNT(DISTINCT taxon_id) as unique_taxa
+    FROM observations
+    WHERE version = '${VERSION_VALUE}'
+    AND release = '${RELEASE_VALUE}'
+    AND latitude BETWEEN ${YMIN} AND ${YMAX}
+    AND longitude BETWEEN ${XMIN} AND ${XMAX}
+)
+SELECT * FROM debug_counts;
+
 SELECT DISTINCT observations.taxon_id
 FROM observations
 JOIN taxa ON observations.taxon_id = taxa.taxon_id
@@ -133,6 +171,9 @@ WHERE
 # Create table <REGION_TAG>_min<MIN_OBS>_all_taxa_obs with dynamic columns
 print_progress "Creating table ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs"
 OBS_COLUMNS=$(get_obs_columns)
+
+# Debug: show the columns being used
+echo "Using columns: ${OBS_COLUMNS}"
 
 execute_sql "
 CREATE TABLE ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs AS
