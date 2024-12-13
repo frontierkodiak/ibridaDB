@@ -122,7 +122,7 @@ COMMIT;
 print_progress "Vacuum analyze"
 execute_sql "VACUUM ANALYZE;"
 
-# Add origin and version columns in parallel
+# Add origin, version, and release columns in parallel
 print_progress "Adding origin, version, and release columns"
 execute_sql "
 BEGIN;
@@ -143,11 +143,11 @@ ALTER TABLE taxa ADD COLUMN release VARCHAR(255);
 COMMIT;
 "
 
-# Run parallel updates for origin and version columns
-print_progress "Running parallel updates for origin and version columns"
+# Run parallel updates for origin, version, and release columns
+print_progress "Running parallel updates for origin, version, and release columns"
 "${BASE_DIR}/common/vers_origin.sh" "$DB_NAME" "$NUM_PROCESSES" "$ORIGIN_VALUE" "$VERSION_VALUE" "$RELEASE_VALUE"
 
-# Create indexes for origin and version columns
+# Create indexes for origin, version, and release columns
 print_progress "Creating indexes for origin, version, and release columns"
 execute_sql "
 BEGIN;

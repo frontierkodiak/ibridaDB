@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# COMMENT: populates origin, version, and release columns in parallel
+# COMMENT: these are the only columns on the base tables that are not populated by the ingest process
+
 # Setup logging
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 LOG_FILE="${SCRIPT_DIR}/vers_origin_$(date +%Y%m%d_%H%M%S).log"
