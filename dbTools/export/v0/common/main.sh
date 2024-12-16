@@ -39,10 +39,12 @@ END \$\$;"
 # Run regional base creation (source functions first)
 print_progress "Creating regional base tables"
 source "${BASE_DIR}/common/regional_base.sh"
+send_notification "${REGION_TAG} regional base tables created"
 
 # Run cladistic filtering
 print_progress "Applying cladistic filters"
 source "${BASE_DIR}/common/cladistic.sh"
+send_notification "${EXPORT_GROUP} cladistic filtering complete"
 
 # Export summary
 print_progress "Creating export summary"

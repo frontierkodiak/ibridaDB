@@ -46,8 +46,13 @@ export EXPORT_SUBDIR="${VERSION_VALUE}/${RELEASE_VALUE}/primary_only_${MIN_OBS}m
 export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/export/v0"
 log_message "Export Directory: ${HOST_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
 
+# Source common functions
+source "${BASE_DIR}/common/functions.sh"
+
 # Execute main script
+send_notification "Starting ${EXPORT_GROUP} export"
 log_message "Executing main script at $(date)"
 "${BASE_DIR}/common/main.sh"
 
 log_message "Process completed at $(date)"
+send_notification "${EXPORT_GROUP} export completed!"

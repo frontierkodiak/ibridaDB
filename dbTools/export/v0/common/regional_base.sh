@@ -106,29 +106,29 @@ set_region_coordinates() {
 # Set region coordinates
 set_region_coordinates
 
-# Debug: Check version and release values
-print_progress "Debugging database parameters"
-execute_sql "
-SELECT DISTINCT version, release, count(*)
-FROM observations
-GROUP BY version, release;"
+# # Debug: Check version and release values
+# print_progress "Debugging database parameters"
+# execute_sql "
+# SELECT DISTINCT version, release, count(*)
+# FROM observations
+# GROUP BY version, release;"
 
-# Debug: Check coordinate bounds
-print_progress "Checking observations within coordinate bounds"
-execute_sql "
-SELECT COUNT(*)
-FROM observations
-WHERE latitude BETWEEN ${YMIN} AND ${YMAX}
-AND longitude BETWEEN ${XMIN} AND ${XMAX};"
+# # Debug: Check coordinate bounds
+# print_progress "Checking observations within coordinate bounds"
+# execute_sql "
+# SELECT COUNT(*)
+# FROM observations
+# WHERE latitude BETWEEN ${YMIN} AND ${YMAX}
+# AND longitude BETWEEN ${XMIN} AND ${XMAX};"
 
-# Debug: Check quality grade distribution
-print_progress "Checking quality grade distribution"
-execute_sql "
-SELECT quality_grade, COUNT(*)
-FROM observations
-WHERE version = '${VERSION_VALUE}'
-AND release = '${RELEASE_VALUE}'
-GROUP BY quality_grade;"
+# # Debug: Check quality grade distribution
+# print_progress "Checking quality grade distribution"
+# execute_sql "
+# SELECT quality_grade, COUNT(*)
+# FROM observations
+# WHERE version = '${VERSION_VALUE}'
+# AND release = '${RELEASE_VALUE}'
+# GROUP BY quality_grade;"
 
 # Drop existing tables if they exist
 print_progress "Dropping existing tables"
@@ -143,9 +143,12 @@ WITH debug_counts AS (
     SELECT COUNT(*) as total_obs,
            COUNT(DISTINCT taxon_id) as unique_taxa
     FROM observations
-    WHERE version = '${VERSION_VALUE}'
-    AND release = '${RELEASE_VALUE}'
-    AND latitude BETWEEN ${YMIN} AND ${YMAX}
+    WHERE 
+    -- TEMPORARY HOTFIX: Commenting out version filters until bulk update is complete
+    -- version = '${VERSION_VALUE}'
+    -- AND release = '${RELEASE_VALUE}'
+    -- AND 
+    latitude BETWEEN ${YMIN} AND ${YMAX}
     AND longitude BETWEEN ${XMIN} AND ${XMAX}
 )
 SELECT * FROM debug_counts;
@@ -154,16 +157,22 @@ SELECT DISTINCT observations.taxon_id
 FROM observations
 JOIN taxa ON observations.taxon_id = taxa.taxon_id
 WHERE 
-    observations.version = '${VERSION_VALUE}'
-    AND observations.release = '${RELEASE_VALUE}'
-    AND NOT (taxa.rank_level = 10 AND observations.quality_grade != 'research')
+    -- TEMPORARY HOTFIX: Commenting out version filters until bulk update is complete
+    -- observations.version = '${VERSION_VALUE}'
+    -- AND observations.release = '${RELEASE_VALUE}'
+    -- AND 
+    NOT (taxa.rank_level = 10 AND observations.quality_grade != 'research')
     AND observations.latitude BETWEEN ${YMIN} AND ${YMAX}
     AND observations.longitude BETWEEN ${XMIN} AND ${XMAX}
     AND observations.taxon_id IN (
         SELECT observations.taxon_id
         FROM observations
-        WHERE version = '${VERSION_VALUE}'
-        AND release = '${RELEASE_VALUE}'
+        WHERE 
+        -- TEMPORARY HOTFIX: Commenting out version filters until bulk update is complete
+        -- version = '${VERSION_VALUE}'
+        -- AND release = '${RELEASE_VALUE}'
+        -- AND 
+        1=1
         GROUP BY observations.taxon_id
         HAVING COUNT(observation_uuid) >= ${MIN_OBS}
     );"
@@ -180,9 +189,11 @@ CREATE TABLE ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs AS
 SELECT ${OBS_COLUMNS}
 FROM observations
 WHERE 
-    version = '${VERSION_VALUE}'
-    AND release = '${RELEASE_VALUE}'
-    AND taxon_id IN (
+    -- TEMPORARY HOTFIX: Commenting out version filters until bulk update is complete
+    -- version = '${VERSION_VALUE}'
+    -- AND release = '${RELEASE_VALUE}'
+    -- AND 
+    taxon_id IN (
         SELECT taxon_id
         FROM ${REGION_TAG}_min${MIN_OBS}_all_taxa
     );"
