@@ -143,13 +143,12 @@ WITH debug_counts AS (
     SELECT COUNT(*) as total_obs,
            COUNT(DISTINCT taxon_id) as unique_taxa
     FROM observations
-    WHERE 
+    WHERE
     -- TEMPORARY HOTFIX: Commenting out version filters until bulk update is complete
     -- version = '${VERSION_VALUE}'
     -- AND release = '${RELEASE_VALUE}'
     -- AND 
-    latitude BETWEEN ${YMIN} AND ${YMAX}
-    AND longitude BETWEEN ${XMIN} AND ${XMAX}
+    geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326)
 )
 SELECT * FROM debug_counts;
 
@@ -162,8 +161,7 @@ WHERE
     -- AND observations.release = '${RELEASE_VALUE}'
     -- AND 
     NOT (taxa.rank_level = 10 AND observations.quality_grade != 'research')
-    AND observations.latitude BETWEEN ${YMIN} AND ${YMAX}
-    AND observations.longitude BETWEEN ${XMIN} AND ${XMAX}
+    AND geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326)
     AND observations.taxon_id IN (
         SELECT observations.taxon_id
         FROM observations
@@ -175,7 +173,7 @@ WHERE
         1=1
         GROUP BY observations.taxon_id
         HAVING COUNT(observation_uuid) >= ${MIN_OBS}
-    );"
+    );
 
 # Create table <REGION_TAG>_min<MIN_OBS>_all_taxa_obs with dynamic columns
 print_progress "Creating table ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs"
