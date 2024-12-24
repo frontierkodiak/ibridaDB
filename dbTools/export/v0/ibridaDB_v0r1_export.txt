@@ -1,11 +1,12 @@
 Directory tree, stemming from root "/home/caleb/repo/ibridaDB/dbTools/export/v0":
-├── common (439 lines)
-│   ├── cladistic.sh (126)
+├── common (618 lines)
+│   ├── clade_defns.sh (171)
+│   ├── cladistic.sh (134)
 │   ├── functions.sh (52)
 │   ├── main.sh (62)
 │   └── regional_base.sh (199)
-└── r1 (58)
-    │   └── wrapper.sh (58)
+└── r1 (59)
+    │   └── wrapper.sh (59)
 ----
 ----
 Full Path: common/main.sh
@@ -333,80 +334,259 @@ export -f ensure_directory
 export -f send_notification
 
 ----
+Full Path: common/clade_defns.sh
+
+#!/bin/bash
+# ------------------------------------------------------------------------------
+# clade_defns.sh
+# ------------------------------------------------------------------------------
+# This file defines the integer-based filtering expressions for macroclades,
+# clades, and metaclades, referencing columns in "expanded_taxa".
+#
+# Usage:
+#   source clade_defns.sh
+#   Then pick a macroclade (MACROCLADE="..."), or a clade (CLADE="..."),
+#   or a metaclade (METACLADE="...") in your environment, and the
+#   cladistic.sh script will build a condition from one of the arrays below.
+#
+# Example:
+#   MACROCLADES["arthropoda"]='("L60_taxonID" = 47119)'
+#   CLADES["insecta"]='("L50_taxonID" = 47120)'
+#   METACLADES["primary_terrestrial_arthropoda"]='("L50_taxonID" = 47120 OR "L50_taxonID" = 101885)'
+#
+# Be sure to substitute the correct taxonIDs for your local database!
+# ------------------------------------------------------------------------------
+
+# ---[ Macroclades ]-----------------------------------------------------------
+# Typically for kingdom-level (L70) or phylum-level (L60) anchors.
+
+declare -A MACROCLADES
+
+# 1) Arthropoda => phylum at L60 = 47120
+MACROCLADES["arthropoda"]='("L60_taxonID" = 47120)'
+
+# 2) Chordata => phylum at L60 = 2
+MACROCLADES["chordata"]='("L60_taxonID" = 2)'
+
+# 3) Plantae => kingdom at L70 = 47126
+MACROCLADES["plantae"]='("L70_taxonID" = 47126)'
+
+# 4) Fungi => kingdom at L70 = 47170
+MACROCLADES["fungi"]='("L70_taxonID" = 47170)'
+
+# (Optional) If you consider Actinopterygii, Mammalia, Reptilia, etc.
+# to be "macroclades," you may define them here instead of in CLADES.
+# For instance:
+#   MACROCLADES["mammalia"]='("L50_taxonID" = 40151)'
+
+
+# ---[ Clades ]----------------------------------------------------------------
+# Typically for class-level (L50), order-level (L40), or narrower taxonomic groups.
+declare -A CLADES
+
+# -- Class-level (L50) Examples --
+
+# 1) Actinopterygii => L50 = 47178
+CLADES["actinopterygii"]='("L50_taxonID" = 47178)'
+
+# 2) Amphibia => L50 = 20978
+CLADES["amphibia"]='("L50_taxonID" = 20978)'
+
+# 3) Arachnida => L50 = 47119
+CLADES["arachnida"]='("L50_taxonID" = 47119)'
+
+# 4) Aves => L50 = 3
+CLADES["aves"]='("L50_taxonID" = 3)'
+
+# 5) Insecta => L50 = 47158
+CLADES["insecta"]='("L50_taxonID" = 47158)'
+
+# 6) Mammalia => L50 = 40151
+CLADES["mammalia"]='("L50_taxonID" = 40151)'
+
+# 7) Reptilia => L50 = 26036
+CLADES["reptilia"]='("L50_taxonID" = 26036)'
+
+
+# -- Order-level (L40) Examples --
+
+# 1) Testudines => L40 = 39532
+CLADES["testudines"]='("L40_taxonID" = 39532)'
+
+# 2) Crocodylia => L40 = 26039
+CLADES["crocodylia"]='("L40_taxonID" = 26039)'
+
+# 3) Coleoptera => L40 = 47208
+CLADES["coleoptera"]='("L40_taxonID" = 47208)'
+
+# 4) Lepidoptera => L40 = 47157
+CLADES["lepidoptera"]='("L40_taxonID" = 47157)'
+
+# 5) Hymenoptera => L40 = 47201
+CLADES["hymenoptera"]='("L40_taxonID" = 47201)'
+
+# 6) Hemiptera => L40 = 47744
+CLADES["hemiptera"]='("L40_taxonID" = 47744)'
+
+# 7) Orthoptera => L40 = 47651
+CLADES["orthoptera"]='("L40_taxonID" = 47651)'
+
+# 8) Odonata => L40 = 47792
+CLADES["odonata"]='("L40_taxonID" = 47792)'
+
+# 9) Diptera => L40 = 47822
+CLADES["diptera"]='("L40_taxonID" = 47822)'
+
+
+# -- Additional Named Groups (Suborders, Clade Subsets, etc.) --
+
+# Pterygota => The DB shows two taxonIDs (184884, 418641) plus
+# another entry with L40_taxonID=48796. We combine them with OR:
+CLADES["pterygota"]='("taxonID" = 184884 OR "taxonID" = 418641 OR "L40_taxonID" = 48796)'
+
+# Phasmatodea => Not found in your query results. If/when you know its ID,
+# you can fill it in here:
+# CLADES["phasmatodea"]='("L40_taxonID" = ???)'
+
+# Subclades within Hymenoptera (all share L40_taxonID=47201).
+# Typically, referencing the top-level order is "hymenoptera"
+# while these might be more specific anchor taxa:
+CLADES["aculeata"]='("taxonID" = 326777)'
+CLADES["apoidea"]='("taxonID" = 47222)'
+CLADES["formicidae"]='("taxonID" = 47336)'
+CLADES["vespoidea"]='("taxonID" = 48740)'
+CLADES["vespidae"]='("taxonID" = 52747)'
+
+
+# ---[ Metaclades ]------------------------------------------------------------
+# Multi-root or cross-macroclade definitions. Compose bigger groups using OR/AND.
+
+declare -A METACLADES
+
+# Example 1: terrestrial_arthropods => Insecta OR Arachnida OR others.
+# (Using the taxonIDs from the CLADES above.)
+METACLADES["terrestrial_arthropods"]='("L50_taxonID" = 47158 OR "L50_taxonID" = 47119)'
+
+# Example 2: flying_vertebrates => Birds (aves) OR Bats (chiroptera)
+# Suppose chiroptera => L40=7721 (if that’s valid in your DB).
+METACLADES["flying_vertebrates"]='("L50_taxonID" = 3 OR "L40_taxonID" = 7721)'
+
+# Example 3: nonavian_reptiles => reptilia minus birds. You might do:
+# METACLADES["nonavian_reptiles"]='("L50_taxonID" = 26036 AND "L50_taxonID" != 3)'
+
+
+# ---[ Helper Function ]-------------------------------------------------------
+# Picks the correct expression given environment variables.
+function get_clade_condition() {
+  local condition
+
+  # 1) If METACLADE is set (and found in METACLADES), return that
+  if [[ -n "${METACLADE}" && -n "${METACLADES[${METACLADE}]}" ]]; then
+    condition="${METACLADES[${METACLADE}]}"
+    echo "${condition}"
+    return
+  fi
+
+  # 2) Else if CLADE is set
+  if [[ -n "${CLADE}" && -n "${CLADES[${CLADE}]}" ]]; then
+    condition="${CLADES[${CLADE}]}"
+    echo "${condition}"
+    return
+  fi
+
+  # 3) Else if MACROCLADE is set
+  if [[ -n "${MACROCLADE}" && -n "${MACROCLADES[${MACROCLADE}]}" ]]; then
+    condition="${MACROCLADES[${MACROCLADE}]}"
+    echo "${condition}"
+    return
+  fi
+
+  # 4) Fallback: no recognized key => no filter
+  echo "TRUE"
+}
+
+export -f get_clade_condition
+
+
+----
 Full Path: common/cladistic.sh
 
 #!/bin/bash
+# ------------------------------------------------------------------------------
+# cladistic.sh
+# ------------------------------------------------------------------------------
+# Creates filtered observation subsets for a specified clade/metaclade,
+# referencing the "expanded_taxa" table instead of the old recursive string method.
+#
+# Usage pattern:
+#   1) Environment variables set by an upstream wrapper or main script:
+#      - METACLADE=...
+#      - CLADE=...
+#      - MACROCLADE=...
+#      - DB_CONTAINER, DB_USER, DB_NAME
+#      - REGION_TAG, MIN_OBS, ...
+#   2) We load "clade_defns.sh" to define which integer columns to match
+#      (e.g. "L50_taxonID" = 47120).
+#   3) We create a final table <group>_observations joined to expanded_taxa
+#      so only active, recognized taxonIDs appear.
+#   4) We then do an export to CSV with a random subset of photos, etc.
+#
+# The environment variable "EXPORT_GROUP" is used to name the final table
+# and output CSV. This is typically set to your clade/metaclade name
+# (e.g. "primary_terrestrial_arthropoda").
+#
+# ------------------------------------------------------------------------------
 
-# Note: functions.sh is already sourced from main.sh
+# Load shared functions
+# (execute_sql, print_progress, get_obs_columns, etc.)
+source "${BASE_DIR}/common/functions.sh"
 
-# Function to get taxa IDs for a given metaclade
-get_metaclade_taxa() {
-    local metaclade=$1
-    case $metaclade in
-        "primary_terrestrial_arthropoda")
-            # Include Insecta and Arachnida, exclude aquatic groups
-            execute_sql "
-                WITH RECURSIVE taxonomy AS (
-                    SELECT taxon_id, ancestry, rank, name, active
-                    FROM taxa
-                    WHERE name IN ('Insecta', 'Arachnida')
-                    UNION ALL
-                    SELECT t.taxon_id, t.ancestry, t.rank, t.name, t.active
-                    FROM taxa t
-                    INNER JOIN taxonomy tax ON t.ancestry LIKE tax.ancestry || '/%'
-                        OR t.ancestry = tax.ancestry
-                    WHERE t.active = true
-                )
-                SELECT DISTINCT taxon_id 
-                FROM taxonomy
-                WHERE active = true
-                AND taxon_id NOT IN (
-                    SELECT DISTINCT t.taxon_id
-                    FROM taxa t
-                    WHERE t.name IN ('Ephemeroptera', 'Plecoptera', 'Trichoptera', 'Odonata')
-                    OR t.ancestry LIKE '%/48549%'  -- Exclude aquatic insects
-                );"
-            ;;
-        "amphibia")
-            execute_sql "
-                WITH RECURSIVE taxonomy AS (
-                    SELECT taxon_id, ancestry, rank, name, active
-                    FROM taxa
-                    WHERE name = 'Amphibia'
-                    UNION ALL
-                    SELECT t.taxon_id, t.ancestry, t.rank, t.name, t.active
-                    FROM taxa t
-                    INNER JOIN taxonomy tax ON t.ancestry LIKE tax.ancestry || '/%'
-                        OR t.ancestry = tax.ancestry
-                    WHERE t.active = true
-                )
-                SELECT DISTINCT taxon_id 
-                FROM taxonomy
-                WHERE active = true;"
-            ;;
-        *)
-            echo "Unknown metaclade: $metaclade"
-            exit 1
-            ;;
-    esac
-}
+# Load the new clade definitions
+source "${BASE_DIR}/common/clade_defns.sh"
 
-# Create filtered tables based on metaclade
+# Construct the final condition from environment variables
+CLADE_CONDITION="$(get_clade_condition)"
+
 print_progress "Creating filtered tables for ${EXPORT_GROUP}"
+
+# We'll build the final table name, e.g. "primary_terrestrial_arthropoda_observations"
+TABLE_NAME="${EXPORT_GROUP}_observations"
+
+# We rely on the region-based table built in regional_base.sh:
+#   <REGION_TAG>_min${MIN_OBS}_all_taxa_obs
+# which is typically "NAfull_min50_all_taxa_obs", etc.
+REGIONAL_TABLE="${REGION_TAG}_min${MIN_OBS}_all_taxa_obs"
+
+# The columns we'll select from the region table
+OBS_COLUMNS="$(get_obs_columns)"
+
+# 1) Drop old table if it exists
 execute_sql "
-CREATE TEMPORARY TABLE metaclade_taxa AS
-$(get_metaclade_taxa ${EXPORT_GROUP});
+DROP TABLE IF EXISTS \"${TABLE_NAME}\" CASCADE;
+"
 
-CREATE TABLE ${EXPORT_GROUP}_observations AS
+# 2) Create new table by joining to expanded_taxa
+#    so that we skip any taxon_id not found in expanded_taxa (i.e., inactive or missing).
+send_notification "Joining regional table ${REGIONAL_TABLE} to expanded_taxa"
+print_progress "Joining regional table ${REGIONAL_TABLE} to expanded_taxa"
+execute_sql "
+CREATE TABLE \"${TABLE_NAME}\" AS
 SELECT ${OBS_COLUMNS}
-FROM ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs obs
-WHERE obs.taxon_id IN (SELECT taxon_id FROM metaclade_taxa);"
+FROM \"${REGIONAL_TABLE}\" obs
+JOIN \"expanded_taxa\" e
+   ON e.\"taxonID\" = obs.taxon_id
+WHERE e.\"taxonActive\" = TRUE
+  AND ${CLADE_CONDITION};
+"
 
-# Export filtered observations
+# 3) Export to CSV (random subset w/ photos)
+send_notification "Exporting filtered observations"
 print_progress "Exporting filtered observations"
-if [ "$PRIMARY_ONLY" = true ]; then
+
+if [ "${PRIMARY_ONLY}" = true ]; then
+    # Photos with position=0, quality_grade='research'
     execute_sql "\COPY (
-        SELECT o.*, 
+        SELECT o.*,
                p.photo_uuid,
                p.photo_id,
                p.extension,
@@ -414,16 +594,18 @@ if [ "$PRIMARY_ONLY" = true ]; then
                p.width,
                p.height,
                p.position
-        FROM ${EXPORT_GROUP}_observations o
+        FROM \"${TABLE_NAME}\" o
         JOIN photos p ON o.observation_uuid = p.observation_uuid
         WHERE p.position = 0
-        AND o.quality_grade = 'research'
+          AND o.quality_grade = 'research'
         ORDER BY random()
         LIMIT ${MAX_RN}
-    ) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv' WITH CSV HEADER DELIMITER E'\t';"
+    ) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
+      WITH CSV HEADER DELIMITER E'\t';"
 else
+    # All photos for the final set, restricted to quality_grade='research'
     execute_sql "\COPY (
-        SELECT o.*, 
+        SELECT o.*,
                p.photo_uuid,
                p.photo_id,
                p.extension,
@@ -431,15 +613,16 @@ else
                p.width,
                p.height,
                p.position
-        FROM ${EXPORT_GROUP}_observations o
+        FROM \"${TABLE_NAME}\" o
         JOIN photos p ON o.observation_uuid = p.observation_uuid
         WHERE o.quality_grade = 'research'
         ORDER BY random()
         LIMIT ${MAX_RN}
-    ) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv' WITH CSV HEADER DELIMITER E'\t';"
+    ) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
+      WITH CSV HEADER DELIMITER E'\t';"
 fi
 
-# Create summary of exported data
+# 4) Summarize exported data
 print_progress "Creating export statistics"
 STATS=$(execute_sql "
 WITH export_stats AS (
@@ -447,7 +630,7 @@ WITH export_stats AS (
         COUNT(DISTINCT observation_uuid) as num_observations,
         COUNT(DISTINCT taxon_id) as num_taxa,
         COUNT(DISTINCT observer_id) as num_observers
-    FROM ${EXPORT_GROUP}_observations
+    FROM \"${TABLE_NAME}\"
 )
 SELECT format(
     'Exported Data Statistics:
@@ -461,6 +644,7 @@ FROM export_stats;")
 echo "${STATS}" >> "${HOST_EXPORT_DIR}/export_summary.txt"
 
 print_progress "Cladistic filtering complete"
+
 
 ----
 Full Path: r1/wrapper.sh
@@ -498,7 +682,8 @@ export REGION_TAG="NAfull"
 export MIN_OBS=50
 export MAX_RN=4000
 export PRIMARY_ONLY=true
-export EXPORT_GROUP="primary_terrestrial_arthropoda"
+export METACLADE="primary_terrestrial_arthropoda"
+export EXPORT_GROUP="${METACLADE}"
 export PROCESS_OTHER=false
 log_message "Region: ${REGION_TAG}"
 log_message "Min Observations: ${MIN_OBS}"

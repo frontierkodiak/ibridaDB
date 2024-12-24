@@ -173,7 +173,7 @@ WHERE
         1=1
         GROUP BY observations.taxon_id
         HAVING COUNT(observation_uuid) >= ${MIN_OBS}
-    );
+    );"
 
 # Create table <REGION_TAG>_min<MIN_OBS>_all_taxa_obs with dynamic columns
 print_progress "Creating table ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs"

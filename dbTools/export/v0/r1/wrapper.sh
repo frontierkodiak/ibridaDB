@@ -31,7 +31,8 @@ export REGION_TAG="NAfull"
 export MIN_OBS=50
 export MAX_RN=4000
 export PRIMARY_ONLY=true
-export EXPORT_GROUP="primary_terrestrial_arthropoda"
+export METACLADE="primary_terrestrial_arthropoda"
+export EXPORT_GROUP="${METACLADE}"
 export PROCESS_OTHER=false
 log_message "Region: ${REGION_TAG}"
 log_message "Min Observations: ${MIN_OBS}"
