@@ -2,7 +2,7 @@
 
 # Note: functions are sourced from main.sh
 
-# Function to set region-specific coordinates
+# ------------------[ 1) Region Coordinates ]-------------------
 set_region_coordinates() {
   case "$REGION_TAG" in
     "NAfull")
@@ -102,98 +102,68 @@ set_region_coordinates() {
   esac
 }
 
-
-# Set region coordinates
+# Set region coordinates based on $REGION_TAG
 set_region_coordinates
 
-# # Debug: Check version and release values
-# print_progress "Debugging database parameters"
-# execute_sql "
-# SELECT DISTINCT version, release, count(*)
-# FROM observations
-# GROUP BY version, release;"
-
-# # Debug: Check coordinate bounds
-# print_progress "Checking observations within coordinate bounds"
-# execute_sql "
-# SELECT COUNT(*)
-# FROM observations
-# WHERE latitude BETWEEN ${YMIN} AND ${YMAX}
-# AND longitude BETWEEN ${XMIN} AND ${XMAX};"
-
-# # Debug: Check quality grade distribution
-# print_progress "Checking quality grade distribution"
-# execute_sql "
-# SELECT quality_grade, COUNT(*)
-# FROM observations
-# WHERE version = '${VERSION_VALUE}'
-# AND release = '${RELEASE_VALUE}'
-# GROUP BY quality_grade;"
-
-# Drop existing tables if they exist
+# ------------------[ 2) Drop Old Tables ]----------------------
 print_progress "Dropping existing tables"
-execute_sql "DROP TABLE IF EXISTS ${REGION_TAG}_min${MIN_OBS}_all_taxa CASCADE;"
-execute_sql "DROP TABLE IF EXISTS ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs CASCADE;"
 
-# Create table with debug output
-print_progress "Creating table ${REGION_TAG}_min${MIN_OBS}_all_taxa with debug"
 execute_sql "
-CREATE TABLE ${REGION_TAG}_min${MIN_OBS}_all_taxa AS
+DROP TABLE IF EXISTS \"${REGION_TAG}_min${MIN_OBS}_all_taxa\" CASCADE;
+DROP TABLE IF EXISTS \"${REGION_TAG}_min${MIN_OBS}_all_taxa_obs\" CASCADE;
+"
+
+# ------------------[ 3) Optional Debug Counts ]----------------
+# If you want the debug counts as a separate table:
+print_progress "Creating debug_counts for region ${REGION_TAG}"
+execute_sql "
+DROP TABLE IF EXISTS \"${REGION_TAG}_debug_counts\" CASCADE;
+
+CREATE TABLE \"${REGION_TAG}_debug_counts\" AS
 WITH debug_counts AS (
-    SELECT COUNT(*) as total_obs,
-           COUNT(DISTINCT taxon_id) as unique_taxa
+    SELECT
+      COUNT(*) AS total_obs,
+      COUNT(DISTINCT taxon_id) AS unique_taxa
     FROM observations
     WHERE
-    -- TEMPORARY HOTFIX: Commenting out version filters until bulk update is complete
-    -- version = '${VERSION_VALUE}'
-    -- AND release = '${RELEASE_VALUE}'
-    -- AND 
-    geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326)
+      -- version='${VERSION_VALUE}' AND ...
+      geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326)
 )
 SELECT * FROM debug_counts;
+"
 
-SELECT DISTINCT observations.taxon_id
-FROM observations
-JOIN taxa ON observations.taxon_id = taxa.taxon_id
-WHERE 
-    -- TEMPORARY HOTFIX: Commenting out version filters until bulk update is complete
-    -- observations.version = '${VERSION_VALUE}'
-    -- AND observations.release = '${RELEASE_VALUE}'
-    -- AND 
-    NOT (taxa.rank_level = 10 AND observations.quality_grade != 'research')
-    AND geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326)
-    AND observations.taxon_id IN (
-        SELECT observations.taxon_id
-        FROM observations
-        WHERE 
-        -- TEMPORARY HOTFIX: Commenting out version filters until bulk update is complete
-        -- version = '${VERSION_VALUE}'
-        -- AND release = '${RELEASE_VALUE}'
-        -- AND 
-        1=1
-        GROUP BY observations.taxon_id
-        HAVING COUNT(observation_uuid) >= ${MIN_OBS}
-    );"
+# ------------------[ 4) Create _all_taxa Table ]---------------
+print_progress "Creating table \"${REGION_TAG}_min${MIN_OBS}_all_taxa\""
+execute_sql "
+CREATE TABLE \"${REGION_TAG}_min${MIN_OBS}_all_taxa\" AS
+SELECT DISTINCT o.taxon_id
+FROM observations o
+JOIN taxa t ON o.taxon_id = t.taxon_id
+WHERE
+  NOT (t.rank_level = 10 AND o.quality_grade != 'research')
+  AND o.geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326)
+  AND o.taxon_id IN (
+      SELECT o2.taxon_id
+      FROM observations o2
+      GROUP BY o2.taxon_id
+      HAVING COUNT(o2.observation_uuid) >= ${MIN_OBS}
+  );
+"
 
-# Create table <REGION_TAG>_min<MIN_OBS>_all_taxa_obs with dynamic columns
-print_progress "Creating table ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs"
+# ------------------[ 5) Create _all_taxa_obs Table ]-----------
+print_progress "Creating table \"${REGION_TAG}_min${MIN_OBS}_all_taxa_obs\""
 OBS_COLUMNS=$(get_obs_columns)
 
-# Debug: show the columns being used
 echo "Using columns: ${OBS_COLUMNS}"
 
 execute_sql "
-CREATE TABLE ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs AS
+CREATE TABLE \"${REGION_TAG}_min${MIN_OBS}_all_taxa_obs\" AS
 SELECT ${OBS_COLUMNS}
 FROM observations
-WHERE 
-    -- TEMPORARY HOTFIX: Commenting out version filters until bulk update is complete
-    -- version = '${VERSION_VALUE}'
-    -- AND release = '${RELEASE_VALUE}'
-    -- AND 
-    taxon_id IN (
-        SELECT taxon_id
-        FROM ${REGION_TAG}_min${MIN_OBS}_all_taxa
-    );"
+WHERE taxon_id IN (
+    SELECT taxon_id
+    FROM \"${REGION_TAG}_min${MIN_OBS}_all_taxa\"
+);
+"
 
 print_progress "Regional base tables created"

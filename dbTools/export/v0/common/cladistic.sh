@@ -124,129 +124,124 @@ WHERE e.\"taxonActive\" = TRUE
 # 5) Export to CSV (random subset w/ photos).
 #    We must also select the same set of columns (plus the photo fields).
 #    Notice we reference the newly created table "TABLE_NAME" for the final data.
-
 send_notification "Exporting filtered observations"
 print_progress "Exporting filtered observations"
 
 if [ "${PRIMARY_ONLY}" = true ]; then
     # Photos with position=0, quality_grade='research'
-    execute_sql "\COPY (
-        SELECT
-            o.*,
-            -- Include expanded_taxonID, expanded_rankLevel, expanded_name:
-            o.expanded_taxonID,
-            o.expanded_rankLevel,
-            o.expanded_name,
-
-            -- Full set of ancestral taxonID columns:
-            o.\"L5_taxonID\",
-            o.\"L10_taxonID\",
-            o.\"L11_taxonID\",
-            o.\"L12_taxonID\",
-            o.\"L13_taxonID\",
-            o.\"L15_taxonID\",
-            o.\"L20_taxonID\",
-            o.\"L24_taxonID\",
-            o.\"L25_taxonID\",
-            o.\"L26_taxonID\",
-            o.\"L27_taxonID\",
-            o.\"L30_taxonID\",
-            o.\"L32_taxonID\",
-            o.\"L33_taxonID\",
-            o.\"L33_5_taxonID\",
-            o.\"L34_taxonID\",
-            o.\"L34_5_taxonID\",
-            o.\"L35_taxonID\",
-            o.\"L37_taxonID\",
-            o.\"L40_taxonID\",
-            o.\"L43_taxonID\",
-            o.\"L44_taxonID\",
-            o.\"L45_taxonID\",
-            o.\"L47_taxonID\",
-            o.\"L50_taxonID\",
-            o.\"L53_taxonID\",
-            o.\"L57_taxonID\",
-            o.\"L60_taxonID\",
-            o.\"L67_taxonID\",
-            o.\"L70_taxonID\",
-
-            p.photo_uuid,
-            p.photo_id,
-            p.extension,
-            p.license,
-            p.width,
-            p.height,
-            p.position
-
-        FROM \"${TABLE_NAME}\" o
-        JOIN photos p
-          ON o.observation_uuid = p.observation_uuid
-        WHERE p.position = 0
-          AND o.quality_grade = 'research'
-        ORDER BY random()
-        LIMIT ${MAX_RN}
-    ) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
-      WITH CSV HEADER DELIMITER E'\t';
-    "
+    # CLARIFY: We assume ${EXPORT_DIR} is a valid path in the container. Please confirm.
+    # ASSUMPTION: The container user has write access to ${EXPORT_DIR}.
+    execute_sql "
+COPY (
+    SELECT
+        o.*,
+        o.expanded_taxonID,
+        o.expanded_rankLevel,
+        o.expanded_name,
+        o.\"L5_taxonID\",
+        o.\"L10_taxonID\",
+        o.\"L11_taxonID\",
+        o.\"L12_taxonID\",
+        o.\"L13_taxonID\",
+        o.\"L15_taxonID\",
+        o.\"L20_taxonID\",
+        o.\"L24_taxonID\",
+        o.\"L25_taxonID\",
+        o.\"L26_taxonID\",
+        o.\"L27_taxonID\",
+        o.\"L30_taxonID\",
+        o.\"L32_taxonID\",
+        o.\"L33_taxonID\",
+        o.\"L33_5_taxonID\",
+        o.\"L34_taxonID\",
+        o.\"L34_5_taxonID\",
+        o.\"L35_taxonID\",
+        o.\"L37_taxonID\",
+        o.\"L40_taxonID\",
+        o.\"L43_taxonID\",
+        o.\"L44_taxonID\",
+        o.\"L45_taxonID\",
+        o.\"L47_taxonID\",
+        o.\"L50_taxonID\",
+        o.\"L53_taxonID\",
+        o.\"L57_taxonID\",
+        o.\"L60_taxonID\",
+        o.\"L67_taxonID\",
+        o.\"L70_taxonID\",
+        p.photo_uuid,
+        p.photo_id,
+        p.extension,
+        p.license,
+        p.width,
+        p.height,
+        p.position
+    FROM \"${TABLE_NAME}\" o
+    JOIN photos p
+      ON o.observation_uuid = p.observation_uuid
+    WHERE p.position = 0
+      AND o.quality_grade = 'research'
+    ORDER BY random()
+    LIMIT ${MAX_RN}
+) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
+WITH (FORMAT CSV, HEADER, DELIMITER E'\t');
+"
 else
     # All photos for the final set, restricted to quality_grade='research'
-    execute_sql "\COPY (
-        SELECT
-            o.*,
-            -- Include expanded_taxonID, expanded_rankLevel, expanded_name:
-            o.expanded_taxonID,
-            o.expanded_rankLevel,
-            o.expanded_name,
-
-            -- Full set of ancestral taxonID columns:
-            o.\"L5_taxonID\",
-            o.\"L10_taxonID\",
-            o.\"L11_taxonID\",
-            o.\"L12_taxonID\",
-            o.\"L13_taxonID\",
-            o.\"L15_taxonID\",
-            o.\"L20_taxonID\",
-            o.\"L24_taxonID\",
-            o.\"L25_taxonID\",
-            o.\"L26_taxonID\",
-            o.\"L27_taxonID\",
-            o.\"L30_taxonID\",
-            o.\"L32_taxonID\",
-            o.\"L33_taxonID\",
-            o.\"L33_5_taxonID\",
-            o.\"L34_taxonID\",
-            o.\"L34_5_taxonID\",
-            o.\"L35_taxonID\",
-            o.\"L37_taxonID\",
-            o.\"L40_taxonID\",
-            o.\"L43_taxonID\",
-            o.\"L44_taxonID\",
-            o.\"L45_taxonID\",
-            o.\"L47_taxonID\",
-            o.\"L50_taxonID\",
-            o.\"L53_taxonID\",
-            o.\"L57_taxonID\",
-            o.\"L60_taxonID\",
-            o.\"L67_taxonID\",
-            o.\"L70_taxonID\",
-
-            p.photo_uuid,
-            p.photo_id,
-            p.extension,
-            p.license,
-            p.width,
-            p.height,
-            p.position
-
-        FROM \"${TABLE_NAME}\" o
-        JOIN photos p
-          ON o.observation_uuid = p.observation_uuid
-        WHERE o.quality_grade = 'research'
-        ORDER BY random()
-        LIMIT ${MAX_RN}
-    ) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
-      WITH CSV HEADER DELIMITER E'\t';
-    "
+    # CLARIFY: We assume ${EXPORT_DIR} is a valid path in the container. Please confirm.
+    # ASSUMPTION: The container user has write access to ${EXPORT_DIR}.
+    execute_sql "
+COPY (
+    SELECT
+        o.*,
+        o.expanded_taxonID,
+        o.expanded_rankLevel,
+        o.expanded_name,
+        o.\"L5_taxonID\",
+        o.\"L10_taxonID\",
+        o.\"L11_taxonID\",
+        o.\"L12_taxonID\",
+        o.\"L13_taxonID\",
+        o.\"L15_taxonID\",
+        o.\"L20_taxonID\",
+        o.\"L24_taxonID\",
+        o.\"L25_taxonID\",
+        o.\"L26_taxonID\",
+        o.\"L27_taxonID\",
+        o.\"L30_taxonID\",
+        o.\"L32_taxonID\",
+        o.\"L33_taxonID\",
+        o.\"L33_5_taxonID\",
+        o.\"L34_taxonID\",
+        o.\"L34_5_taxonID\",
+        o.\"L35_taxonID\",
+        o.\"L37_taxonID\",
+        o.\"L40_taxonID\",
+        o.\"L43_taxonID\",
+        o.\"L44_taxonID\",
+        o.\"L45_taxonID\",
+        o.\"L47_taxonID\",
+        o.\"L50_taxonID\",
+        o.\"L53_taxonID\",
+        o.\"L57_taxonID\",
+        o.\"L60_taxonID\",
+        o.\"L67_taxonID\",
+        o.\"L70_taxonID\",
+        p.photo_uuid,
+        p.photo_id,
+        p.extension,
+        p.license,
+        p.width,
+        p.height,
+        p.position
+    FROM \"${TABLE_NAME}\" o
+    JOIN photos p
+      ON o.observation_uuid = p.observation_uuid
+    WHERE o.quality_grade = 'research'
+    ORDER BY random()
+    LIMIT ${MAX_RN}
+) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
+WITH (FORMAT CSV, HEADER, DELIMITER E'\t');
+"
 fi
 
 # 6) Summarize exported data: how many observations, taxa, observers?
