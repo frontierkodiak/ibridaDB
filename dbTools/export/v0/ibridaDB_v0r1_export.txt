@@ -1,13 +1,158 @@
 Directory tree, stemming from root "/home/caleb/repo/ibridaDB/dbTools/export/v0":
-├── common (729 lines)
+├── common (768 lines)
 │   ├── clade_defns.sh (171)
-│   ├── cladistic.sh (274)
+│   ├── cladistic.sh (217)
+│   ├── export_per_species_snippet.sh (96)
 │   ├── functions.sh (52)
 │   ├── main.sh (62)
 │   └── regional_base.sh (170)
+├── export.md (139)
 └── r1 (59)
     │   └── wrapper.sh (59)
 ----
+----
+Full Path: export.md
+
+# ibridaDB Export Reference
+
+This document describes the key parameters that drive the **v1** export process in our `ibridaDB` pipeline. The parameters are split into three logical groups, reflecting their usage and declaration in `wrapper.sh`: **Database Config**, **Export Parameters**, and **Paths**. 
+
+## 1. Database Config
+
+These environment variables specify how the export scripts connect to the database and handle versioning.
+
+### `DB_USER`
+- **Description**: The database user that executes SQL commands.
+- **Default**: `"postgres"`
+
+### `VERSION_VALUE`
+- **Description**: The string identifier for the data version being exported (e.g., `"v0"`).  
+- **Usage**: Combined with `RELEASE_VALUE` to construct the `DB_NAME`, and also embedded in logs or summary files.
+
+### `RELEASE_VALUE`
+- **Description**: Further disambiguates the release within the version (e.g., `"r1"`).
+- **Usage**: Combined with `VERSION_VALUE` to construct the `DB_NAME`; also used for conditional logic in `functions.sh` (e.g., deciding whether to append `anomaly_score` columns).
+
+### `ORIGIN_VALUE`
+- **Description**: Documents the source of the data (e.g., `"iNat-Dec2024"`).  
+- **Usage**: Potentially used to label data, but currently only logged or stored in summary contexts.
+
+### `DB_NAME`
+- **Description**: The actual database name to which SQL commands are directed.  
+- **Constructed**: Typically `"ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"` (e.g., `"ibrida-v0-r1"`).
+
+---
+
+## 2. Export Parameters
+
+These variables control which data are included in the export and how they are sampled or filtered.
+
+### `REGION_TAG`
+- **Description**: Identifies a particular broad region (e.g., `"NAfull"`, `"EURfull"`) that will define bounding box coordinates.  
+- **Usage**: Affected by the `set_region_coordinates()` function in `regional_base.sh`, which sets `XMIN`, `YMIN`, `XMAX`, `YMAX`.  
+- **Example**: `"NAfull"` for North America bounding box.
+
+### `MIN_OBS`
+- **Description**: The minimum number of observations required for a species to be included in the regional tables.  
+- **Intended Behavior**: 
+  - In `regional_base.sh`, species (rank_level == 10) must have at least `MIN_OBS` **research-grade** observations to be included in `<REGION_TAG>_min${MIN_OBS}_all_taxa` and subsequent tables.  
+  - Practically, the code checks for `HAVING COUNT(o2.observation_uuid) >= ${MIN_OBS}` and also filters out non-research-grade observations if `t.rank_level = 10`.  
+- **Default**: `50`  
+- **Note**: If a taxon is not strictly species rank, the code uses a looser condition, but for true species (rank_level=10), it must meet the threshold. 
+
+### `MAX_RN`
+- **Description**: The maximum number of **research-grade** observations that will be **sampled per species** in the final CSV export.  
+- **Usage**:
+  - In `cladistic.sh`, a partition-based random sampling ensures up to `MAX_RN` observations per species (`L10_taxonID`).  
+  - Observations with `L10_taxonID IS NULL` are exempt from this cap (they are not strictly species-level).  
+- **Default**: `4000`
+
+### `PRIMARY_ONLY`
+- **Description**: Controls whether to only export `position=0` (the “primary” or first) photo per observation, or *all* photos.  
+- **Usage**:
+  - In `cladistic.sh`, the `COPY` statements either require `p.position = 0` or allow all positions, based on `PRIMARY_ONLY=true/false`.  
+- **Typical Values**: `true` (only primary photo) or `false` (all photos).
+
+### `METACLADE`
+- **Description**: A specialized grouping of clades, combining multiple lineages. Often something like `"primary_terrestrial_arthropoda"`.  
+- **Usage**:
+  - In `clade_defns.sh`, a `METACLADES["primary_terrestrial_arthropoda"] = ...` expression defines which taxonIDs to include.  
+  - If `METACLADE` is set, it overrides `CLADE` or `MACROCLADE` when building the final condition.
+
+### `EXPORT_GROUP`
+- **Description**: The name or label for the final exported dataset (e.g., `"primary_terrestrial_arthropoda"`).  
+- **Usage**:
+  - Used to build the final table name (`<EXPORT_GROUP>_observations`) in `cladistic.sh`.  
+  - Also appended to output CSV filenames and summary messages.
+
+### `PROCESS_OTHER`
+- **Description**: A boolean-like flag (default `false`) indicating whether to run additional extra steps.  
+- **Usage**:
+  - Not deeply integrated in the current code, but can be used to skip or include extra logic if set to `true`.
+
+---
+
+## 3. Paths
+
+These variables handle filesystem or container paths for storing exports and controlling Docker context.
+
+### `DB_CONTAINER`
+- **Description**: The name of the Docker container running PostgreSQL (e.g., `"ibridaDB"`).  
+- **Usage**:
+  - `functions.sh` uses it in `execute_sql()` to run `docker exec ${DB_CONTAINER} ...`.
+
+### `HOST_EXPORT_BASE_PATH`
+- **Description**: The base path on the **host** for storing final exports (mapped into the container).  
+- **Default**: `"/datasets/ibrida-data/exports"`.
+
+### `CONTAINER_EXPORT_BASE_PATH`
+- **Description**: The base path **inside** the Docker container that maps to `HOST_EXPORT_BASE_PATH`.  
+- **Default**: `"/exports"`.
+
+### `EXPORT_SUBDIR`
+- **Description**: A dynamic subdirectory that includes the version, release, and other parameters (e.g., `"v0/r1/primary_only_50min_4000max"`).  
+- **Usage**:
+  - Combined with `HOST_EXPORT_BASE_PATH` for writing to disk from the host perspective, and with `CONTAINER_EXPORT_BASE_PATH` for writing to disk from within the container.  
+  - E.g., final container path is `"$CONTAINER_EXPORT_BASE_PATH/$EXPORT_SUBDIR"`, final host path is `"$HOST_EXPORT_BASE_PATH/$EXPORT_SUBDIR"`.
+
+### `BASE_DIR`
+- **Description**: The top-level directory for the export scripts inside the container (e.g., `"/home/caleb/repo/ibridaDB/dbTools/export/v0"`).  
+- **Usage**:  
+  - Scripts in `wrapper.sh` or `main.sh` reference subdirectories within `BASE_DIR`, e.g., `BASE_DIR/common/functions.sh` or `BASE_DIR/common/regional_base.sh`.  
+
+---
+
+## Flow of Parameter Usage
+
+1. **Wrapper Script** (`wrapper.sh`):  
+   - Defines the environment variables documented above.  
+   - Logs them and calls `main.sh`.
+
+2. **Main Script** (`main.sh`):  
+   - Validates required variables.  
+   - Creates the export directory.  
+   - Calls `regional_base.sh` to create region-based tables.  
+   - Calls `cladistic.sh` to filter and export the final CSV.  
+   - Generates a final `export_summary.txt`.
+
+3. **regional_base.sh**:  
+   - Uses `REGION_TAG` to set bounding box coordinates.  
+   - Applies `MIN_OBS` to exclude species with fewer than the required number of research-grade observations.  
+   - Produces `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs`.
+
+4. **cladistic.sh**:  
+   - Applies `METACLADE`, `CLADE`, or `MACROCLADE` logic to define taxonomic filters.  
+   - Joins the regional table to `expanded_taxa`, producing `<EXPORT_GROUP>_observations`.  
+   - Randomly samples up to `MAX_RN` observations **per species** (defined by `L10_taxonID`) in the final CSV, with `PRIMARY_ONLY` restricting photos if desired.
+
+5. **export_per_species_snippet.sh** (Optional):  
+   - A shortcut script to export a final CSV from an already-existing `<EXPORT_GROUP>_observations` table without re-creating upstream tables or re-running the entire flow.
+
+---
+
+**End of Document**  
+
+
 ----
 Full Path: common/main.sh
 
@@ -496,6 +641,8 @@ Full Path: common/cladistic.sh
 #      - MACROCLADE=...
 #      - DB_CONTAINER, DB_USER, DB_NAME
 #      - REGION_TAG, MIN_OBS, ...
+#      - MAX_RN (the max number of observations to keep per species)
+#      - PRIMARY_ONLY (whether to restrict photos to position=0)
 #   2) We load "clade_defns.sh" to define which integer columns to match
 #      (e.g. "L50_taxonID" = 47120).
 #   3) We create a final table <group>_observations joined to expanded_taxa
@@ -512,6 +659,9 @@ Full Path: common/cladistic.sh
 #     (taxonID, rankLevel, name from expanded_taxa) to the standard observation
 #     columns plus photo fields. This ensures our downstream processes have
 #     all needed ancestry info.
+#   - The partition-based sampling approach ensures we select up to MAX_RN
+#     observations per species (defined by L10_taxonID). Observations with
+#     L10_taxonID IS NULL are included in full (i.e. no limit).
 #
 # ------------------------------------------------------------------------------
 # Permission / Ownership Note:
@@ -597,7 +747,6 @@ SELECT
     e.\"L60_taxonID\",
     e.\"L67_taxonID\",
     e.\"L70_taxonID\"
-
 FROM \"${REGIONAL_TABLE}\" obs
 JOIN \"expanded_taxa\" e
    ON e.\"taxonID\" = obs.taxon_id
@@ -605,132 +754,71 @@ WHERE e.\"taxonActive\" = TRUE
   AND ${CLADE_CONDITION};
 "
 
-# 5) Export to CSV (random subset w/ photos).
-#    We must also select the same set of columns (plus the photo fields).
-#    Notice we reference the newly created table "TABLE_NAME" for the final data.
-
+# 5) Export to CSV with partition-based sampling
 send_notification "Exporting filtered observations"
 print_progress "Exporting filtered observations"
 
 if [ "${PRIMARY_ONLY}" = true ]; then
-    # Photos with position=0, quality_grade='research'
-    execute_sql "\COPY (
-        SELECT
-            o.*,
-            -- Include expanded_taxonID, expanded_rankLevel, expanded_name:
-            o.expanded_taxonID,
-            o.expanded_rankLevel,
-            o.expanded_name,
-
-            -- Full set of ancestral taxonID columns:
-            o.\"L5_taxonID\",
-            o.\"L10_taxonID\",
-            o.\"L11_taxonID\",
-            o.\"L12_taxonID\",
-            o.\"L13_taxonID\",
-            o.\"L15_taxonID\",
-            o.\"L20_taxonID\",
-            o.\"L24_taxonID\",
-            o.\"L25_taxonID\",
-            o.\"L26_taxonID\",
-            o.\"L27_taxonID\",
-            o.\"L30_taxonID\",
-            o.\"L32_taxonID\",
-            o.\"L33_taxonID\",
-            o.\"L33_5_taxonID\",
-            o.\"L34_taxonID\",
-            o.\"L34_5_taxonID\",
-            o.\"L35_taxonID\",
-            o.\"L37_taxonID\",
-            o.\"L40_taxonID\",
-            o.\"L43_taxonID\",
-            o.\"L44_taxonID\",
-            o.\"L45_taxonID\",
-            o.\"L47_taxonID\",
-            o.\"L50_taxonID\",
-            o.\"L53_taxonID\",
-            o.\"L57_taxonID\",
-            o.\"L60_taxonID\",
-            o.\"L67_taxonID\",
-            o.\"L70_taxonID\",
-
-            p.photo_uuid,
-            p.photo_id,
-            p.extension,
-            p.license,
-            p.width,
-            p.height,
-            p.position
-
-        FROM \"${TABLE_NAME}\" o
-        JOIN photos p
-          ON o.observation_uuid = p.observation_uuid
-        WHERE p.position = 0
-          AND o.quality_grade = 'research'
+    # Photos with position=0, quality_grade='research', up to MAX_RN per species
+    execute_sql "
+COPY (
+  WITH per_species AS (
+    SELECT
+      o.*,
+      p.photo_uuid,
+      p.photo_id,
+      p.extension,
+      p.license,
+      p.width,
+      p.height,
+      p.position,
+      ROW_NUMBER() OVER (
+        PARTITION BY o.\"L10_taxonID\"
         ORDER BY random()
-        LIMIT ${MAX_RN}
-    ) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
-      WITH CSV HEADER DELIMITER E'\t';
-    "
+      ) AS species_rand_idx
+    FROM \"${TABLE_NAME}\" o
+    JOIN photos p ON o.observation_uuid = p.observation_uuid
+    WHERE p.position = 0
+      AND o.quality_grade = 'research'
+  )
+  SELECT *
+  FROM per_species
+  WHERE
+    (\"L10_taxonID\" IS NULL)
+    OR (\"L10_taxonID\" IS NOT NULL AND species_rand_idx <= ${MAX_RN})
+) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
+WITH (FORMAT CSV, HEADER, DELIMITER E'\t');
+"
 else
-    # All photos for the final set, restricted to quality_grade='research'
-    execute_sql "\COPY (
-        SELECT
-            o.*,
-            -- Include expanded_taxonID, expanded_rankLevel, expanded_name:
-            o.expanded_taxonID,
-            o.expanded_rankLevel,
-            o.expanded_name,
-
-            -- Full set of ancestral taxonID columns:
-            o.\"L5_taxonID\",
-            o.\"L10_taxonID\",
-            o.\"L11_taxonID\",
-            o.\"L12_taxonID\",
-            o.\"L13_taxonID\",
-            o.\"L15_taxonID\",
-            o.\"L20_taxonID\",
-            o.\"L24_taxonID\",
-            o.\"L25_taxonID\",
-            o.\"L26_taxonID\",
-            o.\"L27_taxonID\",
-            o.\"L30_taxonID\",
-            o.\"L32_taxonID\",
-            o.\"L33_taxonID\",
-            o.\"L33_5_taxonID\",
-            o.\"L34_taxonID\",
-            o.\"L34_5_taxonID\",
-            o.\"L35_taxonID\",
-            o.\"L37_taxonID\",
-            o.\"L40_taxonID\",
-            o.\"L43_taxonID\",
-            o.\"L44_taxonID\",
-            o.\"L45_taxonID\",
-            o.\"L47_taxonID\",
-            o.\"L50_taxonID\",
-            o.\"L53_taxonID\",
-            o.\"L57_taxonID\",
-            o.\"L60_taxonID\",
-            o.\"L67_taxonID\",
-            o.\"L70_taxonID\",
-
-            p.photo_uuid,
-            p.photo_id,
-            p.extension,
-            p.license,
-            p.width,
-            p.height,
-            p.position
-
-        FROM \"${TABLE_NAME}\" o
-        JOIN photos p
-          ON o.observation_uuid = p.observation_uuid
-        WHERE o.quality_grade = 'research'
+    # All photos for the final set, restricted to quality_grade='research', up to MAX_RN per species
+    execute_sql "
+COPY (
+  WITH per_species AS (
+    SELECT
+      o.*,
+      p.photo_uuid,
+      p.photo_id,
+      p.extension,
+      p.license,
+      p.width,
+      p.height,
+      p.position,
+      ROW_NUMBER() OVER (
+        PARTITION BY o.\"L10_taxonID\"
         ORDER BY random()
-        LIMIT ${MAX_RN}
-    ) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
-      WITH CSV HEADER DELIMITER E'\t';
-    "
+      ) AS species_rand_idx
+    FROM \"${TABLE_NAME}\" o
+    JOIN photos p ON o.observation_uuid = p.observation_uuid
+    WHERE o.quality_grade = 'research'
+  )
+  SELECT *
+  FROM per_species
+  WHERE
+    (\"L10_taxonID\" IS NULL)
+    OR (\"L10_taxonID\" IS NOT NULL AND species_rand_idx <= ${MAX_RN})
+) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
+WITH (FORMAT CSV, HEADER, DELIMITER E'\t');
+"
 fi
 
 # 6) Summarize exported data: how many observations, taxa, observers?
@@ -756,6 +844,106 @@ echo "${STATS}" >> "${HOST_EXPORT_DIR}/export_summary.txt"
 
 print_progress "Cladistic filtering complete"
 
+
+----
+Full Path: common/export_per_species_snippet.sh
+
+#!/bin/bash
+#
+# export_per_species_snippet.sh
+#
+# This script performs a per-species random sampling export from an
+# already-existing table. It does NOT drop or re-create the table.
+# It's intended for quick usage to avoid re-running all upstream steps.
+#
+# Usage: set environment variables before calling, e.g.:
+#   export DB_CONTAINER="ibridaDB"
+#   export DB_USER="postgres"
+#   export DB_NAME="ibrida-v0-r1"
+#   export EXPORT_GROUP="primary_terrestrial_arthropoda"
+#   export EXPORT_DIR="/exports/v0/r1/primary_only_50min_4000max"
+#   export MAX_RN=4000
+#   export PRIMARY_ONLY=true
+#   Then run:
+#   ./export_per_species_snippet.sh
+#
+
+# CLARIFY: We assume that the user already has a table named ${EXPORT_GROUP}_observations
+#          that includes all columns needed, and a 'photos' table too.
+# ASSUMPTION: The container user has write access to $EXPORT_DIR.
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+source "${SCRIPT_DIR}/functions.sh"
+
+TABLE_NAME="${EXPORT_GROUP}_observations"
+
+print_progress "Starting quick per-species export from existing table: ${TABLE_NAME}"
+
+# The actual COPY logic is adapted from cladistic.sh, focusing on partition-based random sampling:
+if [ "${PRIMARY_ONLY}" = true ]; then
+    # Photos with position=0, quality_grade='research'
+    execute_sql "
+COPY (
+  WITH per_species AS (
+    SELECT
+      o.*,
+      p.photo_uuid,
+      p.photo_id,
+      p.extension,
+      p.license,
+      p.width,
+      p.height,
+      p.position,
+      ROW_NUMBER() OVER (
+        PARTITION BY o.\"L10_taxonID\"
+        ORDER BY random()
+      ) AS species_rand_idx
+    FROM \"${TABLE_NAME}\" o
+    JOIN photos p ON o.observation_uuid = p.observation_uuid
+    WHERE p.position = 0
+      AND o.quality_grade = 'research'
+  )
+  SELECT *
+  FROM per_species
+  WHERE
+    (\"L10_taxonID\" IS NULL)
+    OR (\"L10_taxonID\" IS NOT NULL AND species_rand_idx <= ${MAX_RN})
+) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
+WITH (FORMAT CSV, HEADER, DELIMITER E'\t');
+"
+else
+    # All photos for the final set, restricted to quality_grade='research'
+    execute_sql "
+COPY (
+  WITH per_species AS (
+    SELECT
+      o.*,
+      p.photo_uuid,
+      p.photo_id,
+      p.extension,
+      p.license,
+      p.width,
+      p.height,
+      p.position,
+      ROW_NUMBER() OVER (
+        PARTITION BY o.\"L10_taxonID\"
+        ORDER BY random()
+      ) AS species_rand_idx
+    FROM \"${TABLE_NAME}\" o
+    JOIN photos p ON o.observation_uuid = p.observation_uuid
+    WHERE o.quality_grade = 'research'
+  )
+  SELECT *
+  FROM per_species
+  WHERE
+    (\"L10_taxonID\" IS NULL)
+    OR (\"L10_taxonID\" IS NOT NULL AND species_rand_idx <= ${MAX_RN})
+) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
+WITH (FORMAT CSV, HEADER, DELIMITER E'\t');
+"
+fi
+
+print_progress "Quick per-species export complete."
 
 ----
 Full Path: r1/wrapper.sh

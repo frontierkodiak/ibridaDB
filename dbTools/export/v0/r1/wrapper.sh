@@ -34,10 +34,13 @@ export PRIMARY_ONLY=true
 export METACLADE="primary_terrestrial_arthropoda"
 export EXPORT_GROUP="${METACLADE}"
 export PROCESS_OTHER=false
+export SKIP_REGIONAL_BASE=true # Note: adjust as needed, typically used for successive cladistic exports (from same regional base)
+
 log_message "Region: ${REGION_TAG}"
 log_message "Min Observations: ${MIN_OBS}"
 log_message "Max Random Number: ${MAX_RN}"
 log_message "Export Group: ${EXPORT_GROUP}"
+log_message "Skip Regional Base Creation: ${SKIP_REGIONAL_BASE}"
 
 # Paths
 export DB_CONTAINER="ibridaDB"
