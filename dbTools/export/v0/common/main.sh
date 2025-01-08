@@ -5,8 +5,8 @@ source "${BASE_DIR}/common/functions.sh"
 
 # Validate required variables
 required_vars=(
-    "DB_USER" "VERSION_VALUE" "RELEASE_VALUE" "ORIGIN_VALUE" 
-    "DB_NAME" "REGION_TAG" "MIN_OBS" "MAX_RN" 
+    "DB_USER" "VERSION_VALUE" "RELEASE_VALUE" "ORIGIN_VALUE"
+    "DB_NAME" "REGION_TAG" "MIN_OBS" "MAX_RN"
     "DB_CONTAINER" "HOST_EXPORT_BASE_PATH" "CONTAINER_EXPORT_BASE_PATH"
     "EXPORT_GROUP"
 )
@@ -36,10 +36,10 @@ BEGIN
     END IF;
 END \$\$;"
 
-# ASSUMPTION: We assume the user won't skip if the table name is inconsistent with
+# CLARIFY: We assume the user won't skip if the table name is inconsistent with
 # the desired region or MIN_OBS. We only do a basic check that the table exists
-# and has rows. 
-# ASSUMPTION: The user is responsible for ensuring that the existing table 
+# and has rows.
+# ASSUMPTION: The user is responsible for ensuring that the existing table
 # matches the correct region and MIN_OBS setting if SKIP_REGIONAL_BASE=true.
 
 if [ "${SKIP_REGIONAL_BASE}" = "true" ]; then
@@ -59,7 +59,7 @@ if [ "${SKIP_REGIONAL_BASE}" = "true" ]; then
         print_progress "Table ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs found, checking row count..."
 
         row_count=$(execute_sql "SELECT count(*) as cnt FROM \"${REGION_TAG}_min${MIN_OBS}_all_taxa_obs\";")
-        
+
         # We'll parse the integer from row_count with a simple approach:
         # row_count might look like:
         #  cnt
@@ -96,7 +96,8 @@ send_notification "${EXPORT_GROUP} cladistic filtering complete"
 
 # Export summary
 print_progress "Creating export summary"
-cat > "${HOST_EXPORT_DIR}/export_summary.txt" << EOL
+# Changed from a fixed "export_summary.txt" to a unique name:
+cat > "${HOST_EXPORT_DIR}/${EXPORT_GROUP}_export_summary.txt" << EOL
 Export Summary
 Version: ${VERSION_VALUE}
 Release: ${RELEASE_VALUE}

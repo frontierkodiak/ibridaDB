@@ -46,6 +46,14 @@ MACROCLADES["fungi"]='("L70_taxonID" = 47170)'
 # Typically for class-level (L50), order-level (L40), or narrower taxonomic groups.
 declare -A CLADES
 
+# -- Plant Clades (Subphylum and Class levels) --
+# -- Plant Subphylum (L57) --
+CLADES["angiospermae"]='("L57_taxonID" = 47125)' # flowering plants
+
+# -- Plant Classes (L50) --
+CLADES["liliopsida"]='("L50_taxonID" = 47163)'    # monocots
+CLADES["magnoliopsida"]='("L50_taxonID" = 47124)'  # dicots
+
 # -- Class-level (L50) Examples --
 
 # 1) Actinopterygii => L50 = 47178

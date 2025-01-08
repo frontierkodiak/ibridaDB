@@ -1,21 +1,23 @@
 Directory tree, stemming from root "/home/caleb/repo/ibridaDB/dbTools/export/v0":
-├── common (768 lines)
-│   ├── clade_defns.sh (171)
+├── common (729 lines)
+│   ├── clade_defns.sh (179)
 │   ├── cladistic.sh (217)
-│   ├── export_per_species_snippet.sh (96)
 │   ├── functions.sh (52)
-│   ├── main.sh (62)
+│   ├── main.sh (111)
 │   └── regional_base.sh (170)
-├── export.md (139)
-└── r1 (59)
-    │   └── wrapper.sh (59)
+├── export.md (142)
+└── r1 (248)
+    │   ├── wrapper.sh (62)
+    │   ├── wrapper_amphibia.sh (62)
+    │   ├── wrapper_angiospermae.sh (62)
+    │   └── wrapper_aves.sh (62)
 ----
 ----
 Full Path: export.md
 
 # ibridaDB Export Reference
 
-This document describes the key parameters that drive the **v1** export process in our `ibridaDB` pipeline. The parameters are split into three logical groups, reflecting their usage and declaration in `wrapper.sh`: **Database Config**, **Export Parameters**, and **Paths**. 
+This document describes the key parameters that drive the **v1** export process in our `ibridaDB` pipeline. The parameters are split into three logical groups, reflecting their usage and declaration in `wrapper.sh`: **Database Config**, **Export Parameters**, and **Paths**.
 
 ## 1. Database Config
 
@@ -90,6 +92,13 @@ These variables control which data are included in the export and how they are s
 - **Usage**:
   - Not deeply integrated in the current code, but can be used to skip or include extra logic if set to `true`.
 
+### `SKIP_REGIONAL_BASE`
+- **Description**: Allows the user to **skip** dropping and recreating the regional base tables if they **already exist** and are **non-empty**.  
+- **Usage**:
+  - In `main.sh`, if `SKIP_REGIONAL_BASE=true`, the script checks if `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs` exists and has at least one row. If so, it skips calling `regional_base.sh`. Otherwise, it recreates the table as normal.  
+  - Saves time when multiple clade exports reference the same region-based table.  
+- **Default**: `false`
+
 ---
 
 ## 3. Paths
@@ -131,7 +140,7 @@ These variables handle filesystem or container paths for storing exports and con
 2. **Main Script** (`main.sh`):  
    - Validates required variables.  
    - Creates the export directory.  
-   - Calls `regional_base.sh` to create region-based tables.  
+   - **If `SKIP_REGIONAL_BASE=true`, checks if the existing region-based table is present and non-empty. Otherwise, or if the table is missing or empty, runs `regional_base.sh`.**  
    - Calls `cladistic.sh` to filter and export the final CSV.  
    - Generates a final `export_summary.txt`.
 
@@ -147,10 +156,6 @@ These variables handle filesystem or container paths for storing exports and con
 
 5. **export_per_species_snippet.sh** (Optional):  
    - A shortcut script to export a final CSV from an already-existing `<EXPORT_GROUP>_observations` table without re-creating upstream tables or re-running the entire flow.
-
----
-
-**End of Document**  
 
 
 ----
@@ -194,10 +199,58 @@ BEGIN
     END IF;
 END \$\$;"
 
-# Run regional base creation (source functions first)
-print_progress "Creating regional base tables"
-source "${BASE_DIR}/common/regional_base.sh"
-send_notification "${REGION_TAG} regional base tables created"
+# ASSUMPTION: We assume the user won't skip if the table name is inconsistent with
+# the desired region or MIN_OBS. We only do a basic check that the table exists
+# and has rows. 
+# ASSUMPTION: The user is responsible for ensuring that the existing table 
+# matches the correct region and MIN_OBS setting if SKIP_REGIONAL_BASE=true.
+
+if [ "${SKIP_REGIONAL_BASE}" = "true" ]; then
+    print_progress "SKIP_REGIONAL_BASE=true: Checking existing tables..."
+
+    # 1) Check if the table actually exists
+    table_check=$(execute_sql "SELECT 1
+      FROM pg_catalog.pg_tables
+      WHERE schemaname = 'public'
+        AND tablename = '${REGION_TAG}_min${MIN_OBS}_all_taxa_obs'
+      LIMIT 1;")
+
+    # Convert the output to something we can parse easily:
+    # psql typically returns row headers, so we check if it contains "(1 row)" or "1"
+    # For simplicity, we do a naive grep or check:
+    if [[ "$table_check" =~ "1" ]]; then
+        print_progress "Table ${REGION_TAG}_min${MIN_OBS}_all_taxa_obs found, checking row count..."
+
+        row_count=$(execute_sql "SELECT count(*) as cnt FROM \"${REGION_TAG}_min${MIN_OBS}_all_taxa_obs\";")
+        
+        # We'll parse the integer from row_count with a simple approach:
+        # row_count might look like:
+        #  cnt
+        # ----
+        #  452201
+        # (1 row)
+        # We can do a quick grep or awk:
+        numeric=$(echo "$row_count" | awk '/[0-9]/{print $1}' | head -1)
+
+        if [[ -n "$numeric" && "$numeric" -gt 0 ]]; then
+            print_progress "Table has $numeric rows; skipping creation of regional base."
+            send_notification "Skipped creating regional base; table is non-empty."
+        else
+            print_progress "Table is empty or row count could not be determined; re-creating..."
+            source "${BASE_DIR}/common/regional_base.sh"
+            send_notification "${REGION_TAG} regional base tables created"
+        fi
+    else
+        print_progress "Table not found; re-creating the regional base."
+        source "${BASE_DIR}/common/regional_base.sh"
+        send_notification "${REGION_TAG} regional base tables created"
+    fi
+else
+    # Run regional base creation (source functions first)
+    print_progress "Creating regional base tables"
+    source "${BASE_DIR}/common/regional_base.sh"
+    send_notification "${REGION_TAG} regional base tables created"
+fi
 
 # Run cladistic filtering
 print_progress "Applying cladistic filters"
@@ -215,6 +268,7 @@ Minimum Observations: ${MIN_OBS}
 Maximum Random Number: ${MAX_RN}
 Export Group: ${EXPORT_GROUP}
 Date: $(date)
+SKIP_REGIONAL_BASE: ${SKIP_REGIONAL_BASE}
 EOL
 
 print_progress "Export process complete"
@@ -499,6 +553,14 @@ MACROCLADES["fungi"]='("L70_taxonID" = 47170)'
 # ---[ Clades ]----------------------------------------------------------------
 # Typically for class-level (L50), order-level (L40), or narrower taxonomic groups.
 declare -A CLADES
+
+# -- Plant Clades (Subphylum and Class levels) --
+# -- Plant Subphylum (L57) --
+CLADES["angiospermae"]='("L57_taxonID" = 47125)' # flowering plants
+
+# -- Plant Classes (L50) --
+CLADES["liliopsida"]='("L50_taxonID" = 47163)'    # monocots
+CLADES["magnoliopsida"]='("L50_taxonID" = 47124)'  # dicots
 
 # -- Class-level (L50) Examples --
 
@@ -846,104 +908,202 @@ print_progress "Cladistic filtering complete"
 
 
 ----
-Full Path: common/export_per_species_snippet.sh
+Full Path: r1/wrapper_amphibia.sh
 
 #!/bin/bash
-#
-# export_per_species_snippet.sh
-#
-# This script performs a per-species random sampling export from an
-# already-existing table. It does NOT drop or re-create the table.
-# It's intended for quick usage to avoid re-running all upstream steps.
-#
-# Usage: set environment variables before calling, e.g.:
-#   export DB_CONTAINER="ibridaDB"
-#   export DB_USER="postgres"
-#   export DB_NAME="ibrida-v0-r1"
-#   export EXPORT_GROUP="primary_terrestrial_arthropoda"
-#   export EXPORT_DIR="/exports/v0/r1/primary_only_50min_4000max"
-#   export MAX_RN=4000
-#   export PRIMARY_ONLY=true
-#   Then run:
-#   ./export_per_species_snippet.sh
-#
 
-# CLARIFY: We assume that the user already has a table named ${EXPORT_GROUP}_observations
-#          that includes all columns needed, and a 'photos' table too.
-# ASSUMPTION: The container user has write access to $EXPORT_DIR.
-
+# Setup logging
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-source "${SCRIPT_DIR}/functions.sh"
+LOG_FILE="${SCRIPT_DIR}/$(basename "$0" .sh)_$(date +%Y%m%d_%H%M%S).log"
+echo "Starting new run at $(date)" > "${LOG_FILE}"
 
-TABLE_NAME="${EXPORT_GROUP}_observations"
+# Function to log messages to both console and file
+log_message() {
+    echo "$1" | tee -a "${LOG_FILE}"
+}
 
-print_progress "Starting quick per-species export from existing table: ${TABLE_NAME}"
+# Redirect all stdout and stderr to both console and log file
+exec 1> >(tee -a "${LOG_FILE}")
+exec 2> >(tee -a "${LOG_FILE}")
 
-# The actual COPY logic is adapted from cladistic.sh, focusing on partition-based random sampling:
-if [ "${PRIMARY_ONLY}" = true ]; then
-    # Photos with position=0, quality_grade='research'
-    execute_sql "
-COPY (
-  WITH per_species AS (
-    SELECT
-      o.*,
-      p.photo_uuid,
-      p.photo_id,
-      p.extension,
-      p.license,
-      p.width,
-      p.height,
-      p.position,
-      ROW_NUMBER() OVER (
-        PARTITION BY o.\"L10_taxonID\"
-        ORDER BY random()
-      ) AS species_rand_idx
-    FROM \"${TABLE_NAME}\" o
-    JOIN photos p ON o.observation_uuid = p.observation_uuid
-    WHERE p.position = 0
-      AND o.quality_grade = 'research'
-  )
-  SELECT *
-  FROM per_species
-  WHERE
-    (\"L10_taxonID\" IS NULL)
-    OR (\"L10_taxonID\" IS NOT NULL AND species_rand_idx <= ${MAX_RN})
-) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
-WITH (FORMAT CSV, HEADER, DELIMITER E'\t');
-"
-else
-    # All photos for the final set, restricted to quality_grade='research'
-    execute_sql "
-COPY (
-  WITH per_species AS (
-    SELECT
-      o.*,
-      p.photo_uuid,
-      p.photo_id,
-      p.extension,
-      p.license,
-      p.width,
-      p.height,
-      p.position,
-      ROW_NUMBER() OVER (
-        PARTITION BY o.\"L10_taxonID\"
-        ORDER BY random()
-      ) AS species_rand_idx
-    FROM \"${TABLE_NAME}\" o
-    JOIN photos p ON o.observation_uuid = p.observation_uuid
-    WHERE o.quality_grade = 'research'
-  )
-  SELECT *
-  FROM per_species
-  WHERE
-    (\"L10_taxonID\" IS NULL)
-    OR (\"L10_taxonID\" IS NOT NULL AND species_rand_idx <= ${MAX_RN})
-) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
-WITH (FORMAT CSV, HEADER, DELIMITER E'\t');
-"
-fi
+log_message "Initializing export process with configuration:"
 
-print_progress "Quick per-species export complete."
+# Database config
+export DB_USER="postgres"
+export VERSION_VALUE="v0"
+export RELEASE_VALUE="r1"
+export ORIGIN_VALUE="iNat-Dec2024"
+export DB_NAME="ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"
+log_message "Database: ${DB_NAME}"
+log_message "Version: ${VERSION_VALUE}"
+log_message "Release: ${RELEASE_VALUE}"
+
+# Export parameters
+export REGION_TAG="NAfull"
+export MIN_OBS=100
+export MAX_RN=4000
+export PRIMARY_ONLY=true
+export CLADE="amphibia"
+export EXPORT_GROUP="${CLADE}"
+export PROCESS_OTHER=false
+export SKIP_REGIONAL_BASE=false # Note: adjust as needed, typically used for successive cladistic exports (from same regional base)
+
+log_message "Region: ${REGION_TAG}"
+log_message "Min Observations: ${MIN_OBS}"
+log_message "Max Random Number: ${MAX_RN}"
+log_message "Export Group: ${EXPORT_GROUP}"
+log_message "Skip Regional Base Creation: ${SKIP_REGIONAL_BASE}"
+
+# Paths
+export DB_CONTAINER="ibridaDB"
+export HOST_EXPORT_BASE_PATH="/datasets/ibrida-data/exports"
+export CONTAINER_EXPORT_BASE_PATH="/exports"
+export EXPORT_SUBDIR="${VERSION_VALUE}/${RELEASE_VALUE}/primary_only_${MIN_OBS}min_${MAX_RN}max"
+export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/export/v0"
+log_message "Export Directory: ${HOST_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
+
+# Source common functions
+source "${BASE_DIR}/common/functions.sh"
+
+# Execute main script
+send_notification "Starting ${EXPORT_GROUP} export"
+log_message "Executing main script at $(date)"
+"${BASE_DIR}/common/main.sh"
+
+log_message "Process completed at $(date)"
+send_notification "${EXPORT_GROUP} export completed!"
+
+----
+Full Path: r1/wrapper_angiospermae.sh
+
+#!/bin/bash
+
+# Setup logging
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+LOG_FILE="${SCRIPT_DIR}/$(basename "$0" .sh)_$(date +%Y%m%d_%H%M%S).log"
+echo "Starting new run at $(date)" > "${LOG_FILE}"
+
+# Function to log messages to both console and file
+log_message() {
+    echo "$1" | tee -a "${LOG_FILE}"
+}
+
+# Redirect all stdout and stderr to both console and log file
+exec 1> >(tee -a "${LOG_FILE}")
+exec 2> >(tee -a "${LOG_FILE}")
+
+log_message "Initializing export process with configuration:"
+
+# Database config
+export DB_USER="postgres"
+export VERSION_VALUE="v0"
+export RELEASE_VALUE="r1"
+export ORIGIN_VALUE="iNat-Dec2024"
+export DB_NAME="ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"
+log_message "Database: ${DB_NAME}"
+log_message "Version: ${VERSION_VALUE}"
+log_message "Release: ${RELEASE_VALUE}"
+
+# Export parameters
+export REGION_TAG="NAfull"
+export MIN_OBS=50
+export MAX_RN=3000
+export PRIMARY_ONLY=true
+export CLADE="angiospermae"
+export EXPORT_GROUP="${CLADE}"
+export PROCESS_OTHER=false
+export SKIP_REGIONAL_BASE=true # Note: adjust as needed, typically used for successive cladistic exports (from same regional base)
+
+log_message "Region: ${REGION_TAG}"
+log_message "Min Observations: ${MIN_OBS}"
+log_message "Max Random Number: ${MAX_RN}"
+log_message "Export Group: ${EXPORT_GROUP}"
+log_message "Skip Regional Base Creation: ${SKIP_REGIONAL_BASE}"
+
+# Paths
+export DB_CONTAINER="ibridaDB"
+export HOST_EXPORT_BASE_PATH="/datasets/ibrida-data/exports"
+export CONTAINER_EXPORT_BASE_PATH="/exports"
+export EXPORT_SUBDIR="${VERSION_VALUE}/${RELEASE_VALUE}/primary_only_${MIN_OBS}min_${MAX_RN}max"
+export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/export/v0"
+log_message "Export Directory: ${HOST_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
+
+# Source common functions
+source "${BASE_DIR}/common/functions.sh"
+
+# Execute main script
+send_notification "Starting ${EXPORT_GROUP} export"
+log_message "Executing main script at $(date)"
+"${BASE_DIR}/common/main.sh"
+
+log_message "Process completed at $(date)"
+send_notification "${EXPORT_GROUP} export completed!"
+
+----
+Full Path: r1/wrapper_aves.sh
+
+#!/bin/bash
+
+# Setup logging
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+LOG_FILE="${SCRIPT_DIR}/$(basename "$0" .sh)_$(date +%Y%m%d_%H%M%S).log"
+echo "Starting new run at $(date)" > "${LOG_FILE}"
+
+# Function to log messages to both console and file
+log_message() {
+    echo "$1" | tee -a "${LOG_FILE}"
+}
+
+# Redirect all stdout and stderr to both console and log file
+exec 1> >(tee -a "${LOG_FILE}")
+exec 2> >(tee -a "${LOG_FILE}")
+
+log_message "Initializing export process with configuration:"
+
+# Database config
+export DB_USER="postgres"
+export VERSION_VALUE="v0"
+export RELEASE_VALUE="r1"
+export ORIGIN_VALUE="iNat-Dec2024"
+export DB_NAME="ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"
+log_message "Database: ${DB_NAME}"
+log_message "Version: ${VERSION_VALUE}"
+log_message "Release: ${RELEASE_VALUE}"
+
+# Export parameters
+export REGION_TAG="NAfull"
+export MIN_OBS=50
+export MAX_RN=4000
+export PRIMARY_ONLY=true
+export CLADE="aves"
+export EXPORT_GROUP="${CLADE}"
+export PROCESS_OTHER=false
+export SKIP_REGIONAL_BASE=true # Note: adjust as needed, typically used for successive cladistic exports (from same regional base)
+
+log_message "Region: ${REGION_TAG}"
+log_message "Min Observations: ${MIN_OBS}"
+log_message "Max Random Number: ${MAX_RN}"
+log_message "Export Group: ${EXPORT_GROUP}"
+log_message "Skip Regional Base Creation: ${SKIP_REGIONAL_BASE}"
+
+# Paths
+export DB_CONTAINER="ibridaDB"
+export HOST_EXPORT_BASE_PATH="/datasets/ibrida-data/exports"
+export CONTAINER_EXPORT_BASE_PATH="/exports"
+export EXPORT_SUBDIR="${VERSION_VALUE}/${RELEASE_VALUE}/primary_only_${MIN_OBS}min_${MAX_RN}max"
+export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/export/v0"
+log_message "Export Directory: ${HOST_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
+
+# Source common functions
+source "${BASE_DIR}/common/functions.sh"
+
+# Execute main script
+send_notification "Starting ${EXPORT_GROUP} export"
+log_message "Executing main script at $(date)"
+"${BASE_DIR}/common/main.sh"
+
+log_message "Process completed at $(date)"
+send_notification "${EXPORT_GROUP} export completed!"
 
 ----
 Full Path: r1/wrapper.sh
@@ -984,10 +1144,13 @@ export PRIMARY_ONLY=true
 export METACLADE="primary_terrestrial_arthropoda"
 export EXPORT_GROUP="${METACLADE}"
 export PROCESS_OTHER=false
+export SKIP_REGIONAL_BASE=true # Note: adjust as needed, typically used for successive cladistic exports (from same regional base)
+
 log_message "Region: ${REGION_TAG}"
 log_message "Min Observations: ${MIN_OBS}"
 log_message "Max Random Number: ${MAX_RN}"
 log_message "Export Group: ${EXPORT_GROUP}"
+log_message "Skip Regional Base Creation: ${SKIP_REGIONAL_BASE}"
 
 # Paths
 export DB_CONTAINER="ibridaDB"
