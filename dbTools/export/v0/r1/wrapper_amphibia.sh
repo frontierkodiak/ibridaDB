@@ -34,7 +34,7 @@ export PRIMARY_ONLY=true
 export CLADE="amphibia"
 export EXPORT_GROUP="${CLADE}"
 export PROCESS_OTHER=false
-export SKIP_REGIONAL_BASE=false # Note: adjust as needed, typically used for successive cladistic exports (from same regional base)
+export SKIP_REGIONAL_BASE=true # Note: adjust as needed, typically used for successive cladistic exports (from same regional base)
 
 log_message "Region: ${REGION_TAG}"
 log_message "Min Observations: ${MIN_OBS}"

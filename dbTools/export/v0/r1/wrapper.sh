@@ -29,7 +29,7 @@ log_message "Release: ${RELEASE_VALUE}"
 # Export parameters
 export REGION_TAG="NAfull"
 export MIN_OBS=50
-export MAX_RN=4000
+export MAX_RN=3000
 export PRIMARY_ONLY=true
 export METACLADE="primary_terrestrial_arthropoda"
 export EXPORT_GROUP="${METACLADE}"
