@@ -21,19 +21,15 @@
 #   4) We then export to CSV with a random subset of photos. 
 #      The new requirement: we must include the entire ancestral taxonID set
 #      (L5_taxonID, L10_taxonID, ... L70_taxonID) plus expanded_taxa.taxonID,
-#      expanded_taxa.rankLevel, and expanded_taxa.name. 
+#      expanded_taxa.rankLevel, and expanded_taxa.name.
 #   5) The environment variable "EXPORT_GROUP" is used to name the final table
 #      and output CSV (e.g. "primary_terrestrial_arthropoda").
 #
-# IMPORTANT NOTE regarding CSV exports:
-#   - The script now appends every L{level}_taxonID column and the base columns
-#     (taxonID, rankLevel, name from expanded_taxa) to the standard observation
-#     columns plus photo fields. This ensures our downstream processes have
-#     all needed ancestry info.
-#   - The partition-based sampling approach ensures we select up to MAX_RN
-#     observations per species (defined by L10_taxonID). Observations with
-#     L10_taxonID IS NULL are included in full (i.e. no limit).
-#
+# NOTES:
+#   - The final summary stats are now handled by main.sh, so we only
+#     create the table and do the CSV export here.
+#   - If you need partial stats or debugging, you can log them here, but do not
+#     overwrite export_summary.txt. main.sh will unify everything at the end.
 # ------------------------------------------------------------------------------
 # Permission / Ownership Note:
 #   If you see "Operation not permitted" when chmod-ing existing CSV files, it
@@ -44,37 +40,23 @@
 #   errors at export time, confirm the directory and file ownership allow writes.
 # ------------------------------------------------------------------------------
 
-# Load shared functions (execute_sql, print_progress, get_obs_columns, etc.)
 source "${BASE_DIR}/common/functions.sh"
-
-# Load the new clade definitions (MACROCLADES, CLADES, METACLADES, get_clade_condition)
 source "${BASE_DIR}/common/clade_defns.sh"
 
-# 1) Construct the final condition from environment variables
 CLADE_CONDITION="$(get_clade_condition)"
-
 print_progress "Creating filtered tables for ${EXPORT_GROUP}"
 
-# We'll build the final table name, e.g. "primary_terrestrial_arthropoda_observations"
 TABLE_NAME="${EXPORT_GROUP}_observations"
-
-# We rely on the region-based table built in regional_base.sh:
-#   <REGION_TAG>_min${MIN_OBS}_all_taxa_obs
-# which is typically "NAfull_min50_all_taxa_obs", etc.
 REGIONAL_TABLE="${REGION_TAG}_min${MIN_OBS}_all_taxa_obs"
-
-# 2) The observation columns we'll select from the region table
-#    (defined by get_obs_columns in functions.sh)
 OBS_COLUMNS="$(get_obs_columns)"
 
-# 3) Drop any old table if it exists
+# Drop old table if it exists
 execute_sql "
 DROP TABLE IF EXISTS \"${TABLE_NAME}\" CASCADE;
 "
 
-# 4) Create new table by joining the region table to expanded_taxa
-#    so that we skip any taxon_id not found in expanded_taxa (i.e., inactive or missing).
-#    We also filter by e."taxonActive" = TRUE and the clade condition.
+# Create new table by joining region-based table to expanded_taxa
+# We also apply the clade condition and ensure e."taxonActive"=TRUE.
 send_notification "Joining regional table ${REGIONAL_TABLE} to expanded_taxa"
 print_progress "Joining regional table ${REGIONAL_TABLE} to expanded_taxa"
 
@@ -82,12 +64,9 @@ execute_sql "
 CREATE TABLE \"${TABLE_NAME}\" AS
 SELECT
     ${OBS_COLUMNS},
-    -- Include the base expanded_taxa columns (taxonID, rankLevel, name)
-    e.\"taxonID\"       AS expanded_taxonID,
-    e.\"rankLevel\"     AS expanded_rankLevel,
-    e.\"name\"          AS expanded_name,
-
-    -- Include all ancestral taxonID columns (sparsely populated, but required)
+    e.\"taxonID\"         AS expanded_taxonID,
+    e.\"rankLevel\"       AS expanded_rankLevel,
+    e.\"name\"            AS expanded_name,
     e.\"L5_taxonID\",
     e.\"L10_taxonID\",
     e.\"L11_taxonID\",
@@ -125,12 +104,12 @@ WHERE e.\"taxonActive\" = TRUE
   AND ${CLADE_CONDITION};
 "
 
-# 5) Export to CSV with partition-based sampling
+# Export to CSV with partition-based random sampling
 send_notification "Exporting filtered observations"
 print_progress "Exporting filtered observations"
 
 if [ "${PRIMARY_ONLY}" = true ]; then
-    # Photos with position=0, quality_grade='research', up to MAX_RN per species
+    # Only position=0 photos, research-grade, up to MAX_RN per species
     execute_sql "
 COPY (
   WITH per_species AS (
@@ -161,7 +140,7 @@ COPY (
 WITH (FORMAT CSV, HEADER, DELIMITER E'\t');
 "
 else
-    # All photos for the final set, restricted to quality_grade='research', up to MAX_RN per species
+    # All photos, but only up to MAX_RN for species-level
     execute_sql "
 COPY (
   WITH per_species AS (
@@ -192,25 +171,5 @@ WITH (FORMAT CSV, HEADER, DELIMITER E'\t');
 "
 fi
 
-# 6) Summarize exported data: how many observations, taxa, observers?
-print_progress "Creating export statistics"
-STATS=$(execute_sql "
-WITH export_stats AS (
-    SELECT 
-        COUNT(DISTINCT observation_uuid) as num_observations,
-        COUNT(DISTINCT taxon_id) as num_taxa,
-        COUNT(DISTINCT observer_id) as num_observers
-    FROM \"${TABLE_NAME}\"
-)
-SELECT format(
-    'Exported Data Statistics:
-    Observations: %s
-    Unique Taxa: %s
-    Unique Observers: %s',
-    num_observations, num_taxa, num_observers
-)
-FROM export_stats;")
-
-echo "${STATS}" >> "${HOST_EXPORT_DIR}/export_summary.txt"
-
+# Removed final summary from here. We do that in main.sh.
 print_progress "Cladistic filtering complete"

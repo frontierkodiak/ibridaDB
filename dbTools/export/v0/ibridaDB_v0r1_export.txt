@@ -1,13 +1,13 @@
 Directory tree, stemming from root "/home/caleb/repo/ibridaDB/dbTools/export/v0":
-├── common (735 lines)
+├── common (781 lines)
 │   ├── clade_defns.sh (179)
 │   ├── cladistic.sh (217)
 │   ├── functions.sh (57)
-│   ├── main.sh (112)
-│   └── regional_base.sh (170)
+│   ├── main.sh (116)
+│   └── regional_base.sh (212)
 ├── export.md (142)
-└── r1 (62)
-    │   └── wrapper.sh (62)
+└── r1 (89)
+    │   └── wrapper.sh (89)
 ----
 ----
 Full Path: export.md
@@ -257,6 +257,10 @@ send_notification "${EXPORT_GROUP} cladistic filtering complete"
 # Export summary
 print_progress "Creating export summary"
 # Changed from a fixed "export_summary.txt" to a unique name:
+# TODO: Add more information to the summary. All env vars. Is there a lightweight way to log some statistics? no. unique taxonIDs for the major (L10, L20, ... L70) ranks? proportion of observations with labels for those ranks? proportion of observations metadata values (`latitude`, `longitude`, `observed_on`)?
+# COMMENT: It seems like we write some export summart statistics in cladistic.sh, but probably end up overwriting it below? Reconcile; only write one summary per job, using the unique name schema below.
+# TODO: Drop the `Creating debug_counts for region ...` logics/messages from the scripts, don't need these anymore. More detailed export summaries are much more useful for understanding data distributions and also sanity-checking export logics.
+
 cat > "${HOST_EXPORT_DIR}/${EXPORT_GROUP}_export_summary.txt" << EOL
 Export Summary
 Version: ${VERSION_VALUE}
@@ -276,9 +280,30 @@ Full Path: common/regional_base.sh
 
 #!/bin/bash
 
-# Note: functions are sourced from main.sh
+# --------------------------------------------------------------------------------
+# regional_base.sh
+# --------------------------------------------------------------------------------
+# This script creates two tables for a given region (REGION_TAG) and MIN_OBS:
+#   1) <REGION_TAG>_min${MIN_OBS}_all_taxa: the set of species that have at least
+#      MIN_OBS research-grade observations within the bounding box.
+#   2) <REGION_TAG>_min${MIN_OBS}_all_taxa_obs: all observations whose taxon_id
+#      is in (1). By default, if INCLUDE_OUT_OF_REGION_OBS=true, we do NOT
+#      re-apply the bounding box at this step (thus allowing out-of-region data).
+#      If INCLUDE_OUT_OF_REGION_OBS=false, we do apply the bounding box again.
+#
+# This is a partial step toward the larger "ancestor-aware" approach; for now,
+# we only directly select species that pass the threshold plus all their
+# observations if they appear in the final step's filter.
+#
+# Usage:
+#   - Sourced by main.sh
+#   - Relies on environment variables:
+#       REGION_TAG, MIN_OBS, INCLUDE_OUT_OF_REGION_OBS
+#       DB_CONTAINER, DB_USER, DB_NAME, etc.
+#
+# --------------------------------------------------------------------------------
 
-# ------------------[ 1) Region Coordinates ]-------------------
+# 1) Set region coordinates
 set_region_coordinates() {
   case "$REGION_TAG" in
     "NAfull")
@@ -378,19 +403,20 @@ set_region_coordinates() {
   esac
 }
 
-# Set region coordinates based on $REGION_TAG
+# --------------------------------------------------------------------
+# 2) Initialize Coordinates & Drop Old Tables
+# --------------------------------------------------------------------
 set_region_coordinates
 
-# ------------------[ 2) Drop Old Tables ]----------------------
 print_progress "Dropping existing tables"
-
 execute_sql "
 DROP TABLE IF EXISTS \"${REGION_TAG}_min${MIN_OBS}_all_taxa\" CASCADE;
 DROP TABLE IF EXISTS \"${REGION_TAG}_min${MIN_OBS}_all_taxa_obs\" CASCADE;
 "
 
-# ------------------[ 3) Optional Debug Counts ]----------------
-# If you want the debug counts as a separate table:
+# --------------------------------------------------------------------
+# 3) Optional Debug Counts
+# --------------------------------------------------------------------
 print_progress "Creating debug_counts for region ${REGION_TAG}"
 execute_sql "
 DROP TABLE IF EXISTS \"${REGION_TAG}_debug_counts\" CASCADE;
@@ -402,45 +428,65 @@ WITH debug_counts AS (
       COUNT(DISTINCT taxon_id) AS unique_taxa
     FROM observations
     WHERE
-      -- version='${VERSION_VALUE}' AND ...
       geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326)
 )
 SELECT * FROM debug_counts;
 "
 
-# ------------------[ 4) Create _all_taxa Table ]---------------
+# --------------------------------------------------------------------
+# 4) Create <REGION_TAG>_min${MIN_OBS}_all_taxa
+# --------------------------------------------------------------------
+# We only include species (rank_level=10) that have at least MIN_OBS
+# *research-grade* observations in region. We do *not* exclude
+# non-species ranks here yet. This is the "valid species" subset.
 print_progress "Creating table \"${REGION_TAG}_min${MIN_OBS}_all_taxa\""
+
 execute_sql "
 CREATE TABLE \"${REGION_TAG}_min${MIN_OBS}_all_taxa\" AS
-SELECT DISTINCT o.taxon_id
-FROM observations o
-JOIN taxa t ON o.taxon_id = t.taxon_id
-WHERE
-  NOT (t.rank_level = 10 AND o.quality_grade != 'research')
-  AND o.geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326)
-  AND o.taxon_id IN (
-      SELECT o2.taxon_id
-      FROM observations o2
-      GROUP BY o2.taxon_id
-      HAVING COUNT(o2.observation_uuid) >= ${MIN_OBS}
-  );
+SELECT s.taxon_id
+FROM observations s
+JOIN taxa t ON t.taxon_id = s.taxon_id
+WHERE t.rank_level = 10
+  AND s.quality_grade = 'research'
+  AND s.geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326)
+GROUP BY s.taxon_id
+HAVING COUNT(s.observation_uuid) >= ${MIN_OBS};
 "
 
-# ------------------[ 5) Create _all_taxa_obs Table ]-----------
+# --------------------------------------------------------------------
+# 5) Create <REGION_TAG>_min${MIN_OBS}_all_taxa_obs
+# --------------------------------------------------------------------
+# By default, we won't re-check bounding box if INCLUDE_OUT_OF_REGION_OBS=true.
+# If INCLUDE_OUT_OF_REGION_OBS=false, we filter again on geom && bounding box.
 print_progress "Creating table \"${REGION_TAG}_min${MIN_OBS}_all_taxa_obs\""
-OBS_COLUMNS=$(get_obs_columns)
 
+OBS_COLUMNS=$(get_obs_columns)
 echo "Using columns: ${OBS_COLUMNS}"
 
-execute_sql "
-CREATE TABLE \"${REGION_TAG}_min${MIN_OBS}_all_taxa_obs\" AS
-SELECT ${OBS_COLUMNS}
-FROM observations
-WHERE taxon_id IN (
-    SELECT taxon_id
-    FROM \"${REGION_TAG}_min${MIN_OBS}_all_taxa\"
-);
-"
+if [ "${INCLUDE_OUT_OF_REGION_OBS}" = "true" ]; then
+    # Global coverage for these species
+    execute_sql "
+    CREATE TABLE \"${REGION_TAG}_min${MIN_OBS}_all_taxa_obs\" AS
+    SELECT ${OBS_COLUMNS}
+    FROM observations
+    WHERE taxon_id IN (
+        SELECT taxon_id
+        FROM \"${REGION_TAG}_min${MIN_OBS}_all_taxa\"
+    );
+    "
+else
+    # Restrict to region again
+    execute_sql "
+    CREATE TABLE \"${REGION_TAG}_min${MIN_OBS}_all_taxa_obs\" AS
+    SELECT ${OBS_COLUMNS}
+    FROM observations
+    WHERE taxon_id IN (
+        SELECT taxon_id
+        FROM \"${REGION_TAG}_min${MIN_OBS}_all_taxa\"
+    )
+    AND geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326);
+    "
+fi
 
 print_progress "Regional base tables created"
 
@@ -931,50 +977,77 @@ exec 2> >(tee -a "${LOG_FILE}")
 
 log_message "Initializing export process with configuration:"
 
+# ---------------------------------------------------------------------------
 # Database config
+# ---------------------------------------------------------------------------
 export DB_USER="postgres"
 export VERSION_VALUE="v0"
 export RELEASE_VALUE="r1"
 export ORIGIN_VALUE="iNat-Dec2024"
 export DB_NAME="ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"
+
 log_message "Database: ${DB_NAME}"
 log_message "Version: ${VERSION_VALUE}"
 log_message "Release: ${RELEASE_VALUE}"
 
+# ---------------------------------------------------------------------------
 # Export parameters
+# ---------------------------------------------------------------------------
 export REGION_TAG="NAfull"
-export MIN_OBS=50
-export MAX_RN=3000
+export MIN_OBS=100
+export MAX_RN=1000 # Smaller for testing
 export PRIMARY_ONLY=true
-export METACLADE="primary_terrestrial_arthropoda"
-export EXPORT_GROUP="${METACLADE}"
+
+# We’ll use a metaclade here as an example
+export CLADE="amphibia"
+export EXPORT_GROUP="${CLADE}"
+
+# Additional flags
 export PROCESS_OTHER=false
-export SKIP_REGIONAL_BASE=true # Note: adjust as needed, typically used for successive cladistic exports (from same regional base)
+export SKIP_REGIONAL_BASE=false  # typically used for successive cladistic exports
+
+# ---[ NEW ENV VARS ]---
+# Whether to include out-of-region observations in the final dataset
+export INCLUDE_OUT_OF_REGION_OBS=true
+
+# Whether to keep research-grade only, non-research, etc.
+# For now, we default to ALL; future steps will integrate it
+export RG_FILTER_MODE="ALL"
 
 log_message "Region: ${REGION_TAG}"
 log_message "Min Observations: ${MIN_OBS}"
 log_message "Max Random Number: ${MAX_RN}"
 log_message "Export Group: ${EXPORT_GROUP}"
 log_message "Skip Regional Base Creation: ${SKIP_REGIONAL_BASE}"
+log_message "Include Out-of-Region Obs: ${INCLUDE_OUT_OF_REGION_OBS}"
+log_message "RG Filter Mode: ${RG_FILTER_MODE}"
 
+# ---------------------------------------------------------------------------
 # Paths
+# ---------------------------------------------------------------------------
 export DB_CONTAINER="ibridaDB"
 export HOST_EXPORT_BASE_PATH="/datasets/ibrida-data/exports"
 export CONTAINER_EXPORT_BASE_PATH="/exports"
 export EXPORT_SUBDIR="${VERSION_VALUE}/${RELEASE_VALUE}/primary_only_${MIN_OBS}min_${MAX_RN}max"
 export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/export/v0"
+
 log_message "Export Directory: ${HOST_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
 
+# ---------------------------------------------------------------------------
 # Source common functions
+# ---------------------------------------------------------------------------
 source "${BASE_DIR}/common/functions.sh"
 
+# ---------------------------------------------------------------------------
 # Execute main script
+# ---------------------------------------------------------------------------
 send_notification "Starting ${EXPORT_GROUP} export"
 log_message "Executing main script at $(date)"
 "${BASE_DIR}/common/main.sh"
 
 log_message "Process completed at $(date)"
 send_notification "${EXPORT_GROUP} export completed!"
+
 
 ----
 Full Path: ../../../docker/stausee/docker-compose.yml

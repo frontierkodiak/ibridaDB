@@ -1,8 +1,32 @@
 #!/bin/bash
+# --------------------------------------------------------------------------------
+# regional_base.sh
+# --------------------------------------------------------------------------------
+# This script creates two tables for a given region (REGION_TAG) and MIN_OBS:
+#   1) <REGION_TAG>_min${MIN_OBS}_all_taxa:
+#      The set of species (rank_level=10) that have at least MIN_OBS
+#      research-grade observations within the bounding box.
+#
+#   2) <REGION_TAG>_min${MIN_OBS}_all_taxa_obs:
+#      All observations whose taxon_id is in (1). If INCLUDE_OUT_OF_REGION_OBS=true,
+#      we do NOT re-apply the bounding-box filter, so out-of-region observations
+#      are included. If false, we restrict again by bounding box.
+#
+# This is a partial step toward the "ancestor-aware" approach. For now, we only
+# pick species that pass the threshold, ignoring higher or lower ranks.
+#
+# Usage:
+#   - Sourced by main.sh
+#   - Relies on environment variables:
+#       REGION_TAG, MIN_OBS, INCLUDE_OUT_OF_REGION_OBS
+#       DB_CONTAINER, DB_USER, DB_NAME, etc.
+#
+# CHANGES:
+#   * Removed debug_counts table creation to streamline performance.
+#   * No changes to final summary; that is now unified in main.sh.
+# --------------------------------------------------------------------------------
 
-# Note: functions are sourced from main.sh
-
-# ------------------[ 1) Region Coordinates ]-------------------
+# Function sets the bounding-box coords for $REGION_TAG
 set_region_coordinates() {
   case "$REGION_TAG" in
     "NAfull")
@@ -102,68 +126,65 @@ set_region_coordinates() {
   esac
 }
 
-# Set region coordinates based on $REGION_TAG
+# 1) Set region coordinates
 set_region_coordinates
 
-# ------------------[ 2) Drop Old Tables ]----------------------
 print_progress "Dropping existing tables"
-
 execute_sql "
 DROP TABLE IF EXISTS \"${REGION_TAG}_min${MIN_OBS}_all_taxa\" CASCADE;
 DROP TABLE IF EXISTS \"${REGION_TAG}_min${MIN_OBS}_all_taxa_obs\" CASCADE;
 "
 
-# ------------------[ 3) Optional Debug Counts ]----------------
-# If you want the debug counts as a separate table:
-print_progress "Creating debug_counts for region ${REGION_TAG}"
-execute_sql "
-DROP TABLE IF EXISTS \"${REGION_TAG}_debug_counts\" CASCADE;
+# --------------------------------------------------
+# Removed debug_counts block:
+#   print_progress "Creating debug_counts for region ${REGION_TAG}"
+#   ...
+# --------------------------------------------------
 
-CREATE TABLE \"${REGION_TAG}_debug_counts\" AS
-WITH debug_counts AS (
-    SELECT
-      COUNT(*) AS total_obs,
-      COUNT(DISTINCT taxon_id) AS unique_taxa
-    FROM observations
-    WHERE
-      -- version='${VERSION_VALUE}' AND ...
-      geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326)
-)
-SELECT * FROM debug_counts;
-"
-
-# ------------------[ 4) Create _all_taxa Table ]---------------
+# 2) Create <REGION_TAG>_min${MIN_OBS}_all_taxa
+#    We only include species (rank_level=10) that have >= MIN_OBS
+#    research-grade obs in region.
 print_progress "Creating table \"${REGION_TAG}_min${MIN_OBS}_all_taxa\""
 execute_sql "
 CREATE TABLE \"${REGION_TAG}_min${MIN_OBS}_all_taxa\" AS
-SELECT DISTINCT o.taxon_id
-FROM observations o
-JOIN taxa t ON o.taxon_id = t.taxon_id
-WHERE
-  NOT (t.rank_level = 10 AND o.quality_grade != 'research')
-  AND o.geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326)
-  AND o.taxon_id IN (
-      SELECT o2.taxon_id
-      FROM observations o2
-      GROUP BY o2.taxon_id
-      HAVING COUNT(o2.observation_uuid) >= ${MIN_OBS}
-  );
+SELECT s.taxon_id
+FROM observations s
+JOIN taxa t ON t.taxon_id = s.taxon_id
+WHERE t.rank_level = 10
+  AND s.quality_grade = 'research'
+  AND s.geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326)
+GROUP BY s.taxon_id
+HAVING COUNT(s.observation_uuid) >= ${MIN_OBS};
 "
 
-# ------------------[ 5) Create _all_taxa_obs Table ]-----------
+# 3) Create <REGION_TAG>_min${MIN_OBS}_all_taxa_obs
+#    If INCLUDE_OUT_OF_REGION_OBS=true, we do not filter again by bounding box.
+#    Otherwise, we re-check s.geom against the region.
 print_progress "Creating table \"${REGION_TAG}_min${MIN_OBS}_all_taxa_obs\""
 OBS_COLUMNS=$(get_obs_columns)
-
 echo "Using columns: ${OBS_COLUMNS}"
 
-execute_sql "
-CREATE TABLE \"${REGION_TAG}_min${MIN_OBS}_all_taxa_obs\" AS
-SELECT ${OBS_COLUMNS}
-FROM observations
-WHERE taxon_id IN (
-    SELECT taxon_id
-    FROM \"${REGION_TAG}_min${MIN_OBS}_all_taxa\"
-);
-"
+if [ "${INCLUDE_OUT_OF_REGION_OBS}" = "true" ]; then
+    execute_sql "
+    CREATE TABLE \"${REGION_TAG}_min${MIN_OBS}_all_taxa_obs\" AS
+    SELECT ${OBS_COLUMNS}
+    FROM observations
+    WHERE taxon_id IN (
+        SELECT taxon_id
+        FROM \"${REGION_TAG}_min${MIN_OBS}_all_taxa\"
+    );
+    "
+else
+    execute_sql "
+    CREATE TABLE \"${REGION_TAG}_min${MIN_OBS}_all_taxa_obs\" AS
+    SELECT ${OBS_COLUMNS}
+    FROM observations
+    WHERE taxon_id IN (
+        SELECT taxon_id
+        FROM \"${REGION_TAG}_min${MIN_OBS}_all_taxa\"
+    )
+    AND geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326);
+    "
+fi
 
 print_progress "Regional base tables created"

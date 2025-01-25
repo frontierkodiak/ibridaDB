@@ -1,141 +1,203 @@
-# ibridaDB Export Reference
+# ibridaDB Export Reference (v1)
 
-This document describes the key parameters that drive the **v1** export process in our `ibridaDB` pipeline. The parameters are split into three logical groups, reflecting their usage and declaration in `wrapper.sh`: **Database Config**, **Export Parameters**, and **Paths**.
+This document describes how to configure and run an **ibridaDB** export job using our **v1** pipeline. The pipeline is driven by a set of **environment variables** that control which data are included, how they are filtered, and where the outputs are written. These variables are typically set in a **wrapper script** (e.g., `r1/wrapper.sh`).
 
-## 1. Database Config
+Below is an overview of:
 
-These environment variables specify how the export scripts connect to the database and handle versioning.
+- [ibridaDB Export Reference (v1)](#ibridadb-export-reference-v1)
+  - [Introduction \& Pipeline Overview](#introduction--pipeline-overview)
+  - [Quick Start](#quick-start)
+  - [Environment Variables](#environment-variables)
+    - [Database Config](#database-config)
+    - [Export Parameters](#export-parameters)
+    - [Paths](#paths)
+  - [Export Flow \& Scripts](#export-flow--scripts)
 
-### `DB_USER`
-- **Description**: The database user that executes SQL commands.
-- **Default**: `"postgres"`
-
-### `VERSION_VALUE`
-- **Description**: The string identifier for the data version being exported (e.g., `"v0"`).  
-- **Usage**: Combined with `RELEASE_VALUE` to construct the `DB_NAME`, and also embedded in logs or summary files.
-
-### `RELEASE_VALUE`
-- **Description**: Further disambiguates the release within the version (e.g., `"r1"`).
-- **Usage**: Combined with `VERSION_VALUE` to construct the `DB_NAME`; also used for conditional logic in `functions.sh` (e.g., deciding whether to append `anomaly_score` columns).
-
-### `ORIGIN_VALUE`
-- **Description**: Documents the source of the data (e.g., `"iNat-Dec2024"`).  
-- **Usage**: Potentially used to label data, but currently only logged or stored in summary contexts.
-
-### `DB_NAME`
-- **Description**: The actual database name to which SQL commands are directed.  
-- **Constructed**: Typically `"ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"` (e.g., `"ibrida-v0-r1"`).
+A **placeholder** for a mermaid diagram is provided below. You can generate or modify the diagram according to your team’s preferences and paste it in there.  
 
 ---
 
-## 2. Export Parameters
+## Introduction & Pipeline Overview
 
-These variables control which data are included in the export and how they are sampled or filtered.
+The **ibridaDB** export pipeline is designed to subset observations from a large PostgreSQL/PostGIS database based on:
 
-### `REGION_TAG`
-- **Description**: Identifies a particular broad region (e.g., `"NAfull"`, `"EURfull"`) that will define bounding box coordinates.  
-- **Usage**: Affected by the `set_region_coordinates()` function in `regional_base.sh`, which sets `XMIN`, `YMIN`, `XMAX`, `YMAX`.  
-- **Example**: `"NAfull"` for North America bounding box.
+- **Geographic region** (e.g., bounding box for North America).  
+- **Minimum number of research-grade observations** required for each species (`MIN_OBS`).  
+- **Taxonomic clade** (class, order, or custom “metaclade”).  
+- **Export parameters** such as maximum number of photos per species, whether to include only the primary photo or all photos, etc.
 
-### `MIN_OBS`
-- **Description**: The minimum number of observations required for a species to be included in the regional tables.  
-- **Intended Behavior**: 
-  - In `regional_base.sh`, species (rank_level == 10) must have at least `MIN_OBS` **research-grade** observations to be included in `<REGION_TAG>_min${MIN_OBS}_all_taxa` and subsequent tables.  
-  - Practically, the code checks for `HAVING COUNT(o2.observation_uuid) >= ${MIN_OBS}` and also filters out non-research-grade observations if `t.rank_level = 10`.  
-- **Default**: `50`  
-- **Note**: If a taxon is not strictly species rank, the code uses a looser condition, but for true species (rank_level=10), it must meet the threshold. 
+The pipeline executes in the following broad stages:
 
-### `MAX_RN`
-- **Description**: The maximum number of **research-grade** observations that will be **sampled per species** in the final CSV export.  
-- **Usage**:
-  - In `cladistic.sh`, a partition-based random sampling ensures up to `MAX_RN` observations per species (`L10_taxonID`).  
-  - Observations with `L10_taxonID IS NULL` are exempt from this cap (they are not strictly species-level).  
-- **Default**: `4000`
+1. **Wrapper Script** (e.g., `r1/wrapper.sh`) sets environment variables to configure the export.  
+2. **Main Script** (`common/main.sh`) orchestrates creation of “regional base” tables if needed, then calls the **cladistic** filtering step.  
+3. **Regional Base** (`common/regional_base.sh`): Creates two key tables:
+   - `<REGION_TAG>_min${MIN_OBS}_all_taxa`, storing species that meet the threshold in the bounding box.  
+   - `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs`, storing all observations for those species, possibly including out-of-region if configured.  
+4. **Cladistic** (`common/cladistic.sh`): Filters by the chosen clade/metaclade, creating a final table `<EXPORT_GROUP>_observations`. It then exports a CSV using partition-based random sampling.  
+5. **Summary & Logging**: `main.sh` writes a single `*_export_summary.txt` that includes relevant environment variables, final observation counts, and other metrics. It also optionally copies the wrapper script for reproducibility.
 
-### `PRIMARY_ONLY`
-- **Description**: Controls whether to only export `position=0` (the “primary” or first) photo per observation, or *all* photos.  
-- **Usage**:
-  - In `cladistic.sh`, the `COPY` statements either require `p.position = 0` or allow all positions, based on `PRIMARY_ONLY=true/false`.  
-- **Typical Values**: `true` (only primary photo) or `false` (all photos).
+```mermaid
 
-### `METACLADE`
-- **Description**: A specialized grouping of clades, combining multiple lineages. Often something like `"primary_terrestrial_arthropoda"`.  
-- **Usage**:
-  - In `clade_defns.sh`, a `METACLADES["primary_terrestrial_arthropoda"] = ...` expression defines which taxonIDs to include.  
-  - If `METACLADE` is set, it overrides `CLADE` or `MACROCLADE` when building the final condition.
+flowchart TB
+    A["Wrapper Script<br/>(r1/wrapper.sh)"] --> B["Main Script<br/>(common/main.sh)"]
+    B --> C{"Check<br/>SKIP_REGIONAL_BASE?"}
+    C -- "true && table exists" --> E["Reuse existing tables"]
+    C -- "false" --> D["regional_base.sh<br/>Create tables"]
+    E --> F["cladistic.sh<br/>Filter by clade"]
+    D --> F["cladistic.sh<br/>Filter by clade"]
+    F --> G["Export CSV + final table"]
+    G --> H["main.sh<br/>Write summary<br/>+ copy wrapper"]
 
-### `EXPORT_GROUP`
-- **Description**: The name or label for the final exported dataset (e.g., `"primary_terrestrial_arthropoda"`).  
-- **Usage**:
-  - Used to build the final table name (`<EXPORT_GROUP>_observations`) in `cladistic.sh`.  
-  - Also appended to output CSV filenames and summary messages.
 
-### `PROCESS_OTHER`
-- **Description**: A boolean-like flag (default `false`) indicating whether to run additional extra steps.  
-- **Usage**:
-  - Not deeply integrated in the current code, but can be used to skip or include extra logic if set to `true`.
-
-### `SKIP_REGIONAL_BASE`
-- **Description**: Allows the user to **skip** dropping and recreating the regional base tables if they **already exist** and are **non-empty**.  
-- **Usage**:
-  - In `main.sh`, if `SKIP_REGIONAL_BASE=true`, the script checks if `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs` exists and has at least one row. If so, it skips calling `regional_base.sh`. Otherwise, it recreates the table as normal.  
-  - Saves time when multiple clade exports reference the same region-based table.  
-- **Default**: `false`
+```
 
 ---
 
-## 3. Paths
+## Quick Start
 
-These variables handle filesystem or container paths for storing exports and controlling Docker context.
-
-### `DB_CONTAINER`
-- **Description**: The name of the Docker container running PostgreSQL (e.g., `"ibridaDB"`).  
-- **Usage**:
-  - `functions.sh` uses it in `execute_sql()` to run `docker exec ${DB_CONTAINER} ...`.
-
-### `HOST_EXPORT_BASE_PATH`
-- **Description**: The base path on the **host** for storing final exports (mapped into the container).  
-- **Default**: `"/datasets/ibrida-data/exports"`.
-
-### `CONTAINER_EXPORT_BASE_PATH`
-- **Description**: The base path **inside** the Docker container that maps to `HOST_EXPORT_BASE_PATH`.  
-- **Default**: `"/exports"`.
-
-### `EXPORT_SUBDIR`
-- **Description**: A dynamic subdirectory that includes the version, release, and other parameters (e.g., `"v0/r1/primary_only_50min_4000max"`).  
-- **Usage**:
-  - Combined with `HOST_EXPORT_BASE_PATH` for writing to disk from the host perspective, and with `CONTAINER_EXPORT_BASE_PATH` for writing to disk from within the container.  
-  - E.g., final container path is `"$CONTAINER_EXPORT_BASE_PATH/$EXPORT_SUBDIR"`, final host path is `"$HOST_EXPORT_BASE_PATH/$EXPORT_SUBDIR"`.
-
-### `BASE_DIR`
-- **Description**: The top-level directory for the export scripts inside the container (e.g., `"/home/caleb/repo/ibridaDB/dbTools/export/v0"`).  
-- **Usage**:  
-  - Scripts in `wrapper.sh` or `main.sh` reference subdirectories within `BASE_DIR`, e.g., `BASE_DIR/common/functions.sh` or `BASE_DIR/common/regional_base.sh`.  
+1. **Clone or navigate** to the `dbTools/export/v0` directory.  
+2. **Create/modify** a wrapper script (e.g., `r1/wrapper.sh`) to set your parameters:
+   - `REGION_TAG`, `MIN_OBS`, `MAX_RN`, `PRIMARY_ONLY`, etc.  
+   - `CLADE` or `METACLADE` if focusing on a particular subset of taxa.  
+   - Optionally `INCLUDE_OUT_OF_REGION_OBS` and `RG_FILTER_MODE`.  
+3. **Run** the wrapper script. The pipeline will:
+   - Create region-based tables (if not skipping).  
+   - Join them to `expanded_taxa` for a final set of observations.  
+   - Write a CSV with photo metadata.  
+   - Dump a summary file describing the final dataset.
 
 ---
 
-## Flow of Parameter Usage
+## Environment Variables
 
-1. **Wrapper Script** (`wrapper.sh`):  
-   - Defines the environment variables documented above.  
-   - Logs them and calls `main.sh`.
+Below are the most commonly used variables. **All** variables are read in the wrapper, then passed to `main.sh` (and subsequently to `regional_base.sh` or `cladistic.sh`).
 
-2. **Main Script** (`main.sh`):  
-   - Validates required variables.  
-   - Creates the export directory.  
-   - **If `SKIP_REGIONAL_BASE=true`, checks if the existing region-based table is present and non-empty. Otherwise, or if the table is missing or empty, runs `regional_base.sh`.**  
-   - Calls `cladistic.sh` to filter and export the final CSV.  
-   - Generates a final `export_summary.txt`.
+### Database Config
 
-3. **regional_base.sh**:  
-   - Uses `REGION_TAG` to set bounding box coordinates.  
-   - Applies `MIN_OBS` to exclude species with fewer than the required number of research-grade observations.  
-   - Produces `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs`.
+- **`DB_USER`**  
+  - **Description**: PostgreSQL user for executing SQL.  
+  - **Default**: `"postgres"`  
 
-4. **cladistic.sh**:  
-   - Applies `METACLADE`, `CLADE`, or `MACROCLADE` logic to define taxonomic filters.  
-   - Joins the regional table to `expanded_taxa`, producing `<EXPORT_GROUP>_observations`.  
-   - Randomly samples up to `MAX_RN` observations **per species** (defined by `L10_taxonID`) in the final CSV, with `PRIMARY_ONLY` restricting photos if desired.
+- **`VERSION_VALUE`**  
+  - **Description**: Data version identifier (e.g. `"v0"`).  
+  - **Usage**: Combined with `RELEASE_VALUE` to build `DB_NAME`. Also included in logs and table references.
 
-5. **export_per_species_snippet.sh** (Optional):  
-   - A shortcut script to export a final CSV from an already-existing `<EXPORT_GROUP>_observations` table without re-creating upstream tables or re-running the entire flow.
+- **`RELEASE_VALUE`**  
+  - **Description**: Additional label for the data release (e.g., `"r1"`).  
+  - **Usage**: Combined with `VERSION_VALUE` to create `DB_NAME`. Controls logic in some scripts (e.g., whether to include anomaly_score).
+
+- **`ORIGIN_VALUE`**  
+  - **Description**: Describes data provenance (e.g., `"iNat-Dec2024"`).  
+  - **Usage**: Logged in summary contexts.
+
+- **`DB_NAME`**  
+  - **Description**: Full name of the database. Typically `"ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"`.
+
+---
+
+### Export Parameters
+
+- **`REGION_TAG`**  
+  - **Description**: Specifies a broad region whose bounding box is defined in `regional_base.sh`.  
+  - **Examples**: `"NAfull"`, `"EURfull"`.  
+  - **Usage**: `regional_base.sh` calls `set_region_coordinates()` to set `$XMIN,$YMIN,$XMAX,$YMAX`.
+
+- **`MIN_OBS`**  
+  - **Description**: Minimum number of **research-grade** observations required for a species to be included in the region-based tables.  
+  - **Usage**: In `regional_base.sh`, we gather species with at least `MIN_OBS` research-grade observations inside the bounding box.  
+  - **Default**: `50`.
+
+- **`MAX_RN`**  
+  - **Description**: Maximum number of research-grade observations to be sampled per species in the final CSV.  
+  - **Usage**: In `cladistic.sh`, we do a partition-based random sampling. Observations at species rank beyond `MAX_RN` are excluded in the final CSV.  
+  - **Default**: `4000`.
+
+- **`PRIMARY_ONLY`**  
+  - **Description**: If `true`, only export the primary (position=0) photo for each observation; if `false`, include all photos.  
+  - **Usage**: In `cladistic.sh`, the final `COPY` statement filters `p.position=0` if `PRIMARY_ONLY=true`.  
+
+- **`CLADE`** / **`METACLADE`** / **`MACROCLADE`**  
+  - **Description**: Used to define the clade or group of interest.  
+  - **Usage**: In `clade_defns.sh`, we have integer-based conditions for major taxonomic ranks (e.g., `L50_taxonID=3` for birds). If `METACLADE` is set, it overrides `CLADE` or `MACROCLADE`.  
+  - **Example**: `METACLADE="terrestrial_arthropods"` or `CLADE="amphibia"`.
+
+- **`EXPORT_GROUP`**  
+  - **Description**: The final label for the exported dataset; used to name `<EXPORT_GROUP>_observations` and the CSV.  
+  - **Usage**: Also appended to summary logs, e.g., `amphibia_export_summary.txt`.
+
+- **`PROCESS_OTHER`**  
+  - **Description**: Generic boolean-like flag (default `false`).  
+  - **Usage**: Not heavily used but can gate extra steps if desired.
+
+- **`SKIP_REGIONAL_BASE`**  
+  - **Description**: If `true`, skip creating region-based tables if they already exist and are non-empty.  
+  - **Usage**: `main.sh` checks for `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs`; if present and non-empty, it is reused.  
+  - **Default**: `false`.
+
+- **`INCLUDE_OUT_OF_REGION_OBS`**  
+  - **Description**: If `true`, once a species is selected by `MIN_OBS` inside the bounding box, we include **all** observations of that species globally. If `false`, re-apply bounding box in final table.  
+  - **Usage**: Set in `regional_base.sh`. Defaults to `true` in most wrappers to increase data coverage.
+
+- **`RG_FILTER_MODE`**  
+  - **Description**: Controls how research-grade vs. non-research observations are ultimately included.  
+  - **Possible Values**:
+    1. `ONLY_RESEARCH` — Only research-grade observations.  
+    2. `ALL` — Include all.  
+    3. `ALL_EXCLUDE_SPECIES_NON_RESEARCH` — Include everything except non-research-grade if rank=species.  
+    4. `ONLY_NONRESEARCH` — Only non-research-grade.  
+  - **Usage**: Future expansions will apply this filter in `cladistic.sh`. Currently defaulted to `ALL`.
+
+---
+
+### Paths
+
+- **`DB_CONTAINER`**  
+  - **Description**: Docker container name running PostgreSQL (often `"ibridaDB"`).  
+  - **Usage**: Scripts run `docker exec ${DB_CONTAINER} psql ...`.
+
+- **`HOST_EXPORT_BASE_PATH`**  
+  - **Description**: Host filesystem path to store exports.  
+  - **Default**: `"/datasets/ibrida-data/exports"`.
+
+- **`CONTAINER_EXPORT_BASE_PATH`**  
+  - **Description**: Container path mapping to `HOST_EXPORT_BASE_PATH`.  
+  - **Default**: `"/exports"`.
+
+- **`EXPORT_SUBDIR`**  
+  - **Description**: A subdirectory typically combining `VERSION_VALUE`, `RELEASE_VALUE`, and other parameters (e.g., `"v0/r1/primary_only_50min_4000max"`).  
+  - **Usage**: `main.sh` assembles final output paths from `CONTAINER_EXPORT_BASE_PATH/$EXPORT_SUBDIR` and `HOST_EXPORT_BASE_PATH/$EXPORT_SUBDIR`.
+
+- **`BASE_DIR`**  
+  - **Description**: Path to the export scripts inside the container.  
+  - **Usage**: Set in the wrapper to locate `common/functions.sh`, `common/regional_base.sh`, `common/cladistic.sh`, etc.
+
+---
+
+## Export Flow & Scripts
+
+Below is the **script-by-script** overview:
+
+1. **`wrapper.sh`**  
+   - You define all environment variables needed for your particular export (see above).  
+   - Sets `WRAPPER_PATH="$0"` so the pipeline can copy the wrapper into the output directory for reproducibility.  
+   - Calls `main.sh`.
+
+2. **`main.sh`**  
+   - Validates environment variables.  
+   - Creates the export directory (`EXPORT_SUBDIR`).  
+   - **Optional**: If `SKIP_REGIONAL_BASE=true`, checks whether region-based tables already exist.  
+   - Sources `regional_base.sh` if needed.  
+   - Calls `cladistic.sh` to do the final clade-based filtering and CSV export.  
+   - Gathers final stats (e.g., #observations, #taxa) from `<EXPORT_GROUP>_observations`.  
+   - Writes a single summary file (`${EXPORT_GROUP}_export_summary.txt`).  
+   - Optionally copies the wrapper script into the export folder.
+
+3. **`regional_base.sh`**  
+   - Sets bounding box coordinates for the region (`REGION_TAG`).  
+   - Creates `<REGION_TAG>_min${MIN_OBS}_all_taxa`, selecting species with at least `MIN_OBS` research-grade obs.  
+   - Creates `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs`, either global or region-limited based on `INCLUDE_OUT_OF_REGION_OBS`.
+
+4. **`cladistic.sh`**  
+   - Loads `clade_defns.sh` to interpret `CLADE`, `METACLADE`, or `MACROCLADE`.  
+   - Joins `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs` to `expanded_taxa` and filters for active taxa matching the clade condition. Produces `<EXPORT_GROUP>_observations`.  
+   - Exports a CSV with photo metadata, applying `PRIMARY_ONLY` and random sampling of up to `MAX_RN` observations per species.
