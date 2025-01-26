@@ -47,11 +47,11 @@ export SKIP_REGIONAL_BASE=true  # typically used for successive cladistic export
 
 # ---[ NEW ENV VARS ]---
 # Whether to include out-of-region observations in the final dataset
-export INCLUDE_OUT_OF_REGION_OBS=true
+export INCLUDE_OUT_OF_REGION_OBS=false
 
 # Whether to keep research-grade only, non-research, etc.
 # For now, we default to ALL; future steps will integrate it
-export RG_FILTER_MODE="ALL"
+export RG_FILTER_MODE="ONLY_RESEARCH"
 
 log_message "Region: ${REGION_TAG}"
 log_message "Min Observations: ${MIN_OBS}"

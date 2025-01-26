@@ -1,40 +1,32 @@
 ```mermaid
 flowchart TB
-    subgraph Input
-        inat[iNaturalist Open Data]
-        csv[CSV Files]
-    end
 
     subgraph Ingest["Database Initialization (ingest/)"]
-        wrapper[Wrapper Script\nr0/wrapper.sh or r1/wrapper.sh]
-        main[Main Script\ncommon/main.sh]
-        geom[Geometry Processing\ncommon/geom.sh]
-        vers[Version/Origin Updates\ncommon/vers_origin.sh]
-        db[(PostgreSQL Database)]
+        i_wrap["Ingest Wrapper<br/>(e.g. r0/wrapper.sh)"]
+        i_main["Ingest Main<br/>(common/main.sh)"]
+        i_other["Other Common Scripts"]
+        db["(ibridaDB PostgreSQL)"]
+        i_wrap --> i_main
+        i_main --> i_other
+        i_other --> db
     end
 
     subgraph Export["Data Export (export/)"]
-        exp_wrapper[Export Wrapper\nr0/wrapper.sh or r1/wrapper.sh]
-        exp_main[Export Main Script\ncommon/main.sh]
-        reg_base[Regional Base Tables\ncommon/regional_base.sh]
-        clad[Cladistic Filtering\ncommon/cladistic.sh]
-        csv_out[CSV Export Files]
+        e_wrap["Export Wrapper<br/>(e.g. r1/my_wrapper.sh)"]
+        e_main["Export Main<br/>(common/main.sh)"]
+        rbase["regional_base.sh<br/>Species + Ancestors"]
+        clad["cladistic.sh<br/>RG_FILTER_MODE + partial-labeled"]
+        csv_out["CSV + Summary Files"]
+        e_wrap --> e_main
+        e_main --> rbase
+        rbase --> clad
+        clad --> csv_out
     end
 
-    inat --> csv
-    csv --> wrapper
-    wrapper --> main
-    main --> geom
-    main --> vers
-    geom --> db
-    vers --> db
-    db --> exp_wrapper
-    exp_wrapper --> exp_main
-    exp_main --> reg_base
-    reg_base --> clad
-    clad --> csv_out
+    i_other --> db
+    db --> e_wrap
 
     style Ingest fill:#f9f,stroke:#333,stroke-width:2px
     style Export fill:#bbf,stroke:#333,stroke-width:2px
-    style Input fill:#bfb,stroke:#333,stroke-width:2px
+
 ```

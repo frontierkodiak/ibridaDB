@@ -1,13 +1,8 @@
 #!/bin/bash
-#
-# wrapper.sh
-#
-# A typical user-facing script that sets environment variables and then calls main.sh.
-# We define WRAPPER_PATH="$0" so that main.sh can copy this file for reproducibility.
 
+# Setup logging
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 LOG_FILE="${SCRIPT_DIR}/$(basename "$0" .sh)_$(date +%Y%m%d_%H%M%S).log"
-
 echo "Starting new run at $(date)" > "${LOG_FILE}"
 
 # Function to log messages to both console and file
@@ -20,9 +15,6 @@ exec 1> >(tee -a "${LOG_FILE}")
 exec 2> >(tee -a "${LOG_FILE}")
 
 log_message "Initializing export process with configuration:"
-
-# Provide path to wrapper for reproducibility
-export WRAPPER_PATH="$0"
 
 # ---------------------------------------------------------------------------
 # Database config
@@ -41,21 +33,25 @@ log_message "Release: ${RELEASE_VALUE}"
 # Export parameters
 # ---------------------------------------------------------------------------
 export REGION_TAG="NAfull"
-export MIN_OBS=100
-export MAX_RN=200
+export MIN_OBS=50
+export MAX_RN=3000
 export PRIMARY_ONLY=true
 
-# We could set CLADE or METACLADE here; let's pick something as an example:
-export CLADE="amphibia"
-export EXPORT_GROUP="${CLADE}"
+# We’ll use a metaclade here as an example
+export METACLADE="primary_terrestrial_arthropoda"
+export EXPORT_GROUP="${METACLADE}"
 
 # Additional flags
 export PROCESS_OTHER=false
-export SKIP_REGIONAL_BASE=false
+export SKIP_REGIONAL_BASE=true  # typically used for successive cladistic exports
 
-# NEW ENV VARS
-export INCLUDE_OUT_OF_REGION_OBS=true
-export RG_FILTER_MODE="ALL"
+# ---[ NEW ENV VARS ]---
+# Whether to include out-of-region observations in the final dataset
+export INCLUDE_OUT_OF_REGION_OBS=false
+
+# Whether to keep research-grade only, non-research, etc.
+# For now, we default to ALL; future steps will integrate it
+export RG_FILTER_MODE="ONLY_NONRESEARCH_WIPE_SPECIES_LABEL"
 
 log_message "Region: ${REGION_TAG}"
 log_message "Min Observations: ${MIN_OBS}"
@@ -76,13 +72,16 @@ export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/export/v0"
 
 log_message "Export Directory: ${HOST_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
 
+# ---------------------------------------------------------------------------
 # Source common functions
+# ---------------------------------------------------------------------------
 source "${BASE_DIR}/common/functions.sh"
 
+# ---------------------------------------------------------------------------
 # Execute main script
+# ---------------------------------------------------------------------------
 send_notification "Starting ${EXPORT_GROUP} export"
 log_message "Executing main script at $(date)"
-
 "${BASE_DIR}/common/main.sh"
 
 log_message "Process completed at $(date)"

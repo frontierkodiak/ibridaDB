@@ -133,7 +133,7 @@ CLADES["vespidae"]='("taxonID" = 52747)'
 
 declare -A METACLADES
 
-# Example 1: terrestrial_arthropods => Insecta OR Arachnida OR others.
+# Example 1: terrestrial_arthropods => Insecta OR Arachnida.
 # (Using the taxonIDs from the CLADES above.)
 METACLADES["terrestrial_arthropods"]='("L50_taxonID" = 47158 OR "L50_taxonID" = 47119)'
 

@@ -1,149 +1,152 @@
 # ibrida Database Reproduction Guide
 
 ## Overview
-This guide documents the step-by-step process for reproducing the ibrida database from iNaturalist open data dumps. The database uses a versioning system with two components:
-- **Version (v#)**: Indicates structural changes to the database
-- **Release (r#)**: Indicates different data dumps using the same structure
+This guide documents the end-to-end process for **reproducing** and **exporting** from the ibrida database, which is derived from iNaturalist open data dumps. The database uses a versioning system with two components:
+- **Version (v#)**: Indicates structural changes (schema revisions) to the database.
+- **Release (r#)**: Indicates distinct data releases from iNaturalist under the same schema version.
 
-Current versions:
-- v0r0: June 2024 iNat data release
-- v0r1: December 2024 iNat data release (adds anomaly_score column to observations table)
+For example:
+- **v0r0**: June 2024 iNat data release
+- **v0r1**: December 2024 iNat data release (adds `anomaly_score` column to `observations`)
 
 ## System Architecture
-The process is divided into two main phases:
-1. Database Initialization (ingest/)
-2. Data Export (export/)
+The pipeline is split into two phases:
+1. **Database Initialization** (`ingest/`)
+2. **Data Export** (`export/`)
 
-Each phase uses a modular structure with:
-- Common scripts containing shared logic
-- Release-specific wrapper scripts containing parameters
+Each phase has:
+- Common scripts for shared logic
+- Release- or job-specific *wrapper scripts* that set environment variables for that particular run
 
-## Database Initialization
+## 1. Database Initialization (ingest/)
 ### Directory Structure
+
 ```
 dbTools/ingest/v0/
-├── common/                # Shared scripts
-│   ├── geom.sh           # Geometry calculations
-│   ├── vers_origin.sh    # Version/origin updates
-│   └── main.sh           # Core ingestion logic
+├── common/
+│   ├── geom.sh         # Geometry calculations
+│   ├── vers_origin.sh  # Version/origin updates
+│   └── main.sh         # Core ingestion logic
 ├── r0/
-│   ├── wrapper.sh        # June 2024 release parameters
-│   └── structure.sql     # Database schema for r0
+│   ├── wrapper.sh      # June 2024 release
+│   └── structure.sql   # schema for r0
 └── r1/
-    ├── wrapper.sh        # December 2024 release parameters
-    └── structure.sql     # Database schema for r1 (includes anomaly_score)
+    ├── wrapper.sh      # December 2024 release
+    └── structure.sql   # schema for r1 (adds anomaly_score)
 ```
 
 ### Running the Ingestion Process
-Make scripts executable:
-```bash
-# Make common scripts executable
-chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/common/main.sh
-chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/common/geom.sh
-chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/common/vers_origin.sh
+1. **Make scripts executable**:
+    ```bash
+    chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/common/*.sh
+    chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/r0/wrapper.sh
+    chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/r1/wrapper.sh
+    ```
+2. **Run**:
+    ```bash
+    # For June 2024 (r0)
+    /home/caleb/repo/ibridaDB/dbTools/ingest/v0/r0/wrapper.sh
 
-# Make wrapper scripts executable
-chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/r0/wrapper.sh
-chmod +x /home/caleb/repo/ibridaDB/dbTools/ingest/v0/r1/wrapper.sh
-```
+    # For December 2024 (r1)
+    /home/caleb/repo/ibridaDB/dbTools/ingest/v0/r1/wrapper.sh
+    ```
 
-Run ingest:
-```bash
-# For June 2024 data (r0)
-/home/caleb/repo/ibridaDB/dbTools/ingest/v0/r0/wrapper.sh
+## 2. Data Export (export/)
+The export pipeline allows flexible subsetting of the DB by region, minimum threshold, clade, etc. For additional detail, see [export.md](export.md).
 
-# For December 2024 data (r1)
-/home/caleb/repo/ibridaDB/dbTools/ingest/v0/r1/wrapper.sh
-```
-
-## Data Export
 ### Directory Structure
 ```
 dbTools/export/v0/
 ├── common/
-│   ├── main.sh           # Core export logic
-│   ├── regional_base.sh  # Region-specific filtering
-│   └── cladistic.sh      # Taxonomic filtering
+│   ├── main.sh            # Orchestrates creation or skipping of base tables; final summary
+│   ├── regional_base.sh   # Region-based table creation, ancestor-aware logic
+│   ├── cladistic.sh       # Taxonomic filtering, partial-rank wiping, CSV export
+│   └── functions.sh       # Shared shell functions
 ├── r0/
-│   └── wrapper.sh        # June 2024 parameters
-└── r1/
-    └── wrapper.sh        # December 2024 parameters
+│   └── wrapper.sh         # Example job wrapper for June 2024 export
+├── r1/
+│   └── wrapper.sh         # Example job wrapper for December 2024 export
+└── export.md              # Detailed usage documentation (v1)
 ```
 
-### Export Process Steps
-1. Regional base table creation:
-   - Filters observations by geographic region
-   - Applies minimum observation thresholds
-   - Creates base tables for further filtering
+### Export Workflow
+1. **User creates/edits a wrapper script** (e.g., `r1/my_special_wrapper.sh`) to set:
+   - `REGION_TAG`, `MIN_OBS`, `MAX_RN`, `PRIMARY_ONLY`
+   - Optional toggles like `INCLUDE_OUT_OF_REGION_OBS`, `RG_FILTER_MODE`, `ANCESTOR_ROOT_RANKLEVEL`, `MIN_OCCURRENCES_PER_RANK`
+   - A unique `EXPORT_GROUP` name
+2. **Run** that wrapper. The pipeline will:
+   1. **(regional_base.sh)** Build base tables of in-threshold species + ancestors, optionally bounding to region or not, depending on `INCLUDE_OUT_OF_REGION_OBS`.
+   2. **(cladistic.sh)** Filter final observations by clade or metaclade, optionally wipe partial ranks, and do a random-sample CSV export.
+   3. **(main.sh)** Write a summary file enumerating environment variables, row counts, timing, etc.
 
-2. Cladistic filtering:
-   - Applies taxonomic filters based on metaclades
-   - Handles special cases (e.g., excluding aquatic insects)
-   - Creates filtered observation tables
+3. **Check** `/datasets/ibrida-data/exports` for final CSV output (organized by `VERSION_VALUE` / `RELEASE_VALUE` / any job-specific subdirectory).
 
-3. CSV export:
-   - Creates directory structure if needed
-   - Sets appropriate permissions
-   - Exports filtered data with photo restrictions
-   - Generates export statistics and summaries
-
-### Running the Export Process
-Make scripts executable:
+### Drafting a New Wrapper
+It is **recommended** to create a separate wrapper script for each new export job. For instance:
 ```bash
-# Make common scripts executable
-chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/common/main.sh
-chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/common/regional_base.sh
-chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/common/cladistic.sh
-chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/common/functions.sh
+#!/bin/bash
 
+export WRAPPER_PATH="$0"
 
-# Make wrapper scripts executable
-chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/r0/wrapper.sh
-chmod +x /home/caleb/repo/ibridaDB/dbTools/export/v0/r1/wrapper.sh
+export DB_USER="postgres"
+export VERSION_VALUE="v0"
+export RELEASE_VALUE="r1"
+export ORIGIN_VALUE="iNat-Dec2024"
+export DB_NAME="ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"
+
+export REGION_TAG="NAfull"
+export MIN_OBS=50
+export MAX_RN=3000
+export PRIMARY_ONLY=true
+
+export CLADE="amphibia"
+export EXPORT_GROUP="amphibia_test"
+
+export INCLUDE_OUT_OF_REGION_OBS=false
+export RG_FILTER_MODE="ALL"
+export ANCESTOR_ROOT_RANKLEVEL=40
+export MIN_OCCURRENCES_PER_RANK=30
+
+# other optional vars, e.g. PROCESS_OTHER, SKIP_REGIONAL_BASE, etc.
+
+export DB_CONTAINER="ibridaDB"
+export HOST_EXPORT_BASE_PATH="/datasets/ibrida-data/exports"
+export CONTAINER_EXPORT_BASE_PATH="/exports"
+export EXPORT_SUBDIR="${VERSION_VALUE}/${RELEASE_VALUE}/myamphibia_job"
+export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/export/v0"
+
+source "${BASE_DIR}/common/functions.sh"
+
+/home/caleb/repo/ibridaDB/dbTools/export/v0/common/main.sh
 ```
+Then `chmod +x` this file and run it to generate a new job.
 
-Run exports:
-```bash
-# For June 2024 data (r0)
-/home/caleb/repo/ibridaDB/dbTools/export/v0/r0/wrapper.sh
+### Example Outputs
+The final CSV and summary are placed in a subdirectory (e.g. `v0/r1/myamphibia_job`). A typical summary file `amphibia_test_export_summary.txt` includes:
+- Region: NAfull
+- MIN_OBS: 50
+- RG_FILTER_MODE: ALL
+- Observations: 10,402
+- Unique Taxa: 927
+- Timings for each step
 
-# For December 2024 data (r1)
-/home/caleb/repo/ibridaDB/dbTools/export/v0/r1/wrapper.sh
+### Further Reading
+- **[export.md](export/v0/export.md)** for a deeper parameter reference (v1).
+- **clade_defns.sh** for built-in definitions of macroclades, clades, and metaclades.
+
+## Overall Flow
+Below is a schematic of the entire ingest→export pipeline. For details on the ingest side, see [Ingestion docs](#database-initialization-ingest):
 ```
-
-### Export Directory Structure
-Exports are organized by version and release:
+Ingest (ingest/v0/) --> Database --> Export (export/v0/)
 ```
-/datasets/ibrida-data/exports/
-├── v0/
-│   ├── r0/
-│   │   └── primary_only_50min_3000max/
-│   │       ├── primary_terrestrial_arthropoda_photos.csv
-│   │       └── export_summary.txt
-│   └── r1/
-│       └── primary_only_50min_4000max/
-│           ├── primary_terrestrial_arthropoda_photos.csv
-│           └── export_summary.txt
-```
+In the export sub-phase, each new wrapper script can define a distinct job. Summaries and CSVs are stored in `HOST_EXPORT_BASE_PATH` for easy retrieval and analysis.
 
-### Available Export Groups
-The system supports several predefined export groups:
-1. primary_terrestrial_arthropoda
-   - Includes Insecta and Arachnida
-   - Excludes aquatic groups (Ephemeroptera, Plecoptera, Trichoptera, Odonata)
-   - Parameters: MIN_OBS=50, MAX_RN=4000 (r1)
+## Notes on Schema
+- **v0r1** adds the `anomaly_score numeric(15,6)` column to `observations`.
+- The export scripts automatically check if that column is present based on `RELEASE_VALUE`.
+- If partial-labeled data is desired (coarse ranks for rare species), see the advanced features in `regional_base.sh` (ancestor logic) and `cladistic.sh` (partial-rank wiping logic).
 
-2. amphibia
-   - Includes all Amphibia taxa
-   - Parameters: MIN_OBS=400, MAX_RN=1000
-
-## Schema Notes
-### Release-Specific Changes
-- v0r1 adds `anomaly_score numeric(15,6)` to observations table
-- Export scripts automatically handle presence/absence of this column
-
-### Metadata Columns
-All tables include:
-- `version`: Database structure version (e.g., "v0")
-- `release`: Data release identifier (e.g., "r0", "r1")
-- `origin`: Source and date of the data (e.g., "iNat-Dec2024")
+**Notes**:
+- The ingest side is unchanged for v0→v0r1 except for adding columns and data updates.
+- The export side is significantly more flexible now, supporting ancestor‐aware logic and partial-labeled data.  
+- Each new export job typically has its own wrapper script referencing the relevant `VERSION_VALUE`, `RELEASE_VALUE`, region, and clade parameters.

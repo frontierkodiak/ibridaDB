@@ -139,13 +139,15 @@ Below are the most commonly used variables. **All** variables are read in the wr
   - **Usage**: Set in `regional_base.sh`. Defaults to `true` in most wrappers to increase data coverage.
 
 - **`RG_FILTER_MODE`**  
-  - **Description**: Controls how research-grade vs. non-research observations are ultimately included.  
+  - **Description**: Controls how research-grade vs. non-research observations are ultimately included in the final `<EXPORT_GROUP>_observations`.  
   - **Possible Values**:
-    1. `ONLY_RESEARCH` — Only research-grade observations.  
-    2. `ALL` — Include all.  
-    3. `ALL_EXCLUDE_SPECIES_NON_RESEARCH` — Include everything except non-research-grade if rank=species.  
-    4. `ONLY_NONRESEARCH` — Only non-research-grade.  
-  - **Usage**: Future expansions will apply this filter in `cladistic.sh`. Currently defaulted to `ALL`.
+    1. `ONLY_RESEARCH` — Only research-grade observations (`quality_grade='research'`).
+    2. `ALL` — Include all observations, regardless of quality_grade.
+    3. `ALL_EXCLUDE_SPECIES_NON_RESEARCH` — Include everything except non-research-grade at the species level (`L10_taxonID` non-null).
+    4. `ONLY_NONRESEARCH` — Include only non-research-grade (`quality_grade!='research'`).
+    5. `ONLY_NONRESEARCH_EXCLUDE_SPECIES` — Include only non-research-grade, but also exclude species-level assignments (`quality_grade!='research' AND L10_taxonID IS NULL`).
+    6. `ONLY_NONRESEARCH_WIPE_SPECIES_LABEL` — Include only non-research-grade, but keep any records with a species-level guess. The `L10_taxonID` is forcibly set to `NULL` so the model does not see a species label.  
+  - **Usage**: `cladistic.sh` uses a SQL CASE block to apply the correct filter logic. If the mode is unrecognized, it defaults to `ALL`. The final CSV export currently retains a separate step that filters photos by research-grade for sampling (e.g., `o.quality_grade='research'`), so you may wish to unify that logic if desired.
 
 ---
 
@@ -199,5 +201,5 @@ Below is the **script-by-script** overview:
 
 4. **`cladistic.sh`**  
    - Loads `clade_defns.sh` to interpret `CLADE`, `METACLADE`, or `MACROCLADE`.  
-   - Joins `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs` to `expanded_taxa` and filters for active taxa matching the clade condition. Produces `<EXPORT_GROUP>_observations`.  
+   - Joins `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs` to `expanded_taxa` and filters for active taxa matching the clade condition. Applies `RG_FILTER_MODE` to the final table. Produces `<EXPORT_GROUP>_observations`.  
    - Exports a CSV with photo metadata, applying `PRIMARY_ONLY` and random sampling of up to `MAX_RN` observations per species.

@@ -9,11 +9,7 @@
 #  4) Writing a unified export summary (environment variables + final stats)
 #  5) Optionally copying the wrapper script for reproducibility
 #
-# CLARIFY: We assume no sensitive env vars need filtering. If you store credentials,
-#          you may want to exclude them from the final summary.
-#
-# ASSUMPTION: The user always sets WRAPPER_PATH="$0" in their wrapper, so we
-#             can copy the original wrapper script here.
+# NOTE: Now references new naming logic for ancestor-aware approach.
 
 source "${BASE_DIR}/common/functions.sh"
 
@@ -32,6 +28,10 @@ for var in "${required_vars[@]}"; do
     fi
 done
 
+# We also note optional env vars:
+# ANCESTOR_ROOT_RANKLEVEL, MIN_OCCURRENCES_PER_RANK
+# They can be empty or set. We'll handle them in cladistic/regional_base.
+
 print_progress "Creating export directory structure"
 EXPORT_DIR="${CONTAINER_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
 HOST_EXPORT_DIR="${HOST_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
@@ -48,19 +48,32 @@ BEGIN
     END IF;
 END \$\$;"
 
-# If user wants to skip region creation, check if the table already exists
+overall_start=$(date +%s)
+regional_start=$(date +%s)
+
+# We'll check for presence of the final table we plan to produce
+# if user sets SKIP_REGIONAL_BASE=true
+# New naming might be: ${REGION_TAG}_min${MIN_OBS}_all_sp_and_ancestors_obs
+# or some variant. # CLARIFY: We assume user wants to skip only if that table is found.
+
+BASE_TABLE_NAME="${REGION_TAG}_min${MIN_OBS}_all_sp_and_ancestors_obs"
+# CLARIFY: If we incorporate INCLUDE_OUT_OF_REGION_OBS in the name, do so:
+# if [ "${INCLUDE_OUT_OF_REGION_OBS}" = "true" ]; then
+#   BASE_TABLE_NAME="${REGION_TAG}_min${MIN_OBS}_all_sp_and_ancestors_obs_ioorTrue"
+# fi
+
 if [ "${SKIP_REGIONAL_BASE}" = "true" ]; then
     print_progress "SKIP_REGIONAL_BASE=true: Checking existing tables..."
 
     table_check=$(execute_sql "SELECT 1
       FROM pg_catalog.pg_tables
       WHERE schemaname = 'public'
-        AND tablename = '${REGION_TAG}_min${MIN_OBS}_all_taxa_obs'
+        AND tablename = '${BASE_TABLE_NAME}'
       LIMIT 1;")
 
     if [[ "$table_check" =~ "1" ]]; then
-        print_progress "Table found, checking row count..."
-        row_count=$(execute_sql "SELECT count(*) as cnt FROM \"${REGION_TAG}_min${MIN_OBS}_all_taxa_obs\";")
+        print_progress "Table ${BASE_TABLE_NAME} found, checking row count..."
+        row_count=$(execute_sql "SELECT count(*) as cnt FROM \"${BASE_TABLE_NAME}\";")
         numeric=$(echo "$row_count" | awk '/[0-9]/{print $1}' | head -1)
 
         if [[ -n "$numeric" && "$numeric" -gt 0 ]]; then
@@ -69,31 +82,37 @@ if [ "${SKIP_REGIONAL_BASE}" = "true" ]; then
         else
             print_progress "Table is empty; re-creating..."
             source "${BASE_DIR}/common/regional_base.sh"
-            send_notification "${REGION_TAG} regional base tables created"
+            send_notification "${REGION_TAG} ancestor-aware base tables created"
         fi
     else
         print_progress "Table not found; re-creating the regional base."
         source "${BASE_DIR}/common/regional_base.sh"
-        send_notification "${REGION_TAG} regional base tables created"
+        send_notification "${REGION_TAG} ancestor-aware base tables created"
     fi
 else
-    print_progress "Creating regional base tables"
+    print_progress "Creating ancestor-aware regional base tables"
     source "${BASE_DIR}/common/regional_base.sh"
-    send_notification "${REGION_TAG} regional base tables created"
+    send_notification "${REGION_TAG} ancestor-aware base tables created"
 fi
 
-# Run cladistic filtering
+regional_end=$(date +%s)
+regional_secs=$(( regional_end - regional_start ))
+print_progress "Regional base step took ${regional_secs} seconds"
+
+# Now run cladistic
+cladistic_start=$(date +%s)
 print_progress "Applying cladistic filters"
 source "${BASE_DIR}/common/cladistic.sh"
 send_notification "${EXPORT_GROUP} cladistic filtering complete"
 
-# -------------------------------------------------------------------------
+cladistic_end=$(date +%s)
+cladistic_secs=$(( cladistic_end - cladistic_start ))
+print_progress "Cladistic filtering step took ${cladistic_secs} seconds"
+
 # Single unified export summary
-# -------------------------------------------------------------------------
+stats_start=$(date +%s)
 print_progress "Creating unified export summary"
 
-# 1) Gather final table stats from <EXPORT_GROUP>_observations
-#    If you want more complicated breakdowns, define them here or add queries.
 STATS=$(execute_sql "
 WITH export_stats AS (
     SELECT 
@@ -108,7 +127,6 @@ SELECT format(
 )
 FROM export_stats;")
 
-# 2) Write summary file
 SUMMARY_FILE="${HOST_EXPORT_DIR}/${EXPORT_GROUP}_export_summary.txt"
 {
   echo "Export Summary"
@@ -122,16 +140,33 @@ SUMMARY_FILE="${HOST_EXPORT_DIR}/${EXPORT_GROUP}_export_summary.txt"
   echo "SKIP_REGIONAL_BASE: ${SKIP_REGIONAL_BASE}"
   echo "INCLUDE_OUT_OF_REGION_OBS: ${INCLUDE_OUT_OF_REGION_OBS}"
   echo "RG_FILTER_MODE: ${RG_FILTER_MODE}"
+  echo "ANCESTOR_ROOT_RANKLEVEL: ${ANCESTOR_ROOT_RANKLEVEL}"
+  echo "MIN_OCCURRENCES_PER_RANK: ${MIN_OCCURRENCES_PER_RANK}"
   echo ""
   echo "Final Table Stats:"
   echo "${STATS}"
+  echo ""
+  echo "Timing:"
+  echo " - Regional Base: ${regional_secs} seconds"
+  echo " - Cladistic: ${cladistic_secs} seconds"
 } > "${SUMMARY_FILE}"
 
-# 3) Optionally copy the wrapper script for reproducibility
-# If WRAPPER_PATH is not set, skip; if it is set but references something else, skip.
+stats_end=$(date +%s)
+stats_secs=$(( stats_end - stats_start ))
+print_progress "Stats/summary step took ${stats_secs} seconds"
+
+# Optionally copy the wrapper
 if [ -n "${WRAPPER_PATH}" ] && [ -f "${WRAPPER_PATH}" ]; then
     cp "${WRAPPER_PATH}" "${HOST_EXPORT_DIR}/"
 fi
 
-print_progress "Export process complete"
-send_notification "Export for ${EXPORT_GROUP} is complete. Summary at ${SUMMARY_FILE}"
+overall_end=$(date +%s)
+overall_secs=$(( overall_end - overall_start ))
+print_progress "Export process complete (total time: ${overall_secs} seconds)"
+
+{
+  echo " - Summary/Stats Step: ${stats_secs} seconds"
+  echo " - Overall: ${overall_secs} seconds"
+} >> "${SUMMARY_FILE}"
+
+send_notification "Export for ${EXPORT_GROUP} complete. Summary at ${SUMMARY_FILE}"
