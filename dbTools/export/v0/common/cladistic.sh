@@ -8,12 +8,15 @@
 # Main Steps:
 #   1) Load relevant environment variables (CLADE, METACLADE, etc.)
 #   2) Join the ancestor-based table (<REGION_TAG>_min${MIN_OBS}_sp_and_ancestors_obs)
-#   3) Apply RG_FILTER_MODE
-#   4) (Optional) Partial-rank wiping (MIN_OCCURRENCES_PER_RANK)
+#   3) Apply RG_FILTER_MODE (including optional wiping of species-level IDs if requested)
+#   4) (Optional) Partial-rank wiping (MIN_OCCURRENCES_PER_RANK) for L20, L30, and L40
 #   5) Export final CSV with union-based approach (research species vs. everything else)
 #
-# The final summary stats are handled by main.sh, so we only create the
-# <EXPORT_GROUP>_observations table and do the CSV export here.
+# NOTE:
+#  - The final summary stats are handled by main.sh.
+#  - If MIN_OCCURRENCES_PER_RANK is unset or == -1, we skip the partial-rank wiping step.
+#  - We only wipe L20, L30, and L40 to keep performance manageable (and preserve class-level ranks).
+#  - If future expansions require more ranks, the logic below can be extended easily.
 
 source "${BASE_DIR}/common/functions.sh"
 source "${BASE_DIR}/common/clade_defns.sh"
@@ -21,7 +24,9 @@ source "${BASE_DIR}/common/clade_defns.sh"
 CLADE_CONDITION="$(get_clade_condition)"
 print_progress "Creating filtered tables for ${EXPORT_GROUP}"
 
+# -------------------------------------------------------------------------------
 # 0) Table references and columns
+# -------------------------------------------------------------------------------
 ANCESTOR_BASE_TABLE="${REGION_TAG}_min${MIN_OBS}_sp_and_ancestors_obs"
 TABLE_NAME="${EXPORT_GROUP}_observations"
 OBS_COLUMNS="$(get_obs_columns)"
@@ -116,31 +121,39 @@ WHERE e.\"taxonActive\" = TRUE
 "
 
 # -------------------------------------------------------------------------------
-# Step D) (Optional) Partial-rank wiping if MIN_OCCURRENCES_PER_RANK is set
+# Step D) (Optional) Partial-rank wiping for L20, L30, L40
+#    - If MIN_OCCURRENCES_PER_RANK is empty or == -1, skip wiping.
+#    - If set >= 1, we compute usage for L20_taxonID, L30_taxonID, and L40_taxonID
+#      and nullify them if usage < MIN_OCCURRENCES_PER_RANK.
 # -------------------------------------------------------------------------------
-if [ -z "${MIN_OCCURRENCES_PER_RANK}" ]; then
-  print_progress "MIN_OCCURRENCES_PER_RANK not set; skipping partial-rank wipe."
+if [ -z "${MIN_OCCURRENCES_PER_RANK}" ] || [ "${MIN_OCCURRENCES_PER_RANK}" = "-1" ]; then
+  print_progress "Skipping partial-rank wipe (MIN_OCCURRENCES_PER_RANK not set or == -1)."
 else
   print_progress "Applying partial-rank wipe with threshold = ${MIN_OCCURRENCES_PER_RANK}"
-  # TODO: Build usage counts for each rank column, e.g. L20_taxonID, L30_taxonID, etc.
-  # Then nullify columns that don't meet the threshold.
-  # Implementation example:
-  # usage table, then update the main table. Repeated for each rank col.
-  #
-  # For brevity, not fully implemented. Pseudocode:
-  # execute_sql "
-  #   WITH usage_ct AS (
-  #     SELECT \"L20_taxonID\" as tid, COUNT(*) as c
-  #     FROM \"${TABLE_NAME}\"
-  #     WHERE \"L20_taxonID\" IS NOT NULL
-  #     GROUP BY 1
-  #   )
-  #   UPDATE \"${TABLE_NAME}\"
-  #   SET \"L20_taxonID\" = NULL
-  #   FROM usage_ct
-  #   WHERE usage_ct.tid = \"${TABLE_NAME}\".\"L20_taxonID\"
-  #     AND usage_ct.c < ${MIN_OCCURRENCES_PER_RANK};
-  # "
+
+  # We only do this for major ranks L20, L30, L40. This helps performance
+  # and is the specified requirement that we do not handle minor ranks or class (L50).
+  RANK_COLS=("L20_taxonID" "L30_taxonID" "L40_taxonID")
+
+  for rc in "${RANK_COLS[@]}"; do
+    print_progress "Wiping low-occurrence ${rc} if usage < ${MIN_OCCURRENCES_PER_RANK}"
+
+    # Implementation approach: compute usage counts, then update
+    # We'll do it in a single statement for each rc:
+    execute_sql "
+    WITH usage_ct AS (
+      SELECT \"${rc}\" as tid, COUNT(*) as c
+      FROM \"${TABLE_NAME}\"
+      WHERE \"${rc}\" IS NOT NULL
+      GROUP BY 1
+    )
+    UPDATE \"${TABLE_NAME}\"
+    SET \"${rc}\" = NULL
+    FROM usage_ct
+    WHERE usage_ct.tid = \"${TABLE_NAME}\".\"${rc}\"
+      AND usage_ct.c < ${MIN_OCCURRENCES_PER_RANK};
+    "
+  done
 fi
 
 # -------------------------------------------------------------------------------

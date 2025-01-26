@@ -58,9 +58,9 @@ regional_start=$(date +%s)
 
 BASE_TABLE_NAME="${REGION_TAG}_min${MIN_OBS}_all_sp_and_ancestors_obs"
 # CLARIFY: If we incorporate INCLUDE_OUT_OF_REGION_OBS in the name, do so:
-# if [ "${INCLUDE_OUT_OF_REGION_OBS}" = "true" ]; then
-#   BASE_TABLE_NAME="${REGION_TAG}_min${MIN_OBS}_all_sp_and_ancestors_obs_ioorTrue"
-# fi
+if [ "${INCLUDE_OUT_OF_REGION_OBS}" = "true" ]; then
+  BASE_TABLE_NAME="${REGION_TAG}_min${MIN_OBS}_all_sp_and_ancestors_obs_ioorTrue"
+fi
 
 if [ "${SKIP_REGIONAL_BASE}" = "true" ]; then
     print_progress "SKIP_REGIONAL_BASE=true: Checking existing tables..."
