@@ -38,12 +38,12 @@ export MAX_RN=3000
 export PRIMARY_ONLY=true
 
 # We’ll use a metaclade here as an example
-export METACLADE="primary_terrestrial_arthropoda"
-export EXPORT_GROUP="${METACLADE}"
+export METACLADE="pta" # primary_terrestrial_arthropoda
+export EXPORT_GROUP="pta_non_rg"
 
 # Additional flags
 export PROCESS_OTHER=false
-export SKIP_REGIONAL_BASE=true  # typically used for successive cladistic exports
+export SKIP_REGIONAL_BASE=false  # typically used for successive cladistic exports
 
 # ---[ NEW ENV VARS ]---
 # Whether to include out-of-region observations in the final dataset
@@ -53,6 +53,9 @@ export INCLUDE_OUT_OF_REGION_OBS=false
 # For now, we default to ALL; future steps will integrate it
 export RG_FILTER_MODE="ONLY_NONRESEARCH_WIPE_SPECIES_LABEL"
 
+export MIN_OCCURRENCES_PER_RANK=50
+export INCLUDE_MINOR_RANKS_IN_ANCESTORS=false
+
 log_message "Region: ${REGION_TAG}"
 log_message "Min Observations: ${MIN_OBS}"
 log_message "Max Random Number: ${MAX_RN}"
@@ -60,7 +63,8 @@ log_message "Export Group: ${EXPORT_GROUP}"
 log_message "Skip Regional Base Creation: ${SKIP_REGIONAL_BASE}"
 log_message "Include Out-of-Region Obs: ${INCLUDE_OUT_OF_REGION_OBS}"
 log_message "RG Filter Mode: ${RG_FILTER_MODE}"
-
+log_message "Min Occurrences per Rank: ${MIN_OCCURRENCES_PER_RANK}"
+log_message "Include Minor Ranks in Ancestors: ${INCLUDE_MINOR_RANKS_IN_ANCESTORS}"
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------

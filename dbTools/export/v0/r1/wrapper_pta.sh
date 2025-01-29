@@ -38,8 +38,8 @@ export MAX_RN=3000
 export PRIMARY_ONLY=true
 
 # We’ll use a metaclade here as an example
-export METACLADE="primary_terrestrial_arthropoda"
-export EXPORT_GROUP="${METACLADE}"
+export METACLADE="pta" # primary_terrestrial_arthropoda
+export EXPORT_GROUP="pta"
 
 # Additional flags
 export PROCESS_OTHER=false

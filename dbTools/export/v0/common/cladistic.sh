@@ -2,48 +2,82 @@
 # -------------------------------------------------------------------------------
 # cladistic.sh
 # -------------------------------------------------------------------------------
-# Creates a final observation subset for a specified clade/metaclade,
-# referencing the "expanded_taxa" table in an ancestor-aware manner.
+# Creates a final observation subset for the user-specified clade/metaclade,
+# referencing the "expanded_taxa" table. The input table for this script is
+# typically provided in ANCESTORS_OBS_TABLE, which contains:
 #
-# Main Steps:
-#   1) Load relevant environment variables (CLADE, METACLADE, etc.)
-#   2) Join the ancestor-based table (<REGION_TAG>_min${MIN_OBS}_sp_and_ancestors_obs)
-#   3) Apply RG_FILTER_MODE (including optional wiping of species-level IDs if requested)
-#   4) (Optional) Partial-rank wiping (MIN_OCCURRENCES_PER_RANK) for L20, L30, and L40
-#   5) Export final CSV with union-based approach (research species vs. everything else)
+#   - All observations of species that passed the MIN_OBS threshold in the
+#     specified region (REGION_TAG bounding box) plus all their ancestral
+#     taxonIDs, up to the root rank(s) of the chosen CLADE/METACLADE.
 #
-# NOTE:
-#  - The final summary stats are handled by main.sh.
-#  - If MIN_OCCURRENCES_PER_RANK is unset or == -1, we skip the partial-rank wiping step.
-#  - We only wipe L20, L30, and L40 to keep performance manageable (and preserve class-level ranks).
-#  - If future expansions require more ranks, the logic below can be extended easily.
+#   - If INCLUDE_OUT_OF_REGION_OBS=true, that table may also include
+#     observations that fall outside the bounding box but belong to those
+#     same species or ancestor taxonIDs. Otherwise, the bounding box is
+#     re-applied to keep only in-bounds data.
+#
+#   - If INCLUDE_MINOR_RANKS_IN_ANCESTORS=false, the table only includes
+#     major (decade) ranks up to the boundary. If =true, minor ranks are
+#     included.
+#
+#   - This table is named like:
+#       ${REGION_TAG}_min${MIN_OBS}_sp_and_ancestors_obs_${CLADE_ID}_${RANK_MODE}
+#     but we do NOT compute that name here. Instead, we read the environment
+#     variable $ANCESTORS_OBS_TABLE, which is set by regional_base.sh.
+#
+# Once we have that ancestor-based observation set, we:
+#   1) Create an export-specific table named <EXPORT_GROUP>_observations.
+#   2) Possibly filter out or rewrite certain rows based on RG_FILTER_MODE
+#      (e.g. wiping species-level IDs if not research grade).
+#   3) (Optional) Wipe partial ranks (L20, L30, L40) if they have fewer than
+#      MIN_OCCURRENCES_PER_RANK occurrences.
+#   4) Export the final dataset to CSV, applying a maximum row limit per
+#      species (MAX_RN) for research-grade rows, and unioning that with
+#      everything else.
+#
+# Environment Variables Used:
+#   - ANCESTORS_OBS_TABLE: The table containing the region/clade-specific
+#                          ancestor-based observations. (Set by regional_base.sh)
+#   - EXPORT_GROUP:        Used as a prefix for the final table name
+#   - RG_FILTER_MODE:      Determines how we handle non-research vs. research rows
+#   - MIN_OCCURRENCES_PER_RANK: If set >= 1, triggers partial-rank wiping for L20/L30/L40
+#   - MAX_RN:              The maximum number of random research-grade rows to keep
+#   - PRIMARY_ONLY:        If true, we only keep photo records where position=0
+#   - EXPORT_DIR:          Destination for the CSV export
+#   - DB_CONTAINER, DB_USER, DB_NAME, etc. for database connections
+#
+# -------------------------------------------------------------------------------
+set -e
 
 source "${BASE_DIR}/common/functions.sh"
-source "${BASE_DIR}/common/clade_defns.sh"
-
-CLADE_CONDITION="$(get_clade_condition)"
-print_progress "Creating filtered tables for ${EXPORT_GROUP}"
+source "${BASE_DIR}/common/clade_defns.sh"  # only needed if we reference get_clade_condition, etc.
 
 # -------------------------------------------------------------------------------
-# 0) Table references and columns
+# 0) Validate that ANCESTORS_OBS_TABLE is set
 # -------------------------------------------------------------------------------
-ANCESTOR_BASE_TABLE="${REGION_TAG}_min${MIN_OBS}_sp_and_ancestors_obs"
+if [ -z "${ANCESTORS_OBS_TABLE}" ]; then
+  echo "ERROR: cladistic.sh requires ANCESTORS_OBS_TABLE to be set (exported by regional_base.sh)."
+  exit 1
+fi
+
+print_progress "cladistic.sh: Using ancestor-based table = ${ANCESTORS_OBS_TABLE}"
+
+# We'll build a final table named <EXPORT_GROUP>_observations
 TABLE_NAME="${EXPORT_GROUP}_observations"
 OBS_COLUMNS="$(get_obs_columns)"
 
 # -------------------------------------------------------------------------------
-# Step A) Drop any old table
+# Step A) Drop any old final table
 # -------------------------------------------------------------------------------
 execute_sql "
 DROP TABLE IF EXISTS \"${TABLE_NAME}\" CASCADE;
 "
 
-send_notification "Joining table ${ANCESTOR_BASE_TABLE} to expanded_taxa"
-print_progress "Joining table ${ANCESTOR_BASE_TABLE} to expanded_taxa"
+# -------------------------------------------------------------------------------
+# Step B) Construct a WHERE clause & rewriting logic based on RG_FILTER_MODE
+# -------------------------------------------------------------------------------
+# Typically, we interpret RG_FILTER_MODE to decide how to handle research vs. non-research
+# observations. Possibly we wipe the L10_taxonID for non-research, or exclude them, etc.
 
-# -------------------------------------------------------------------------------
-# Step B) Construct WHERE clause & column rewriting based on RG_FILTER_MODE
-# -------------------------------------------------------------------------------
 rg_where_condition="TRUE"
 rg_l10_col="e.\"L10_taxonID\""
 
@@ -72,13 +106,19 @@ case "${RG_FILTER_MODE}" in
     ;;
 esac
 
+print_progress "Building final table \"${TABLE_NAME}\" from ${ANCESTORS_OBS_TABLE}"
+
 # -------------------------------------------------------------------------------
-# Step C) Create final table <EXPORT_GROUP>_observations
+# Step C) Create <EXPORT_GROUP>_observations table by joining to expanded_taxa
 # -------------------------------------------------------------------------------
+# In theory, ${ANCESTORS_OBS_TABLE} has taxon_id referencing the desired region/clade
+# observations. We join with expanded_taxa for additional columns. Then we apply
+# RG_FILTER_MODE logic.
+
 execute_sql "
 CREATE TABLE \"${TABLE_NAME}\" AS
 SELECT
-    ${OBS_COLUMNS},
+    o.${OBS_COLUMNS},
     e.\"taxonID\"       AS expanded_taxonID,
     e.\"rankLevel\"     AS expanded_rankLevel,
     e.\"name\"          AS expanded_name,
@@ -113,33 +153,23 @@ SELECT
     e.\"L60_taxonID\",
     e.\"L67_taxonID\",
     e.\"L70_taxonID\"
-FROM \"${ANCESTOR_BASE_TABLE}\" o
-JOIN \"expanded_taxa\" e ON e.\"taxonID\" = o.taxon_id
+FROM \"${ANCESTORS_OBS_TABLE}\" o
+JOIN expanded_taxa e ON e.\"taxonID\" = o.taxon_id
 WHERE e.\"taxonActive\" = TRUE
-  AND ${CLADE_CONDITION}
   AND (${rg_where_condition});
 "
 
 # -------------------------------------------------------------------------------
-# Step D) (Optional) Partial-rank wiping for L20, L30, L40
-#    - If MIN_OCCURRENCES_PER_RANK is empty or == -1, skip wiping.
-#    - If set >= 1, we compute usage for L20_taxonID, L30_taxonID, and L40_taxonID
-#      and nullify them if usage < MIN_OCCURRENCES_PER_RANK.
+# Step D) Optional Partial-Rank Wiping (L20, L30, L40) if MIN_OCCURRENCES_PER_RANK >= 1
 # -------------------------------------------------------------------------------
 if [ -z "${MIN_OCCURRENCES_PER_RANK}" ] || [ "${MIN_OCCURRENCES_PER_RANK}" = "-1" ]; then
   print_progress "Skipping partial-rank wipe (MIN_OCCURRENCES_PER_RANK not set or == -1)."
 else
   print_progress "Applying partial-rank wipe with threshold = ${MIN_OCCURRENCES_PER_RANK}"
 
-  # We only do this for major ranks L20, L30, L40. This helps performance
-  # and is the specified requirement that we do not handle minor ranks or class (L50).
   RANK_COLS=("L20_taxonID" "L30_taxonID" "L40_taxonID")
-
   for rc in "${RANK_COLS[@]}"; do
     print_progress "Wiping low-occurrence ${rc} if usage < ${MIN_OCCURRENCES_PER_RANK}"
-
-    # Implementation approach: compute usage counts, then update
-    # We'll do it in a single statement for each rc:
     execute_sql "
     WITH usage_ct AS (
       SELECT \"${rc}\" as tid, COUNT(*) as c
@@ -157,10 +187,10 @@ else
 fi
 
 # -------------------------------------------------------------------------------
-# Step E) Export final CSV with union of research-limited vs. everything else
+# Step E) Export Final CSV with a max row limit per species for research-grade
 # -------------------------------------------------------------------------------
-send_notification "Exporting filtered observations"
-print_progress "Exporting filtered observations"
+send_notification "cladistic.sh: Exporting filtered observations"
+print_progress "cladistic.sh: Exporting filtered observations"
 
 pos_condition="TRUE"
 if [ "${PRIMARY_ONLY}" = true ]; then
@@ -207,12 +237,30 @@ COPY (
       ${pos_condition}
       AND NOT (o.quality_grade='research' AND o.\"L10_taxonID\" IS NOT NULL)
   )
-  SELECT * FROM capped_research_species
+  SELECT
+    o.*,
+    photo_uuid,
+    photo_id,
+    extension,
+    license,
+    width,
+    height,
+    position
+  FROM capped_research_species o
   WHERE rn <= ${MAX_RN}
   UNION ALL
-  SELECT * FROM everything_else
+  SELECT
+    o.*,
+    photo_uuid,
+    photo_id,
+    extension,
+    license,
+    width,
+    height,
+    position
+  FROM everything_else o
 ) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
 WITH (FORMAT CSV, HEADER, DELIMITER E'\t');
 "
 
-print_progress "Cladistic filtering complete"
+print_progress "cladistic.sh: Filtering & export complete"

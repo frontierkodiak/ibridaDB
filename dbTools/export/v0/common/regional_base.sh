@@ -1,258 +1,383 @@
 #!/bin/bash
-# --------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # regional_base.sh
-# --------------------------------------------------------------------------------
-# This script implements the ancestor-aware approach.
+# ------------------------------------------------------------------------------
+# Generates region-specific species tables and associated ancestor sets,
+# factoring in the user's clade/metaclade and the major/minor rank mode.
+#
 # Steps:
-#   1) <REGION_TAG>_min${MIN_OBS}_all_sp:
-#      The set of species (rank_level=10) that have at least MIN_OBS
-#      research-grade observations within the bounding box.
-#   2) <REGION_TAG>_min${MIN_OBS}_all_sp_and_ancestors:
-#      The union of those species plus their ancestors (up to user-defined root).
-#   3) <REGION_TAG>_min${MIN_OBS}_sp_and_ancestors_obs:
-#      All observations referencing the union set. If INCLUDE_OUT_OF_REGION_OBS=true,
-#      do NOT re-apply bounding box; else re-apply.
+#   1) Parse environment variables and region coordinates.
+#   2) Build or reuse the <REGION_TAG>_min<MIN_OBS>_all_sp table (region + MIN_OBS only).
+#   3) Parse clade condition (single or multi-root). If multi-root, check overlap.
+#   4) Build or reuse <REGION_TAG>_min<MIN_OBS>_all_sp_and_ancestors_<cladeID>_<mode>
+#   5) Build or reuse <REGION_TAG>_min<MIN_OBS>_sp_and_ancestors_obs_<cladeID>_<mode>
+#   6) Output final info/summary
+#
+# Requires:
+#   - environment variables: DB_NAME, DB_CONTAINER, DB_USER, ...
+#   - script variables: REGION_TAG, MIN_OBS, SKIP_REGIONAL_BASE,
+#     INCLUDE_OUT_OF_REGION_OBS, INCLUDE_MINOR_RANKS_IN_ANCESTORS,
+#     etc.
+#
+# ------------------------------------------------------------------------------
 
 source "${BASE_DIR}/common/functions.sh"
+source "${BASE_DIR}/common/clade_defns.sh"
+source "${BASE_DIR}/common/clade_helpers.sh"
+source "${BASE_DIR}/common/region_defns.sh"
 
-# We assume the user sets REGION_TAG, MIN_OBS, INCLUDE_OUT_OF_REGION_OBS, etc.
-# CLARIFY: We also check for ANCESTOR_ROOT_RANKLEVEL. If empty, we might default to 70.
+# ---------------------------------------------------------------------------
+# 0) Validate Environment + Setup
+# ---------------------------------------------------------------------------
+: "${REGION_TAG:?Error: REGION_TAG is not set}"
+: "${MIN_OBS:?Error: MIN_OBS is not set}"
+: "${SKIP_REGIONAL_BASE:?Error: SKIP_REGIONAL_BASE is not set}"
+: "${INCLUDE_OUT_OF_REGION_OBS:?Error: INCLUDE_OUT_OF_REGION_OBS is not set}"
+: "${INCLUDE_MINOR_RANKS_IN_ANCESTORS:?Error: INCLUDE_MINOR_RANKS_IN_ANCESTORS is not set}"
 
-if [ -z "${ANCESTOR_ROOT_RANKLEVEL}" ]; then
-  # If user doesn't specify a root rank, assume full ancestry up to 70
-  export ANCESTOR_ROOT_RANKLEVEL=70
-fi
+print_progress "=== regional_base.sh: Starting Ancestor-Aware Regional Base Generation ==="
 
-# Function sets the bounding-box coords for $REGION_TAG
-set_region_coordinates() {
-  case "$REGION_TAG" in
-    "NAfull")
-      XMIN=-169.453125
-      YMIN=12.211180
-      XMAX=-23.554688
-      YMAX=84.897147
-      ;;
-    "EURwest")
-      XMIN=-12.128906
-      YMIN=40.245992
-      XMAX=12.480469
-      YMAX=60.586967
-      ;;
-    "EURnorth")
-      XMIN=-25.927734
-      YMIN=54.673831
-      XMAX=45.966797
-      YMAX=71.357067
-      ;;
-    "EUReast")
-      XMIN=10.722656
-      YMIN=41.771312
-      XMAX=39.550781
-      YMAX=59.977005
-      ;;
-    "EURfull")
-      XMIN=-30.761719
-      YMIN=33.284620
-      XMAX=43.593750
-      YMAX=72.262310
-      ;;
-    "MED")
-      XMIN=-16.259766
-      YMIN=29.916852
-      XMAX=36.474609
-      YMAX=46.316584
-      ;;
-    "AUSfull")
-      XMIN=111.269531
-      YMIN=-47.989922
-      XMAX=181.230469
-      YMAX=-9.622414
-      ;;
-    "ASIAse")
-      XMIN=82.441406
-      YMIN=-11.523088
-      XMAX=153.457031
-      YMAX=28.613459
-      ;;
-    "ASIAeast")
-      XMIN=462.304688
-      YMIN=23.241346
-      XMAX=550.195313
-      YMAX=78.630006
-      ;;
-    "ASIAcentral")
-      XMIN=408.515625
-      YMIN=36.031332
-      XMAX=467.753906
-      YMAX=76.142958
-      ;;
-    "ASIAsouth")
-      XMIN=420.468750
-      YMIN=1.581830
-      XMAX=455.097656
-      YMAX=39.232253
-      ;;
-    "ASIAsw")
-      XMIN=386.718750
-      YMIN=12.897489
-      XMAX=423.281250
-      YMAX=48.922499
-      ;;
-    "ASIA_nw")
-      XMIN=393.046875
-      YMIN=46.800059
-      XMAX=473.203125
-      YMAX=81.621352
-      ;;
-    "SAfull")
-      XMIN=271.230469
-      YMIN=-57.040730
-      XMAX=330.644531
-      YMAX=15.114553
-      ;;
-    "AFRfull")
-      XMIN=339.082031
-      YMIN=-37.718590
-      XMAX=421.699219
-      YMAX=39.232253
-      ;;
-    *)
-      echo "Unknown REGION_TAG: $REGION_TAG"
-      exit 1
-      ;;
-  esac
+# Retrieve bounding box for the region
+get_region_coordinates || {
+  echo "Failed to retrieve bounding box for REGION_TAG=${REGION_TAG}" >&2
+  exit 1
 }
 
-set_region_coordinates
+print_progress "Using bounding box => XMIN=${XMIN}, YMIN=${YMIN}, XMAX=${XMAX}, YMAX=${YMAX}"
 
-# We'll create 3 tables: all_sp, all_sp_and_ancestors, sp_and_ancestors_obs
-print_progress "Dropping existing tables"
-execute_sql "
-DROP TABLE IF EXISTS \"${REGION_TAG}_min${MIN_OBS}_all_sp\" CASCADE;
-DROP TABLE IF EXISTS \"${REGION_TAG}_min${MIN_OBS}_all_sp_and_ancestors\" CASCADE;
-DROP TABLE IF EXISTS \"${REGION_TAG}_min${MIN_OBS}_sp_and_ancestors_obs\" CASCADE;
-"
+# ---------------------------------------------------------------------------
+# 1) Build or Reuse <REGION_TAG>_min<MIN_OBS>_all_sp
+# ---------------------------------------------------------------------------
+ALL_SP_TABLE="${REGION_TAG}_min${MIN_OBS}_all_sp"
 
-# 1) <REGION_TAG>_min${MIN_OBS}_all_sp
-print_progress "Creating table \"${REGION_TAG}_min${MIN_OBS}_all_sp\""
-execute_sql "
-CREATE TABLE \"${REGION_TAG}_min${MIN_OBS}_all_sp\" AS
-SELECT s.taxon_id
-FROM observations s
-JOIN taxa t ON t.taxon_id = s.taxon_id
-WHERE t.rank_level = 10
-  AND s.quality_grade = 'research'
-  AND s.geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326)
-GROUP BY s.taxon_id
-HAVING COUNT(s.observation_uuid) >= ${MIN_OBS};
-"
+check_and_build_all_sp() {
+  # Check existence
+  local table_exists
+  table_exists="$(execute_sql "
+    SELECT 1 FROM pg_catalog.pg_tables
+    WHERE schemaname='public'
+      AND tablename='${ALL_SP_TABLE}'
+    LIMIT 1;
+  ")"
 
-# 2) <REGION_TAG>_min${MIN_OBS}_all_sp_and_ancestors
-# We'll gather each species from above, plus all its ancestors up to ANCESTOR_ROOT_RANKLEVEL
-print_progress "Building ancestor set for species"
+  if [[ "${table_exists}" =~ 1 ]]; then
+    # If table exists, check row count
+    local row_count
+    row_count="$(execute_sql "
+      SELECT count(*) FROM \"${ALL_SP_TABLE}\";
+    ")"
+    local numeric_count
+    numeric_count="$(echo "${row_count}" | awk '/[0-9]/{print $1}' | head -1)"
 
-execute_sql "
-CREATE TABLE \"${REGION_TAG}_min${MIN_OBS}_all_sp_and_ancestors\" (
-  taxon_id integer PRIMARY KEY
-);
-"
+    if [[ -n "${numeric_count}" && "${numeric_count}" -gt 0 ]]; then
+      print_progress "Table ${ALL_SP_TABLE} exists with ${numeric_count} rows"
+      if [ "${SKIP_REGIONAL_BASE}" = "true" ]; then
+        print_progress "SKIP_REGIONAL_BASE=true => reusing existing _all_sp table"
+        return 0
+      else
+        print_progress "Not skipping => dropping and recreating"
+      fi
+    fi
+  fi
 
-# We'll do a single set-based insertion:
-execute_sql "
-WITH sp_list AS (
-  SELECT taxon_id
-  FROM \"${REGION_TAG}_min${MIN_OBS}_all_sp\"
-),
- unravel AS (
-  SELECT
-    e.\"taxonID\" as species_id,
-    e.\"L5_taxonID\", e.\"L10_taxonID\", e.\"L11_taxonID\",
-    e.\"L12_taxonID\", e.\"L13_taxonID\", e.\"L15_taxonID\",
-    e.\"L20_taxonID\", e.\"L24_taxonID\", e.\"L25_taxonID\",
-    e.\"L26_taxonID\", e.\"L27_taxonID\", e.\"L30_taxonID\",
-    e.\"L32_taxonID\", e.\"L33_taxonID\", e.\"L33_5_taxonID\",
-    e.\"L34_taxonID\", e.\"L34_5_taxonID\", e.\"L35_taxonID\",
-    e.\"L37_taxonID\", e.\"L40_taxonID\", e.\"L43_taxonID\",
-    e.\"L44_taxonID\", e.\"L45_taxonID\", e.\"L47_taxonID\",
-    e.\"L50_taxonID\", e.\"L53_taxonID\", e.\"L57_taxonID\",
-    e.\"L60_taxonID\", e.\"L67_taxonID\", e.\"L70_taxonID\"
-  FROM expanded_taxa e
-  JOIN sp_list ON e.\"taxonID\" = sp_list.taxon_id
- )
-SELECT DISTINCT UNNEST(array[
-  unravel.species_id,
-  CASE WHEN \"rankLevel\"(unravel.L5_taxonID)  <= ${ANCESTOR_ROOT_RANKLEVEL} THEN unravel.L5_taxonID  ELSE NULL END,
-  CASE WHEN \"rankLevel\"(unravel.L10_taxonID) <= ${ANCESTOR_ROOT_RANKLEVEL} THEN unravel.L10_taxonID ELSE NULL END,
-  unravel.L11_taxonID,
-  unravel.L12_taxonID,
-  unravel.L13_taxonID,
-  unravel.L15_taxonID,
-  unravel.L20_taxonID,
-  unravel.L24_taxonID,
-  unravel.L25_taxonID,
-  unravel.L26_taxonID,
-  unravel.L27_taxonID,
-  unravel.L30_taxonID,
-  unravel.L32_taxonID,
-  unravel.L33_taxonID,
-  unravel.L33_5_taxonID,
-  unravel.L34_taxonID,
-  unravel.L34_5_taxonID,
-  unravel.L35_taxonID,
-  unravel.L37_taxonID,
-  unravel.L40_taxonID,
-  unravel.L43_taxonID,
-  unravel.L44_taxonID,
-  unravel.L45_taxonID,
-  unravel.L47_taxonID,
-  unravel.L50_taxonID,
-  unravel.L53_taxonID,
-  unravel.L57_taxonID,
-  unravel.L60_taxonID,
-  unravel.L67_taxonID,
-  unravel.L70_taxonID
-]) AS taxon_id
-INTO TEMP all_ancestors
-FROM unravel
-WHERE taxon_id IS NOT NULL;
--- CLARIFY: We rely on a custom function rankLevel(taxonID)? We might need a join to expanded_taxa again or store rankLevel in unravel. We'll keep it conceptual for now.
--- In reality, we'd do a more robust approach. This is a conceptual snippet.
---
+  print_progress "Creating (or recreating) table \"${ALL_SP_TABLE}\""
+  execute_sql "DROP TABLE IF EXISTS \"${ALL_SP_TABLE}\" CASCADE;"
 
-INSERT INTO \"${REGION_TAG}_min${MIN_OBS}_all_sp_and_ancestors\"(taxon_id)
-SELECT DISTINCT taxon_id
-FROM all_ancestors
-WHERE taxon_id IS NOT NULL;
-"
+  # Build the table with bounding box + rank_level=10 + MIN_OBS filter
+  execute_sql "
+  CREATE TABLE \"${ALL_SP_TABLE}\" AS
+  SELECT s.taxon_id
+  FROM observations s
+  JOIN taxa t ON t.taxon_id = s.taxon_id
+  WHERE t.rank_level = 10
+    AND s.quality_grade = 'research'
+    AND s.geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326)
+  GROUP BY s.taxon_id
+  HAVING COUNT(s.observation_uuid) >= ${MIN_OBS};
+  "
+}
 
-# 3) Now create the final observation table from those taxonIDs
-#    <REGION_TAG>_min${MIN_OBS}_sp_and_ancestors_obs
-BASE_OBS_TABLE="${REGION_TAG}_min${MIN_OBS}_sp_and_ancestors_obs"
-print_progress "Creating table \"${BASE_OBS_TABLE}\""
-OBS_COLUMNS=$(get_obs_columns)
-echo "Using columns: ${OBS_COLUMNS}"
+check_and_build_all_sp
 
-if [ "${INCLUDE_OUT_OF_REGION_OBS}" = "true" ]; then
+# ---------------------------------------------------------------------------
+# 2) Parse Clade Condition & Check Overlap if Multi-root
+# ---------------------------------------------------------------------------
+CLADE_CONDITION="$(get_clade_condition)"
+print_progress "Clade Condition: ${CLADE_CONDITION}"
+
+root_list=( $(parse_clade_expression "${CLADE_CONDITION}") )
+root_count="${#root_list[@]}"
+print_progress "Found ${root_count} root(s) from the clade condition"
+
+# Decide on a short ID for the clade/metaclade
+# (if you want to embed actual environment variables: e.g. $CLADE or $METACLADE
+#  or parse the user-supplied string from the condition. We'll do a naive approach.)
+if [ -n "${METACLADE}" ]; then
+  CLADE_ID="${METACLADE}"
+elif [ -n "${CLADE}" ]; then
+  CLADE_ID="${CLADE}"
+elif [ -n "${MACROCLADE}" ]; then
+  CLADE_ID="${MACROCLADE}"
+else
+  # fallback if user didn't set anything
+  CLADE_ID="universal"
+fi
+
+# Clean up the clade_id so it doesn't contain spaces or special chars
+CLADE_ID="${CLADE_ID// /_}"
+
+# If multi-root => check overlap
+if [ "${root_count}" -gt 1 ]; then
+  print_progress "Multiple roots => checking independence"
+  check_root_independence "${DB_NAME}" "${root_list[@]}"
+  if [ $? -ne 0 ]; then
+    echo "ERROR: Overlap detected among metaclade roots. Aborting."
+    exit 1
+  fi
+  print_progress "All roots are mutually independent"
+fi
+
+# Decide majorOrMinor string
+if [ "${INCLUDE_MINOR_RANKS_IN_ANCESTORS}" = "true" ]; then
+  RANK_MODE="inclMinor"
+else
+  RANK_MODE="majorOnly"
+fi
+
+# Build final table names
+ANCESTORS_TABLE="${REGION_TAG}_min${MIN_OBS}_all_sp_and_ancestors_${CLADE_ID}_${RANK_MODE}"
+ANCESTORS_OBS_TABLE="${REGION_TAG}_min${MIN_OBS}_sp_and_ancestors_obs_${CLADE_ID}_${RANK_MODE}"
+
+# ---------------------------------------------------------------------------
+# 3) Build or Reuse <REGION_TAG>_min<MIN_OBS>_all_sp_and_ancestors_<cladeID>_<mode>
+# ---------------------------------------------------------------------------
+check_and_build_ancestors() {
+  # 1) Check if the table already exists and skip if user wants SKIP_REGIONAL_BASE
+  local table_exists
+  table_exists="$(execute_sql "
+    SELECT 1 FROM pg_catalog.pg_tables
+    WHERE schemaname='public'
+      AND tablename='${ANCESTORS_TABLE}'
+    LIMIT 1;
+  ")"
+
+  if [[ "${table_exists}" =~ 1 ]]; then
+    local row_count
+    row_count="$(execute_sql "
+      SELECT count(*) FROM \"${ANCESTORS_TABLE}\";
+    ")"
+    local numeric_count
+    numeric_count="$(echo "${row_count}" | awk '/[0-9]/{print $1}' | head -1)"
+
+    if [[ -n "${numeric_count}" && "${numeric_count}" -gt 0 ]]; then
+      print_progress "Table ${ANCESTORS_TABLE} exists with ${numeric_count} rows"
+      if [ "${SKIP_REGIONAL_BASE}" = "true" ]; then
+        print_progress "Skipping creation of ancestors table"
+        return 0
+      else
+        print_progress "Not skipping => dropping and recreating"
+      fi
+    fi
+  fi
+
+  print_progress "Creating table \"${ANCESTORS_TABLE}\""
+  execute_sql "DROP TABLE IF EXISTS \"${ANCESTORS_TABLE}\" CASCADE;"
+  execute_sql "
+  CREATE TABLE \"${ANCESTORS_TABLE}\" (
+    taxon_id integer PRIMARY KEY
+  );
+  "
+
+  # ---------------------------------------------------------------------------
+  # insert_ancestors_for_root():
+  #
+  # For a given single root (rank_part=50, root_taxid=47158, etc.),
+  # we gather all species from <ALL_SP_TABLE> that have e.L50_taxonID=47158,
+  # then unroll their ancestors via CROSS JOIN LATERAL on the columns L5..L70,
+  # look up each ancestor's rankLevel from expanded_taxa, and keep only those
+  # with rankLevel < boundary_rank. Insert them into ANCESTORS_TABLE.
+  # ---------------------------------------------------------------------------
+  local insert_ancestors_for_root
+  insert_ancestors_for_root() {
+    local root_pair="$1"  # e.g. "50=47158"
+    local rank_part="${root_pair%%=*}"
+    local root_taxid="${root_pair##*=}"
+
+    local col_name="L${rank_part}_taxonID"
+
+    # Decide boundary (majorOnly vs. inclMinor)
+    local boundary_rank="$rank_part"
+    if [ "${INCLUDE_MINOR_RANKS_IN_ANCESTORS}" = "false" ]; then
+      boundary_rank="$(get_major_rank_floor "${rank_part}")"
+    fi
+
     execute_sql "
-    CREATE TABLE \"${BASE_OBS_TABLE}\" AS
+    ----------------------------------------------------------------
+    -- 1) Gather species from <ALL_SP_TABLE> that belong to this root
+    ----------------------------------------------------------------
+    DROP TABLE IF EXISTS temp_${root_taxid}_sp_list CASCADE;
+    CREATE TEMP TABLE temp_${root_taxid}_sp_list AS
+    SELECT s.taxon_id
+    FROM \"${ALL_SP_TABLE}\" s
+    JOIN expanded_taxa e ON e.\"taxonID\" = s.taxon_id
+    WHERE e.\"${col_name}\" = ${root_taxid};
+
+    ----------------------------------------------------------------
+    -- 2) Unroll each species's ancestor IDs (L5..L70) and filter by rank
+    ----------------------------------------------------------------
+    DROP TABLE IF EXISTS temp_${root_taxid}_all_ancestors CASCADE;
+
+    WITH unravel AS (
+      -- 'unravel' yields each row's potential ancestor columns
+      SELECT
+        e.\"taxonID\"        AS sp_id,
+        e.\"L5_taxonID\"     AS L5_id,
+        e.\"L10_taxonID\"    AS L10_id,
+        e.\"L11_taxonID\"    AS L11_id,
+        e.\"L12_taxonID\"    AS L12_id,
+        e.\"L13_taxonID\"    AS L13_id,
+        e.\"L15_taxonID\"    AS L15_id,
+        e.\"L20_taxonID\"    AS L20_id,
+        e.\"L24_taxonID\"    AS L24_id,
+        e.\"L25_taxonID\"    AS L25_id,
+        e.\"L26_taxonID\"    AS L26_id,
+        e.\"L27_taxonID\"    AS L27_id,
+        e.\"L30_taxonID\"    AS L30_id,
+        e.\"L32_taxonID\"    AS L32_id,
+        e.\"L33_taxonID\"    AS L33_id,
+        e.\"L33_5_taxonID\"  AS L33_5_id,
+        e.\"L34_taxonID\"    AS L34_id,
+        e.\"L34_5_taxonID\"  AS L34_5_id,
+        e.\"L35_taxonID\"    AS L35_id,
+        e.\"L37_taxonID\"    AS L37_id,
+        e.\"L40_taxonID\"    AS L40_id,
+        e.\"L43_taxonID\"    AS L43_id,
+        e.\"L44_taxonID\"    AS L44_id,
+        e.\"L45_taxonID\"    AS L45_id,
+        e.\"L47_taxonID\"    AS L47_id,
+        e.\"L50_taxonID\"    AS L50_id,
+        e.\"L53_taxonID\"    AS L53_id,
+        e.\"L57_taxonID\"    AS L57_id,
+        e.\"L60_taxonID\"    AS L60_id,
+        e.\"L67_taxonID\"    AS L67_id,
+        e.\"L70_taxonID\"    AS L70_id
+      FROM expanded_taxa e
+      JOIN temp_${root_taxid}_sp_list sp
+         ON e.\"taxonID\" = sp.taxon_id
+    ),
+    all_ancestors AS (
+      -- We'll produce rows for the species' own ID (sp_id)
+      -- plus each potential ancestor ID, then filter by rankLevel < boundary_rank.
+      SELECT sp_id AS taxon_id
+      FROM unravel
+
+      UNION ALL
+
+      SELECT x.\"taxonID\" AS taxon_id
+      FROM unravel u
+      CROSS JOIN LATERAL (VALUES
+        (u.L5_id),(u.L10_id),(u.L11_id),(u.L12_id),(u.L13_id),(u.L15_id),
+        (u.L20_id),(u.L24_id),(u.L25_id),(u.L26_id),(u.L27_id),(u.L30_id),
+        (u.L32_id),(u.L33_id),(u.L33_5_id),(u.L34_id),(u.L34_5_id),(u.L35_id),
+        (u.L37_id),(u.L40_id),(u.L43_id),(u.L44_id),(u.L45_id),(u.L47_id),
+        (u.L50_id),(u.L53_id),(u.L57_id),(u.L60_id),(u.L67_id),(u.L70_id)
+      ) anc(ancestor_id)
+      JOIN expanded_taxa x ON x.\"taxonID\" = anc.ancestor_id
+      WHERE x.\"rankLevel\" < ${boundary_rank}
+    )
+    SELECT DISTINCT taxon_id
+    INTO TEMP temp_${root_taxid}_all_ancestors
+    FROM all_ancestors
+    WHERE taxon_id IS NOT NULL;
+
+    ----------------------------------------------------------------
+    -- 3) Insert into the final ancestors table
+    ----------------------------------------------------------------
+    INSERT INTO \"${ANCESTORS_TABLE}\"(taxon_id)
+    SELECT DISTINCT taxon_id
+    FROM temp_${root_taxid}_all_ancestors;
+    "
+  }
+
+  # Decide single vs. multi-root
+  if [ "${root_count}" -eq 0 ]; then
+    print_progress "No recognized root => no ancestors inserted. (Might be 'TRUE' clade?)"
+  elif [ "${root_count}" -eq 1 ]; then
+    print_progress "Single root => straightforward insertion"
+    insert_ancestors_for_root "${root_list[0]}"
+  else
+    print_progress "Multi-root => union each root's ancestor set"
+    for root_entry in "${root_list[@]}"; do
+      insert_ancestors_for_root "${root_entry}"
+    done
+  fi
+}
+
+check_and_build_ancestors
+
+# ---------------------------------------------------------------------------
+# 4) Build or Reuse <REGION_TAG>_min<MIN_OBS>_sp_and_ancestors_obs_<cladeID>_<mode>
+# ---------------------------------------------------------------------------
+check_and_build_ancestors_obs() {
+  local table_exists
+  table_exists="$(execute_sql "
+    SELECT 1 FROM pg_catalog.pg_tables
+    WHERE schemaname='public'
+      AND tablename='${ANCESTORS_OBS_TABLE}'
+    LIMIT 1;
+  ")"
+
+  if [[ "${table_exists}" =~ 1 ]]; then
+    local row_count
+    row_count="$(execute_sql "
+      SELECT count(*) FROM \"${ANCESTORS_OBS_TABLE}\";
+    ")"
+    local numeric_count
+    numeric_count="$(echo "${row_count}" | awk '/[0-9]/{print $1}' | head -1)"
+
+    if [[ -n "${numeric_count}" && "${numeric_count}" -gt 0 ]]; then
+      print_progress "Table ${ANCESTORS_OBS_TABLE} exists with ${numeric_count} rows"
+      if [ "${SKIP_REGIONAL_BASE}" = "true" ]; then
+        print_progress "Skipping creation of ancestors_obs table"
+        return 0
+      else
+        print_progress "Not skipping => dropping and recreating"
+      fi
+    fi
+  fi
+
+  print_progress "Creating table \"${ANCESTORS_OBS_TABLE}\""
+  execute_sql "DROP TABLE IF EXISTS \"${ANCESTORS_OBS_TABLE}\" CASCADE;"
+
+  local OBS_COLUMNS
+  OBS_COLUMNS="$(get_obs_columns)"
+
+  if [ "${INCLUDE_OUT_OF_REGION_OBS}" = "true" ]; then
+    execute_sql "
+    CREATE TABLE \"${ANCESTORS_OBS_TABLE}\" AS
     SELECT ${OBS_COLUMNS}
     FROM observations
     WHERE taxon_id IN (
-        SELECT taxon_id
-        FROM \"${REGION_TAG}_min${MIN_OBS}_all_sp_and_ancestors\"
+      SELECT taxon_id
+      FROM \"${ANCESTORS_TABLE}\"
     );
     "
-else
+  else
     execute_sql "
-    CREATE TABLE \"${BASE_OBS_TABLE}\" AS
+    CREATE TABLE \"${ANCESTORS_OBS_TABLE}\" AS
     SELECT ${OBS_COLUMNS}
     FROM observations
     WHERE taxon_id IN (
-        SELECT taxon_id
-        FROM \"${REGION_TAG}_min${MIN_OBS}_all_sp_and_ancestors\"
+      SELECT taxon_id
+      FROM \"${ANCESTORS_TABLE}\"
     )
     AND geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326);
     "
-fi
+  fi
+}
 
-print_progress "Ancestor-aware regional base tables created"
+check_and_build_ancestors_obs
+
+export ANCESTORS_OBS_TABLE="${ANCESTORS_OBS_TABLE}" # for cladistic.sh
+
+print_progress "=== regional_base.sh: Completed building base tables for ${REGION_TAG}, minObs=${MIN_OBS}, clade=${CLADE_ID}, mode=${RANK_MODE} ==="
