@@ -190,55 +190,281 @@ fi
 # Step E) Export Final CSV with a max row limit per species for research-grade
 # -------------------------------------------------------------------------------
 send_notification "cladistic.sh: Exporting filtered observations"
-print_progress "cladistic.sh: Exporting filtered observations"
+print_progress "cladistic.sh: Exporting filtered observations (Step E)"
 
 pos_condition="TRUE"
 if [ "${PRIMARY_ONLY}" = true ]; then
     pos_condition="p.position=0"
 fi
 
+# ------------------------------------------------------------------------------
+# 1) Let's define a list of columns from the <EXPORT_GROUP>_observations table
+#    that we want in our final CSV. We'll call them "obs_columns_for_union".
+#    We'll also add the photo columns explicitly.
+# ------------------------------------------------------------------------------
+obs_columns_for_union="
+    observation_uuid,
+    observer_id,
+    latitude,
+    longitude,
+    positional_accuracy,
+    taxon_id,
+    quality_grade,
+    observed_on,
+    anomaly_score,
+    expanded_taxonID,
+    expanded_rankLevel,
+    expanded_name,
+    L5_taxonID,
+    L10_taxonID,
+    L11_taxonID,
+    L12_taxonID,
+    L13_taxonID,
+    L15_taxonID,
+    L20_taxonID,
+    L24_taxonID,
+    L25_taxonID,
+    L26_taxonID,
+    L27_taxonID,
+    L30_taxonID,
+    L32_taxonID,
+    L33_taxonID,
+    L33_5_taxonID,
+    L34_taxonID,
+    L34_5_taxonID,
+    L35_taxonID,
+    L37_taxonID,
+    L40_taxonID,
+    L43_taxonID,
+    L44_taxonID,
+    L45_taxonID,
+    L47_taxonID,
+    L50_taxonID,
+    L53_taxonID,
+    L57_taxonID,
+    L60_taxonID,
+    L67_taxonID,
+    L70_taxonID
+"
+
+# We also want photo columns in the final CSV:
+photo_columns_for_union="
+    photo_uuid,
+    photo_id,
+    extension,
+    license,
+    width,
+    height,
+    position
+"
+
+# ------------------------------------------------------------------------------
+# 2) We'll do the subselect for "capped_research_species", selecting ALL above
+#    columns + an internal row_number() as 'rn'. We'll *not* include 'rn' in the
+#    final union, so we'll put that in a subselect.
+# ------------------------------------------------------------------------------
+debug_columns_capped="
+SELECT 'DEBUG: capped_research_species columns => ' ||
+       array_to_string(array[
+         '$(echo $obs_columns_for_union | xargs)',
+         '$(echo $photo_columns_for_union | xargs)',
+         'rn'
+       ], ', ')
+ AS debug_cols;
+"
+
+debug_columns_everything="
+SELECT 'DEBUG: everything_else columns => ' ||
+       array_to_string(array[
+         '$(echo $obs_columns_for_union | xargs)',
+         '$(echo $photo_columns_for_union | xargs)'
+       ], ', ')
+ AS debug_cols;
+"
+
+execute_sql "$debug_columns_capped"
+execute_sql "$debug_columns_everything"
+
 execute_sql "
 COPY (
   WITH
-  capped_research_species AS (
-    SELECT
-      o.*,
-      p.photo_uuid,
-      p.photo_id,
-      p.extension,
-      p.license,
-      p.width,
-      p.height,
-      p.position,
-      ROW_NUMBER() OVER (
-        PARTITION BY o.\"L10_taxonID\"
-        ORDER BY random()
-      ) AS rn
-    FROM \"${TABLE_NAME}\" o
-    JOIN photos p ON o.observation_uuid = p.observation_uuid
-    WHERE
-      ${pos_condition}
-      AND o.quality_grade='research'
-      AND o.\"L10_taxonID\" IS NOT NULL
-  ),
-  everything_else AS (
-    SELECT
-      o.*,
-      p.photo_uuid,
-      p.photo_id,
-      p.extension,
-      p.license,
-      p.width,
-      p.height,
-      p.position
-    FROM \"${TABLE_NAME}\" o
-    JOIN photos p ON o.observation_uuid = p.observation_uuid
-    WHERE
-      ${pos_condition}
-      AND NOT (o.quality_grade='research' AND o.\"L10_taxonID\" IS NOT NULL)
-  )
+    capped_research_species AS (
+      SELECT
+        -- 1. The observation columns
+        o.observation_uuid,
+        o.observer_id,
+        o.latitude,
+        o.longitude,
+        o.positional_accuracy,
+        o.taxon_id,
+        o.quality_grade,
+        o.observed_on,
+        o.anomaly_score,
+        o.expanded_taxonID,
+        o.expanded_rankLevel,
+        o.expanded_name,
+        o.\"L5_taxonID\",
+        o.\"L10_taxonID\",
+        o.\"L11_taxonID\",
+        o.\"L12_taxonID\",
+        o.\"L13_taxonID\",
+        o.\"L15_taxonID\",
+        o.\"L20_taxonID\",
+        o.\"L24_taxonID\",
+        o.\"L25_taxonID\",
+        o.\"L26_taxonID\",
+        o.\"L27_taxonID\",
+        o.\"L30_taxonID\",
+        o.\"L32_taxonID\",
+        o.\"L33_taxonID\",
+        o.\"L33_5_taxonID\",
+        o.\"L34_taxonID\",
+        o.\"L34_5_taxonID\",
+        o.\"L35_taxonID\",
+        o.\"L37_taxonID\",
+        o.\"L40_taxonID\",
+        o.\"L43_taxonID\",
+        o.\"L44_taxonID\",
+        o.\"L45_taxonID\",
+        o.\"L47_taxonID\",
+        o.\"L50_taxonID\",
+        o.\"L53_taxonID\",
+        o.\"L57_taxonID\",
+        o.\"L60_taxonID\",
+        o.\"L67_taxonID\",
+        o.\"L70_taxonID\",
+
+        -- 2. Photo columns
+        p.photo_uuid,
+        p.photo_id,
+        p.extension,
+        p.license,
+        p.width,
+        p.height,
+        p.position,
+
+        -- 3. row_number for limiting research-grade
+        ROW_NUMBER() OVER (
+          PARTITION BY o.\"L10_taxonID\"
+          ORDER BY random()
+        ) AS rn
+
+      FROM \"${TABLE_NAME}\" o
+      JOIN photos p ON o.observation_uuid = p.observation_uuid
+      WHERE
+        ${pos_condition}
+        AND o.quality_grade='research'
+        AND o.\"L10_taxonID\" IS NOT NULL
+    ),
+
+    everything_else AS (
+      SELECT
+        -- exact same columns, but no row_number
+        o.observation_uuid,
+        o.observer_id,
+        o.latitude,
+        o.longitude,
+        o.positional_accuracy,
+        o.taxon_id,
+        o.quality_grade,
+        o.observed_on,
+        o.anomaly_score,
+        o.expanded_taxonID,
+        o.expanded_rankLevel,
+        o.expanded_name,
+        o.\"L5_taxonID\",
+        o.\"L10_taxonID\",
+        o.\"L11_taxonID\",
+        o.\"L12_taxonID\",
+        o.\"L13_taxonID\",
+        o.\"L15_taxonID\",
+        o.\"L20_taxonID\",
+        o.\"L24_taxonID\",
+        o.\"L25_taxonID\",
+        o.\"L26_taxonID\",
+        o.\"L27_taxonID\",
+        o.\"L30_taxonID\",
+        o.\"L32_taxonID\",
+        o.\"L33_taxonID\",
+        o.\"L33_5_taxonID\",
+        o.\"L34_taxonID\",
+        o.\"L34_5_taxonID\",
+        o.\"L35_taxonID\",
+        o.\"L37_taxonID\",
+        o.\"L40_taxonID\",
+        o.\"L43_taxonID\",
+        o.\"L44_taxonID\",
+        o.\"L45_taxonID\",
+        o.\"L47_taxonID\",
+        o.\"L50_taxonID\",
+        o.\"L53_taxonID\",
+        o.\"L57_taxonID\",
+        o.\"L60_taxonID\",
+        o.\"L67_taxonID\",
+        o.\"L70_taxonID\",
+
+        p.photo_uuid,
+        p.photo_id,
+        p.extension,
+        p.license,
+        p.width,
+        p.height,
+        p.position
+
+      FROM \"${TABLE_NAME}\" o
+      JOIN photos p ON o.observation_uuid = p.observation_uuid
+      WHERE
+        ${pos_condition}
+        AND NOT (o.quality_grade='research' AND o.\"L10_taxonID\" IS NOT NULL)
+    )
+
+  -- ----------------------------------------------------------------------------
+  -- Now build the final union, but for the first subselect, we only want
+  -- rows where 'rn' <= ${MAX_RN}. Note that we do NOT select 'rn' in the union columns.
+  -- ----------------------------------------------------------------------------
   SELECT
-    o.*,
+    observation_uuid,
+    observer_id,
+    latitude,
+    longitude,
+    positional_accuracy,
+    taxon_id,
+    quality_grade,
+    observed_on,
+    anomaly_score,
+    expanded_taxonID,
+    expanded_rankLevel,
+    expanded_name,
+    \"L5_taxonID\",
+    \"L10_taxonID\",
+    \"L11_taxonID\",
+    \"L12_taxonID\",
+    \"L13_taxonID\",
+    \"L15_taxonID\",
+    \"L20_taxonID\",
+    \"L24_taxonID\",
+    \"L25_taxonID\",
+    \"L26_taxonID\",
+    \"L27_taxonID\",
+    \"L30_taxonID\",
+    \"L32_taxonID\",
+    \"L33_taxonID\",
+    \"L33_5_taxonID\",
+    \"L34_taxonID\",
+    \"L34_5_taxonID\",
+    \"L35_taxonID\",
+    \"L37_taxonID\",
+    \"L40_taxonID\",
+    \"L43_taxonID\",
+    \"L44_taxonID\",
+    \"L45_taxonID\",
+    \"L47_taxonID\",
+    \"L50_taxonID\",
+    \"L53_taxonID\",
+    \"L57_taxonID\",
+    \"L60_taxonID\",
+    \"L67_taxonID\",
+    \"L70_taxonID\",
     photo_uuid,
     photo_id,
     extension,
@@ -246,11 +472,54 @@ COPY (
     width,
     height,
     position
-  FROM capped_research_species o
+  FROM capped_research_species
   WHERE rn <= ${MAX_RN}
+
   UNION ALL
+
   SELECT
-    o.*,
+    observation_uuid,
+    observer_id,
+    latitude,
+    longitude,
+    positional_accuracy,
+    taxon_id,
+    quality_grade,
+    observed_on,
+    anomaly_score,
+    expanded_taxonID,
+    expanded_rankLevel,
+    expanded_name,
+    \"L5_taxonID\",
+    \"L10_taxonID\",
+    \"L11_taxonID\",
+    \"L12_taxonID\",
+    \"L13_taxonID\",
+    \"L15_taxonID\",
+    \"L20_taxonID\",
+    \"L24_taxonID\",
+    \"L25_taxonID\",
+    \"L26_taxonID\",
+    \"L27_taxonID\",
+    \"L30_taxonID\",
+    \"L32_taxonID\",
+    \"L33_taxonID\",
+    \"L33_5_taxonID\",
+    \"L34_taxonID\",
+    \"L34_5_taxonID\",
+    \"L35_taxonID\",
+    \"L37_taxonID\",
+    \"L40_taxonID\",
+    \"L43_taxonID\",
+    \"L44_taxonID\",
+    \"L45_taxonID\",
+    \"L47_taxonID\",
+    \"L50_taxonID\",
+    \"L53_taxonID\",
+    \"L57_taxonID\",
+    \"L60_taxonID\",
+    \"L67_taxonID\",
+    \"L70_taxonID\",
     photo_uuid,
     photo_id,
     extension,
@@ -258,9 +527,9 @@ COPY (
     width,
     height,
     position
-  FROM everything_else o
+  FROM everything_else
 ) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
 WITH (FORMAT CSV, HEADER, DELIMITER E'\t');
 "
 
-print_progress "cladistic.sh: Filtering & export complete"
+print_progress "cladistic.sh: Finished exporting observations CSV (Step E complete)"
