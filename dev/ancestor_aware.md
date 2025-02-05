@@ -177,3 +177,312 @@ With these changes:
 **Next Steps**:
 - Thorough QA and test runs, especially with multi-root `METACLADE`s. 
 - Possibly unify the partial-labeled approach with `RG_FILTER_MODE` if user demands more advanced logic (like skipping research-grade for certain ranks).
+
+
+---
+
+Can you clarify what you mean in this comment  in clade_helpers.sh?
+```
+# NOTE: We do not forcibly integrate with existing "get_clade_condition()"
+# in clade_defns.sh. Instead, you can call parse_clade_expression() if you
+# want to do deeper multi-root logic.
+```
+
+Furthermore, on this point:
+```
+	2.	check_root_independence():
+	•	Conceptual approach to gather each root’s ancestry from expanded_taxa, confirm disjoint sets.
+	•	Currently placeholders. Implementation details would involve real SQL queries.
+```
+a conceptual approach is not acceptable. We need to generate the complete implementation of this method:
+```
+# -------------------------------------------------------------
+# C) check_root_independence()
+# -------------------------------------------------------------
+# This function ensures that each root in a multi-root scenario
+# is truly independent. That is, no root is an ancestor or descendant
+# of another. We do so by building the set of ancestor IDs for each root,
+# then verifying disjointness pairwise.
+#
+# usage: check_root_independence "myDatabaseName" rootArray
+#   rootArray: an array of "rank=taxonID" strings, e.g. "50=47158"
+# We assume we can run a quick query on 'expanded_taxa' to gather
+# the ~30 possible ancestor columns for each root's row, then compare sets.
+#
+# If overlap is found, we can either abort or print a warning. We'll choose to abort here.
+#
+function check_root_independence() {
+  local dbName="$1"
+  shift
+  local roots=("$@")  # e.g. ("50=47158" "60=9999")
+
+  if [ "${#roots[@]}" -le 1 ]; then
+    # Nothing to check
+    return 0
+  fi
+
+  # We'll build arrays of sets. For each root r_i, gather its expanded ancestry.
+  declare -A rootSets  # a map from index to "list of taxonIDs"
+
+  for i in "${!roots[@]}"; do
+    local pair="${roots[$i]}"
+    local rank="${pair%%=*}"
+    local tid="${pair##*=}"
+
+    # We'll do a single row fetch in expanded_taxa where taxonID=tid,
+    # gather all columns "L5_taxonID", "L10_taxonID", ... "L70_taxonID".
+    # Then store them in a set in memory.
+    # We'll do a naive approach: psql call, parse results, etc.
+
+    # Real code might do:
+    # row=$(docker exec ...)
+    # Then parse. For now, we conceptualize a pseudo-result.
+
+    # For demonstration, let's pretend we run:
+    # row_of_ancestors might look like "47158|47157|...|<some nulls>"
+    # We'll parse them into an array, ignoring nulls.
+
+    # We'll store them in e.g. rootSets["$i"] as "47158 47157 1" etc.
+    # PSEUDOCODE:
+    # (No real code, just conceptual)
+
+    # rootSets["$i"]="${list_of_ancestors}"
+
+    # For the sake of demonstration, we'll skip real queries.
+
+    # <snip>
+    :
+  done
+
+  # Now compare pairwise sets for overlap
+  for ((i=0; i<${#roots[@]}; i++)); do
+    for ((j=i+1; j<${#roots[@]}; j++)); do
+      # Compare rootSets["$i"] and rootSets["$j"] for intersection
+      # If non-empty => abort
+      # PSEUDOCODE:
+      # overlapCheck ...
+      # if [ "$foundOverlap" = "true" ]; then
+      #   echo "ERROR: Overlap detected between root i and j"
+      #   return 1
+      # fi
+      :
+    done
+  done
+
+  return 0
+}
+
+```
+
+You may wish to analyze the exact structure of the expanded_taxa table to assist in the completion:
+```
+ibrida-v0-r1=# \d expanded_taxa
+                        Table "public.expanded_taxa"
+      Column      |          Type          | Collation | Nullable | Default
+------------------+------------------------+-----------+----------+---------
+ taxonID          | integer                |           | not null |
+ rankLevel        | double precision       |           |          |
+ rank             | character varying(255) |           |          |
+ name             | character varying(255) |           |          |
+ taxonActive      | boolean                |           |          |
+ L5_taxonID       | integer                |           |          |
+ L5_name          | character varying(255) |           |          |
+ L5_commonName    | character varying(255) |           |          |
+ L10_taxonID      | integer                |           |          |
+ L10_name         | character varying(255) |           |          |
+ L10_commonName   | character varying(255) |           |          |
+ L11_taxonID      | integer                |           |          |
+ L11_name         | character varying(255) |           |          |
+ L11_commonName   | character varying(255) |           |          |
+ L12_taxonID      | integer                |           |          |
+ L12_name         | character varying(255) |           |          |
+ L12_commonName   | character varying(255) |           |          |
+ L13_taxonID      | integer                |           |          |
+ L13_name         | character varying(255) |           |          |
+ L13_commonName   | character varying(255) |           |          |
+ L15_taxonID      | integer                |           |          |
+ L15_name         | character varying(255) |           |          |
+ L15_commonName   | character varying(255) |           |          |
+ L20_taxonID      | integer                |           |          |
+ L20_name         | character varying(255) |           |          |
+ L20_commonName   | character varying(255) |           |          |
+ L24_taxonID      | integer                |           |          |
+ L24_name         | character varying(255) |           |          |
+ L24_commonName   | character varying(255) |           |          |
+ L25_taxonID      | integer                |           |          |
+ L25_name         | character varying(255) |           |          |
+ L25_commonName   | character varying(255) |           |          |
+ L26_taxonID      | integer                |           |          |
+ L26_name         | character varying(255) |           |          |
+ L26_commonName   | character varying(255) |           |          |
+ L27_taxonID      | integer                |           |          |
+ L27_name         | character varying(255) |           |          |
+ L27_commonName   | character varying(255) |           |          |
+ L30_taxonID      | integer                |           |          |
+ L30_name         | character varying(255) |           |          |
+ L30_commonName   | character varying(255) |           |          |
+ L32_taxonID      | integer                |           |          |
+ L32_name         | character varying(255) |           |          |
+ L32_commonName   | character varying(255) |           |          |
+ L33_taxonID      | integer                |           |          |
+ L33_name         | character varying(255) |           |          |
+ L33_commonName   | character varying(255) |           |          |
+ L33_5_taxonID    | integer                |           |          |
+ L33_5_name       | character varying(255) |           |          |
+ L33_5_commonName | character varying(255) |           |          |
+ L37_taxonID      | integer                |           |          |
+ L37_name         | character varying(255) |           |          |
+ L37_commonName   | character varying(255) |           |          |
+ L40_taxonID      | integer                |           |          |
+ L40_name         | character varying(255) |           |          |
+ L40_commonName   | character varying(255) |           |          |
+ L43_taxonID      | integer                |           |          |
+ L43_name         | character varying(255) |           |          |
+ L43_commonName   | character varying(255) |           |          |
+ L44_taxonID      | integer                |           |          |
+ L44_name         | character varying(255) |           |          |
+ L44_commonName   | character varying(255) |           |          |
+ L45_taxonID      | integer                |           |          |
+ L45_name         | character varying(255) |           |          |
+ L45_commonName   | character varying(255) |           |          |
+ L47_taxonID      | integer                |           |          |
+ L47_name         | character varying(255) |           |          |
+ L47_commonName   | character varying(255) |           |          |
+ L50_taxonID      | integer                |           |          |
+ L50_name         | character varying(255) |           |          |
+ L50_commonName   | character varying(255) |           |          |
+ L53_taxonID      | integer                |           |          |
+ L53_name         | character varying(255) |           |          |
+ L53_commonName   | character varying(255) |           |          |
+ L57_taxonID      | integer                |           |          |
+ L57_name         | character varying(255) |           |          |
+ L57_commonName   | character varying(255) |           |          |
+ L60_taxonID      | integer                |           |          |
+ L60_name         | character varying(255) |           |          |
+ L60_commonName   | character varying(255) |           |          |
+ L67_taxonID      | integer                |           |          |
+ L67_name         | character varying(255) |           |          |
+ L67_commonName   | character varying(255) |           |          |
+ L70_taxonID      | integer                |           |          |
+ L70_name         | character varying(255) |           |          |
+ L70_commonName   | character varying(255) |           |          |
+Indexes:
+    "expanded_taxa_pkey" PRIMARY KEY, btree ("taxonID")
+    "idx_expanded_taxa_l10_taxonid" btree ("L10_taxonID")
+    "idx_expanded_taxa_l20_taxonid" btree ("L20_taxonID")
+    "idx_expanded_taxa_l30_taxonid" btree ("L30_taxonID")
+    "idx_expanded_taxa_l40_taxonid" btree ("L40_taxonID")
+    "idx_expanded_taxa_l50_taxonid" btree ("L50_taxonID")
+    "idx_expanded_taxa_l60_taxonid" btree ("L60_taxonID")
+    "idx_expanded_taxa_l70_taxonid" btree ("L70_taxonID")
+```
+Otherwise you should have enough information about the interfaces and requirements for the check_root_independence() method to implement it fully. 
+
+Return the complete implementation of the method. Assume that the expanded_taxa table is always available. You could use the execute_sql() method from function.sh for the execution of any queries (assuming that this function can return in the form we need), or add a new function if needed to execute the actual SQL commands:
+```
+#!/bin/bash
+
+# Common functions used across export scripts
+
+# Function to execute SQL commands
+execute_sql() {
+    local sql="$1"
+    docker exec ${DB_CONTAINER} psql -U ${DB_USER} -d "${DB_NAME}" -c "$sql"
+}
+
+....
+```
+I'm assuming that the DB_CONTAINER, DB_USER, and DB_NAME env vars will be defined in the scope that this function is called. The expanded_taxa table will always be available on the same database as all the other tables we are working with (so just use the DB_ env vars used elsewhere in the flow).
+
+Were there any other 'conceptual' incomplete implementations in your most recent response? If so, you need to return full implementations; taking extra time to think if necessary. 
+
+If not, please return the complete implementation of Section C of clade_helpers.sh:
+```
+# -------------------------------------------------------------
+# C) check_root_independence()
+# -------------------------------------------------------------
+# This function ensures that each root in a multi-root scenario
+# is truly independent. That is, no root is an ancestor or descendant
+# of another. We do so by building the set of ancestor IDs for each root,
+# then verifying disjointness pairwise.
+#
+# usage: check_root_independence "myDatabaseName" rootArray
+#   rootArray: an array of "rank=taxonID" strings, e.g. "50=47158"
+# We assume we can run a quick query on 'expanded_taxa' to gather
+# the ~30 possible ancestor columns for each root's row, then compare sets.
+#
+# If overlap is found, we can either abort or print a warning. We'll choose to abort here.
+#
+function check_root_independence() {
+  local dbName="$1"
+  shift
+  local roots=("$@")  # e.g. ("50=47158" "60=9999")
+
+  if [ "${#roots[@]}" -le 1 ]; then
+    # Nothing to check
+    return 0
+  fi
+
+  # We'll build arrays of sets. For each root r_i, gather its expanded ancestry.
+  declare -A rootSets  # a map from index to "list of taxonIDs"
+
+  for i in "${!roots[@]}"; do
+    local pair="${roots[$i]}"
+    local rank="${pair%%=*}"
+    local tid="${pair##*=}"
+
+    # We'll do a single row fetch in expanded_taxa where taxonID=tid,
+    # gather all columns "L5_taxonID", "L10_taxonID", ... "L70_taxonID".
+    # Then store them in a set in memory.
+    # We'll do a naive approach: psql call, parse results, etc.
+
+    # Real code might do:
+    # row=$(docker exec ...)
+    # Then parse. For now, we conceptualize a pseudo-result.
+
+    # For demonstration, let's pretend we run:
+    # row_of_ancestors might look like "47158|47157|...|<some nulls>"
+    # We'll parse them into an array, ignoring nulls.
+
+    # We'll store them in e.g. rootSets["$i"] as "47158 47157 1" etc.
+    # PSEUDOCODE:
+    # (No real code, just conceptual)
+
+    # rootSets["$i"]="${list_of_ancestors}"
+
+    # For the sake of demonstration, we'll skip real queries.
+
+    # <snip>
+    :
+  done
+
+  # Now compare pairwise sets for overlap
+  for ((i=0; i<${#roots[@]}; i++)); do
+    for ((j=i+1; j<${#roots[@]}; j++)); do
+      # Compare rootSets["$i"] and rootSets["$j"] for intersection
+      # If non-empty => abort
+      # PSEUDOCODE:
+      # overlapCheck ...
+      # if [ "$foundOverlap" = "true" ]; then
+      #   echo "ERROR: Overlap detected between root i and j"
+      #   return 1
+      # fi
+      :
+    done
+  done
+
+  return 0
+}
+```
+
+Now, looking towards the next steps:
+```
+	2.	Proposed Next Steps
+	•	Step A: Integrate clade_helpers.sh usage in regional_base.sh. For multi-root detection, we call parse_clade_expression(get_clade_condition), partition species, etc.
+	•	Step B: Expand check_root_independence() with real SQL queries to gather each root’s ancestor set from expanded_taxa.
+	•	Step C: Add boundary logic (get_major_rank_floor()) or minor-rank logic as user toggles in regional_base.sh.
+	•	Step D: In cladistic.sh, ensure partial-rank wiping remains consistent with any newly introduced rank columns or edge cases.
+
+```
+
+In your response, please return the complete implementation of Section C on clade_helpers.sh AND prepare a refined, highly specific implementation plan for the remaining steps. Please identify any outstanding clarifications that you will need to return full, robust reimplementations for all remaining steps.
