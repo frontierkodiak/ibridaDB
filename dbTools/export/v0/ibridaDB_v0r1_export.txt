@@ -1,18 +1,21 @@
-Directory tree, stemming from root "/home/caleb/repo/ibridaDB/dbTools/export/v0":
-├── common (1408 lines)
-│   ├── clade_defns.sh (153)
-│   ├── clade_helpers.sh (321)
-│   ├── cladistic.sh (267)
-│   ├── functions.sh (57)
-│   ├── main.sh (156)
-│   ├── region_defns.sh (70)
-│   └── regional_base.sh (384)
-└── r1 (93)
-    │   └── wrapper_pta_non_rg.sh (93)
-----
-----
-Full Path: common/main.sh
+<codebase_context>
 
+<dirtree: /home/caleb/repo/ibridaDB/dbTools/export/v0>
+|-- common (1677 lines)
+|   |-- clade_defns.sh (153)
+|   |-- clade_helpers.sh (321)
+|   |-- cladistic.sh (536)
+|   |-- functions.sh (57)
+|   |-- main.sh (156)
+|   |-- region_defns.sh (70)
+|   \-- regional_base.sh (384)
+|-- export.md (227)
+\-- r1 (185)
+    |-- wrapper_aves_all_exc_nonrg_sp.sh (92)
+    \-- wrapper_pta_non_rg.sh (93)
+</dirtree: /home/caleb/repo/ibridaDB/dbTools/export/v0>
+
+<file: common/main.sh>
 #!/bin/bash
 #
 # main.sh
@@ -168,11 +171,9 @@ print_progress "Export process complete (total time: ${overall_secs} seconds)"
 } >> "${SUMMARY_FILE}"
 
 send_notification "Export for ${EXPORT_GROUP} complete. Summary at ${SUMMARY_FILE}"
+</file: common/main.sh>
 
-
-----
-Full Path: common/regional_base.sh
-
+<file: common/regional_base.sh>
 #!/bin/bash
 # ------------------------------------------------------------------------------
 # regional_base.sh
@@ -556,11 +557,9 @@ check_and_build_ancestors_obs
 export ANCESTORS_OBS_TABLE="${ANCESTORS_OBS_TABLE}" # for cladistic.sh
 
 print_progress "=== regional_base.sh: Completed building base tables for ${REGION_TAG}, minObs=${MIN_OBS}, clade=${CLADE_ID}, mode=${RANK_MODE} ==="
+</file: common/regional_base.sh>
 
-
-----
-Full Path: common/functions.sh
-
+<file: common/functions.sh>
 #!/bin/bash
 
 # Common functions used across export scripts
@@ -618,10 +617,9 @@ export -f print_progress
 export -f get_obs_columns
 export -f ensure_directory
 export -f send_notification
+</file: common/functions.sh>
 
-----
-Full Path: common/region_defns.sh
-
+<file: common/region_defns.sh>
 #!/bin/bash
 # ------------------------------------------------------------------------------
 # region_defns.sh
@@ -691,11 +689,9 @@ function get_region_coordinates() {
 }
 
 export -f get_region_coordinates
+</file: common/region_defns.sh>
 
-
-----
-Full Path: common/clade_defns.sh
-
+<file: common/clade_defns.sh>
 #!/bin/bash
 # ------------------------------------------------------------------------------
 # clade_defns.sh
@@ -849,10 +845,9 @@ function get_clade_condition() {
 }
 
 export -f get_clade_condition
+</file: common/clade_defns.sh>
 
-----
-Full Path: common/cladistic.sh
-
+<file: common/cladistic.sh>
 #!/bin/bash
 # -------------------------------------------------------------------------------
 # cladistic.sh
@@ -1045,55 +1040,281 @@ fi
 # Step E) Export Final CSV with a max row limit per species for research-grade
 # -------------------------------------------------------------------------------
 send_notification "cladistic.sh: Exporting filtered observations"
-print_progress "cladistic.sh: Exporting filtered observations"
+print_progress "cladistic.sh: Exporting filtered observations (Step E)"
 
 pos_condition="TRUE"
 if [ "${PRIMARY_ONLY}" = true ]; then
     pos_condition="p.position=0"
 fi
 
+# ------------------------------------------------------------------------------
+# 1) Let's define a list of columns from the <EXPORT_GROUP>_observations table
+#    that we want in our final CSV. We'll call them "obs_columns_for_union".
+#    We'll also add the photo columns explicitly.
+# ------------------------------------------------------------------------------
+obs_columns_for_union="
+    observation_uuid,
+    observer_id,
+    latitude,
+    longitude,
+    positional_accuracy,
+    taxon_id,
+    quality_grade,
+    observed_on,
+    anomaly_score,
+    expanded_taxonID,
+    expanded_rankLevel,
+    expanded_name,
+    L5_taxonID,
+    L10_taxonID,
+    L11_taxonID,
+    L12_taxonID,
+    L13_taxonID,
+    L15_taxonID,
+    L20_taxonID,
+    L24_taxonID,
+    L25_taxonID,
+    L26_taxonID,
+    L27_taxonID,
+    L30_taxonID,
+    L32_taxonID,
+    L33_taxonID,
+    L33_5_taxonID,
+    L34_taxonID,
+    L34_5_taxonID,
+    L35_taxonID,
+    L37_taxonID,
+    L40_taxonID,
+    L43_taxonID,
+    L44_taxonID,
+    L45_taxonID,
+    L47_taxonID,
+    L50_taxonID,
+    L53_taxonID,
+    L57_taxonID,
+    L60_taxonID,
+    L67_taxonID,
+    L70_taxonID
+"
+
+# We also want photo columns in the final CSV:
+photo_columns_for_union="
+    photo_uuid,
+    photo_id,
+    extension,
+    license,
+    width,
+    height,
+    position
+"
+
+# ------------------------------------------------------------------------------
+# 2) We'll do the subselect for "capped_research_species", selecting ALL above
+#    columns + an internal row_number() as 'rn'. We'll *not* include 'rn' in the
+#    final union, so we'll put that in a subselect.
+# ------------------------------------------------------------------------------
+debug_columns_capped="
+SELECT 'DEBUG: capped_research_species columns => ' ||
+       array_to_string(array[
+         '$(echo $obs_columns_for_union | xargs)',
+         '$(echo $photo_columns_for_union | xargs)',
+         'rn'
+       ], ', ')
+ AS debug_cols;
+"
+
+debug_columns_everything="
+SELECT 'DEBUG: everything_else columns => ' ||
+       array_to_string(array[
+         '$(echo $obs_columns_for_union | xargs)',
+         '$(echo $photo_columns_for_union | xargs)'
+       ], ', ')
+ AS debug_cols;
+"
+
+execute_sql "$debug_columns_capped"
+execute_sql "$debug_columns_everything"
+
 execute_sql "
 COPY (
   WITH
-  capped_research_species AS (
-    SELECT
-      o.*,
-      p.photo_uuid,
-      p.photo_id,
-      p.extension,
-      p.license,
-      p.width,
-      p.height,
-      p.position,
-      ROW_NUMBER() OVER (
-        PARTITION BY o.\"L10_taxonID\"
-        ORDER BY random()
-      ) AS rn
-    FROM \"${TABLE_NAME}\" o
-    JOIN photos p ON o.observation_uuid = p.observation_uuid
-    WHERE
-      ${pos_condition}
-      AND o.quality_grade='research'
-      AND o.\"L10_taxonID\" IS NOT NULL
-  ),
-  everything_else AS (
-    SELECT
-      o.*,
-      p.photo_uuid,
-      p.photo_id,
-      p.extension,
-      p.license,
-      p.width,
-      p.height,
-      p.position
-    FROM \"${TABLE_NAME}\" o
-    JOIN photos p ON o.observation_uuid = p.observation_uuid
-    WHERE
-      ${pos_condition}
-      AND NOT (o.quality_grade='research' AND o.\"L10_taxonID\" IS NOT NULL)
-  )
+    capped_research_species AS (
+      SELECT
+        -- 1. The observation columns
+        o.observation_uuid,
+        o.observer_id,
+        o.latitude,
+        o.longitude,
+        o.positional_accuracy,
+        o.taxon_id,
+        o.quality_grade,
+        o.observed_on,
+        o.anomaly_score,
+        o.expanded_taxonID,
+        o.expanded_rankLevel,
+        o.expanded_name,
+        o.\"L5_taxonID\",
+        o.\"L10_taxonID\",
+        o.\"L11_taxonID\",
+        o.\"L12_taxonID\",
+        o.\"L13_taxonID\",
+        o.\"L15_taxonID\",
+        o.\"L20_taxonID\",
+        o.\"L24_taxonID\",
+        o.\"L25_taxonID\",
+        o.\"L26_taxonID\",
+        o.\"L27_taxonID\",
+        o.\"L30_taxonID\",
+        o.\"L32_taxonID\",
+        o.\"L33_taxonID\",
+        o.\"L33_5_taxonID\",
+        o.\"L34_taxonID\",
+        o.\"L34_5_taxonID\",
+        o.\"L35_taxonID\",
+        o.\"L37_taxonID\",
+        o.\"L40_taxonID\",
+        o.\"L43_taxonID\",
+        o.\"L44_taxonID\",
+        o.\"L45_taxonID\",
+        o.\"L47_taxonID\",
+        o.\"L50_taxonID\",
+        o.\"L53_taxonID\",
+        o.\"L57_taxonID\",
+        o.\"L60_taxonID\",
+        o.\"L67_taxonID\",
+        o.\"L70_taxonID\",
+
+        -- 2. Photo columns
+        p.photo_uuid,
+        p.photo_id,
+        p.extension,
+        p.license,
+        p.width,
+        p.height,
+        p.position,
+
+        -- 3. row_number for limiting research-grade
+        ROW_NUMBER() OVER (
+          PARTITION BY o.\"L10_taxonID\"
+          ORDER BY random()
+        ) AS rn
+
+      FROM \"${TABLE_NAME}\" o
+      JOIN photos p ON o.observation_uuid = p.observation_uuid
+      WHERE
+        ${pos_condition}
+        AND o.quality_grade='research'
+        AND o.\"L10_taxonID\" IS NOT NULL
+    ),
+
+    everything_else AS (
+      SELECT
+        -- exact same columns, but no row_number
+        o.observation_uuid,
+        o.observer_id,
+        o.latitude,
+        o.longitude,
+        o.positional_accuracy,
+        o.taxon_id,
+        o.quality_grade,
+        o.observed_on,
+        o.anomaly_score,
+        o.expanded_taxonID,
+        o.expanded_rankLevel,
+        o.expanded_name,
+        o.\"L5_taxonID\",
+        o.\"L10_taxonID\",
+        o.\"L11_taxonID\",
+        o.\"L12_taxonID\",
+        o.\"L13_taxonID\",
+        o.\"L15_taxonID\",
+        o.\"L20_taxonID\",
+        o.\"L24_taxonID\",
+        o.\"L25_taxonID\",
+        o.\"L26_taxonID\",
+        o.\"L27_taxonID\",
+        o.\"L30_taxonID\",
+        o.\"L32_taxonID\",
+        o.\"L33_taxonID\",
+        o.\"L33_5_taxonID\",
+        o.\"L34_taxonID\",
+        o.\"L34_5_taxonID\",
+        o.\"L35_taxonID\",
+        o.\"L37_taxonID\",
+        o.\"L40_taxonID\",
+        o.\"L43_taxonID\",
+        o.\"L44_taxonID\",
+        o.\"L45_taxonID\",
+        o.\"L47_taxonID\",
+        o.\"L50_taxonID\",
+        o.\"L53_taxonID\",
+        o.\"L57_taxonID\",
+        o.\"L60_taxonID\",
+        o.\"L67_taxonID\",
+        o.\"L70_taxonID\",
+
+        p.photo_uuid,
+        p.photo_id,
+        p.extension,
+        p.license,
+        p.width,
+        p.height,
+        p.position
+
+      FROM \"${TABLE_NAME}\" o
+      JOIN photos p ON o.observation_uuid = p.observation_uuid
+      WHERE
+        ${pos_condition}
+        AND NOT (o.quality_grade='research' AND o.\"L10_taxonID\" IS NOT NULL)
+    )
+
+  -- ----------------------------------------------------------------------------
+  -- Now build the final union, but for the first subselect, we only want
+  -- rows where 'rn' <= ${MAX_RN}. Note that we do NOT select 'rn' in the union columns.
+  -- ----------------------------------------------------------------------------
   SELECT
-    o.*,
+    observation_uuid,
+    observer_id,
+    latitude,
+    longitude,
+    positional_accuracy,
+    taxon_id,
+    quality_grade,
+    observed_on,
+    anomaly_score,
+    expanded_taxonID,
+    expanded_rankLevel,
+    expanded_name,
+    \"L5_taxonID\",
+    \"L10_taxonID\",
+    \"L11_taxonID\",
+    \"L12_taxonID\",
+    \"L13_taxonID\",
+    \"L15_taxonID\",
+    \"L20_taxonID\",
+    \"L24_taxonID\",
+    \"L25_taxonID\",
+    \"L26_taxonID\",
+    \"L27_taxonID\",
+    \"L30_taxonID\",
+    \"L32_taxonID\",
+    \"L33_taxonID\",
+    \"L33_5_taxonID\",
+    \"L34_taxonID\",
+    \"L34_5_taxonID\",
+    \"L35_taxonID\",
+    \"L37_taxonID\",
+    \"L40_taxonID\",
+    \"L43_taxonID\",
+    \"L44_taxonID\",
+    \"L45_taxonID\",
+    \"L47_taxonID\",
+    \"L50_taxonID\",
+    \"L53_taxonID\",
+    \"L57_taxonID\",
+    \"L60_taxonID\",
+    \"L67_taxonID\",
+    \"L70_taxonID\",
     photo_uuid,
     photo_id,
     extension,
@@ -1101,11 +1322,54 @@ COPY (
     width,
     height,
     position
-  FROM capped_research_species o
+  FROM capped_research_species
   WHERE rn <= ${MAX_RN}
+
   UNION ALL
+
   SELECT
-    o.*,
+    observation_uuid,
+    observer_id,
+    latitude,
+    longitude,
+    positional_accuracy,
+    taxon_id,
+    quality_grade,
+    observed_on,
+    anomaly_score,
+    expanded_taxonID,
+    expanded_rankLevel,
+    expanded_name,
+    \"L5_taxonID\",
+    \"L10_taxonID\",
+    \"L11_taxonID\",
+    \"L12_taxonID\",
+    \"L13_taxonID\",
+    \"L15_taxonID\",
+    \"L20_taxonID\",
+    \"L24_taxonID\",
+    \"L25_taxonID\",
+    \"L26_taxonID\",
+    \"L27_taxonID\",
+    \"L30_taxonID\",
+    \"L32_taxonID\",
+    \"L33_taxonID\",
+    \"L33_5_taxonID\",
+    \"L34_taxonID\",
+    \"L34_5_taxonID\",
+    \"L35_taxonID\",
+    \"L37_taxonID\",
+    \"L40_taxonID\",
+    \"L43_taxonID\",
+    \"L44_taxonID\",
+    \"L45_taxonID\",
+    \"L47_taxonID\",
+    \"L50_taxonID\",
+    \"L53_taxonID\",
+    \"L57_taxonID\",
+    \"L60_taxonID\",
+    \"L67_taxonID\",
+    \"L70_taxonID\",
     photo_uuid,
     photo_id,
     extension,
@@ -1113,17 +1377,15 @@ COPY (
     width,
     height,
     position
-  FROM everything_else o
+  FROM everything_else
 ) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
 WITH (FORMAT CSV, HEADER, DELIMITER E'\t');
 "
 
-print_progress "cladistic.sh: Filtering & export complete"
+print_progress "cladistic.sh: Finished exporting observations CSV (Step E complete)"
+</file: common/cladistic.sh>
 
-
-----
-Full Path: common/clade_helpers.sh
-
+<file: common/clade_helpers.sh>
 #!/bin/bash
 # ------------------------------------------------------------------------------
 # clade_helpers.sh
@@ -1445,10 +1707,9 @@ function get_major_rank_floor() {
 export -f parse_clade_expression
 export -f check_root_independence
 export -f get_major_rank_floor
+</file: common/clade_helpers.sh>
 
-----
-Full Path: r1/wrapper_pta_non_rg.sh
-
+<file: r1/wrapper_pta_non_rg.sh>
 #!/bin/bash
 
 # Setup logging
@@ -1541,11 +1802,103 @@ log_message "Executing main script at $(date)"
 
 log_message "Process completed at $(date)"
 send_notification "${EXPORT_GROUP} export completed!"
+</file: r1/wrapper_pta_non_rg.sh>
 
+<file: r1/wrapper_aves_all_exc_nonrg_sp.sh>
+#!/bin/bash
 
-----
-Full Path: ../../../docker/stausee/docker-compose.yml
+# Setup logging
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+LOG_FILE="${SCRIPT_DIR}/$(basename "$0" .sh)_$(date +%Y%m%d_%H%M%S).log"
+echo "Starting new run at $(date)" > "${LOG_FILE}"
 
+# Function to log messages to both console and file
+log_message() {
+    echo "$1" | tee -a "${LOG_FILE}"
+}
+
+# Redirect all stdout and stderr to both console and log file
+exec 1> >(tee -a "${LOG_FILE}")
+exec 2> >(tee -a "${LOG_FILE}")
+
+log_message "Initializing export process with configuration:"
+
+# ---------------------------------------------------------------------------
+# Database config
+# ---------------------------------------------------------------------------
+export DB_USER="postgres"
+export VERSION_VALUE="v0"
+export RELEASE_VALUE="r1"
+export ORIGIN_VALUE="iNat-Dec2024"
+export DB_NAME="ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"
+
+log_message "Database: ${DB_NAME}"
+log_message "Version: ${VERSION_VALUE}"
+log_message "Release: ${RELEASE_VALUE}"
+
+# ---------------------------------------------------------------------------
+# Export parameters
+# ---------------------------------------------------------------------------
+export REGION_TAG="NAfull"
+export MIN_OBS=50
+export MAX_RN=2500
+export PRIMARY_ONLY=true
+
+export CLADE="aves"
+export EXPORT_GROUP="aves_all_exc_nonrg_sp_inc_out_of_region"
+
+# Additional flags
+export PROCESS_OTHER=false
+export SKIP_REGIONAL_BASE=false  # typically used for successive cladistic exports
+
+# ---[ NEW ENV VARS ]---
+# Whether to include out-of-region observations in the final dataset
+export INCLUDE_OUT_OF_REGION_OBS=true
+
+# Whether to keep research-grade only, non-research, etc.
+# For now, we default to ALL; future steps will integrate it
+export RG_FILTER_MODE="ONLY_NONRESEARCH_WIPE_SPECIES_LABEL"
+
+export MIN_OCCURRENCES_PER_RANK=50
+export INCLUDE_MINOR_RANKS_IN_ANCESTORS=false
+
+log_message "Region: ${REGION_TAG}"
+log_message "Min Observations: ${MIN_OBS}"
+log_message "Max Random Number: ${MAX_RN}"
+log_message "Export Group: ${EXPORT_GROUP}"
+log_message "Skip Regional Base Creation: ${SKIP_REGIONAL_BASE}"
+log_message "Include Out-of-Region Obs: ${INCLUDE_OUT_OF_REGION_OBS}"
+log_message "RG Filter Mode: ${RG_FILTER_MODE}"
+log_message "Min Occurrences per Rank: ${MIN_OCCURRENCES_PER_RANK}"
+log_message "Include Minor Ranks in Ancestors: ${INCLUDE_MINOR_RANKS_IN_ANCESTORS}"
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+export DB_CONTAINER="ibridaDB"
+export HOST_EXPORT_BASE_PATH="/datasets/ibrida-data/exports"
+export CONTAINER_EXPORT_BASE_PATH="/exports"
+export EXPORT_SUBDIR="${VERSION_VALUE}/${RELEASE_VALUE}/primary_only_${MIN_OBS}min_${MAX_RN}max"
+export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/export/v0"
+
+log_message "Export Directory: ${HOST_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
+
+# ---------------------------------------------------------------------------
+# Source common functions
+# ---------------------------------------------------------------------------
+source "${BASE_DIR}/common/functions.sh"
+
+# ---------------------------------------------------------------------------
+# Execute main script
+# ---------------------------------------------------------------------------
+send_notification "Starting ${EXPORT_GROUP} export"
+log_message "Executing main script at $(date)"
+"${BASE_DIR}/common/main.sh"
+
+log_message "Process completed at $(date)"
+send_notification "${EXPORT_GROUP} export completed!"
+</file: r1/wrapper_aves_all_exc_nonrg_sp.sh>
+
+<file: ../../../docker/stausee/docker-compose.yml>
 services:
   ibrida:
     image: postgis/postgis:15-3.3
@@ -1566,19 +1919,17 @@ services:
     ports:
       - "5432:5432"
     container_name: ibridaDB
+</file: ../../../docker/stausee/docker-compose.yml>
 
-----
-Full Path: ../../../docker/stausee/entrypoint.sh
-
+<file: ../../../docker/stausee/entrypoint.sh>
 #!/bin/bash
 set -e
 
 # Just log and exit - let Docker's default entrypoint handle PostgreSQL
 echo "Entrypoint script executed at $(date)"
+</file: ../../../docker/stausee/entrypoint.sh>
 
-----
-Full Path: scrap/schemas.md
-
+<file: scrap/schemas.md>
 # expanded_taxa
 
 One row per taxon. Expands the 'ancestry' column from the 'taxa' table into a set of columns.
@@ -1812,4 +2163,236 @@ Indexes:
     "index_observers_release" gin (to_tsvector('simple'::regconfig, release::text))
     "index_observers_version" gin (to_tsvector('simple'::regconfig, version::text))
 ```
+</file: scrap/schemas.md>
 
+<file: export.md>
+# ibridaDB Export Reference (v1)
+
+This document describes how to configure and run an **ibridaDB** export job using our **v1** pipeline. The pipeline is driven by a set of **environment variables** that control which data are included, how they are filtered, and where the outputs are written. These variables are typically set in a **wrapper script** (e.g., `r1/wrapper.sh`).
+
+Below is an overview of:
+
+- [ibridaDB Export Reference (v1)](#ibridadb-export-reference-v1)
+  - [NOTES/LIMITATIONS](#noteslimitations)
+  - [Introduction \& Pipeline Overview](#introduction--pipeline-overview)
+  - [Quick Start](#quick-start)
+  - [Environment Variables](#environment-variables)
+    - [Database Config](#database-config)
+    - [Export Parameters](#export-parameters)
+    - [Paths](#paths)
+  - [Export Flow \& Scripts](#export-flow--scripts)
+
+A **placeholder** for a mermaid diagram is provided below. You can generate or modify the diagram according to your team’s preferences and paste it in there.  
+
+---
+## NOTES/LIMITATIONS
+- The upper boundary used for ancestor search, which is determine by the CLADE/METACLADE/MACROCLADE, is used for the regional-base tables ()"${REGION_TAG}_min${MIN_OBS}_all_sp_and_ancestors\"), not on one of the clade-export specific tables in cladistic.sh. So this is at odds with the previous design (before we added ancestor-aware logic), where previously the _all_sp table only varied by the REGION_TAG/MIN_OBS. This is probably OK, and might even be necessary for the purposes of determining the exact set of ancestral taxonIDs that need to be included in the base tables when looking to export more than just research-grade observations (i.e. observations with an uncontested species-level label) but it is a bit of a departure from the previous design. So we need to confirm what the set of taxa in the _all_sp_and_ancestors table depends upon (I think it is only the REGION_TAG/MIN_OBS/boundary ranks), and we can potentially mitigate by adjusting the generated base tables names to include the highest root rank (or highest root ranks, in the case of metaclades with multiple root ranks) used in the ancestor search; this will properly version the regional base tables and prevent reuse of base tables when the ancestor scopes differ.
+  - So this means that the boundaries of the ancestor search for generating the regional _all_sp_and_ancestors is defined with respect to the configured clade/metaclade for a job, and so the regional base table might need to be recreated for successive job using clades/metaclades with different root ranks.
+    - Really, the ancestor-aware logic should be implemented on the cladistic.sh tables.
+    - The regional base table names do not fully capture the 'versining', so e.g. a NAfull_min50_all_sp_and_ancestors table generated from a PTA (metaclade) job would not be reusable for a successive job that used a MACROCLADES["arthropoda"]='("L60_taxonID" = 47120)' macroclade, since the PTA root ranks are lower than the L60 rank-- so that regional base table would be missing L50 ancestors. 
+      - This would actually be OK in theory but it might break some downstream assumptions, so it would be better to recreate the regional base table for each successive job if that job uses a different root rank.
+      - TODO: Confirm that it is only the root rank, not the root taxonID, that is used to define the ancestor search for the regional base tables.
+        - If the regional base table _all_sp_and_ancestors only varies by the REGION_TAG/MIN_OBS/boundary ranks, then we could mitigate by adjusting the generated base tables names to include the highest root rank used in the ancestor search.
+        - Otherwise, we would need to include the CLADE/METACLADE/MACROCLADE in the regional base table name.
+  - regional base table is an increasingly inappropraite name for this table. It was fine when the tables always just included the species in the region that passed the MIN_OBS threshold/the corresponding observations, but the contents of the table are now dependent on the CLADE/METACLADE/MACROCLADE.
+    - This issue was averted for INCLUDE_OUT_OF_REGION_OBS, because the regional base observations table always include all observations for the species in the region that passed the MIN_OBS threshold (and now for all their ancestors in the scope of the ancestor search, too).
+      - And then if INCLUDE_OUT_OF_REGION_OBS=false, then we re-applied the bounding box for the final table.
+    - There might be a similar mitigation approach we could take for ancestor search here. A much more inclusive set of observations for, i.e. _all_sp_and_ancestors would include all species in the region that passed the MIN_OBS threshold and all the ancestors of those species up to but not including L100 (state of matter), i.e. unrestricted ancestor search. _sp_and_ancestors_obs would include all observations where taxon_id=[<a taxonID from _all_sp_and_ancestors].
+      - By default, only search for the major-rank ancestors, i.e. L20, L30, L40, L50, L57, L60, L70. So INCLUDE_MINOR_RANKS_IN_ANCESTORS=false. If INCLUDE_MINOR_RANKS_IN_ANCESTORS=true, then include minor ranks in the unbounded ancestor search, and adjust the table names (_all_sp_and_ancestors_incl_minor_ranks, _sp_and_ancestors_obs_incl_minor_ranks). Searching minor ranks can occur significant performance penalty as only major ranks are indexed, and we will not need to use this in the intermediate future.
+      - Possibly do a second ancestor search with only the set of ancestors that are up to the boundary rank for that export? This would be used for the filtering for the final table for that export job.
+      - But then, for the final table, we'd need to apply a filter to exclude the observations that fall outside of the scope of the job/clade-specific ancestor search. It gets kind of complicated to define this filter-- do we consider the base taxonID of the observation? Not necessarily, since sometimes we wipe labels of some ranks if the no. observations for that taxonID are too low in the final step (depending on MIN_OCCURRENCES_PER_RANK, which is an alternate floor for wiping labels for higher ranks if the no. occurences for those taxonIDs are too low, while still keeping the observations if they have passing labels for some ranks that are not wiped, e.g. an observation has a non-research grade species label, so we wipe L10_taxonID to null, and it has a L20_taxonID label that is very rare, so occurs less than MIN_OCCURRENCES_PER_RANK in the final table, but it has a usable L30_taxonID label and we want to downstream model to be able to learn that a sample like 'that' should be learned as being in that family (L30).
+    - My current standing is that we should do the ancestor search with the constrained upper boundary, and accept that we will lose some reusability between regional base tables between exports that use different clades/metaclades (but maybe can reuse if the ranks of the clades stay constant between jobs, need to confirm).
+      - This simplifies the logic in cladistic.sh and preserves the functionality of the existing filters in cladistic.sh.
+
+## Introduction & Pipeline Overview
+
+The **ibridaDB** export pipeline is designed to subset observations from a large PostgreSQL/PostGIS database based on:
+
+- **Geographic region** (e.g., bounding box for North America).  
+- **Minimum number of research-grade observations** required for each species (`MIN_OBS`).  
+- **Taxonomic clade** (class, order, or custom “metaclade”).  
+- **Export parameters** such as maximum number of photos per species, whether to include only the primary photo or all photos, etc.
+
+The pipeline executes in the following broad stages:
+
+1. **Wrapper Script** (e.g., `r1/wrapper.sh`) sets environment variables to configure the export.  
+2. **Main Script** (`common/main.sh`) orchestrates creation of “regional base” tables if needed, then calls the **cladistic** filtering step.  
+3. **Regional Base** (`common/regional_base.sh`): Creates two key tables:
+   - `<REGION_TAG>_min${MIN_OBS}_all_taxa`, storing species that meet the threshold in the bounding box.  
+   - `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs`, storing all observations for those species, possibly including out-of-region if configured.  
+4. **Cladistic** (`common/cladistic.sh`): Filters by the chosen clade/metaclade, creating a final table `<EXPORT_GROUP>_observations`. It then exports a CSV using partition-based random sampling.  
+5. **Summary & Logging**: `main.sh` writes a single `*_export_summary.txt` that includes relevant environment variables, final observation counts, and other metrics. It also optionally copies the wrapper script for reproducibility.
+
+```mermaid
+
+flowchart TB
+    A["Wrapper Script<br/>(r1/wrapper.sh)"] --> B["Main Script<br/>(common/main.sh)"]
+    B --> C{"Check<br/>SKIP_REGIONAL_BASE?"}
+    C -- "true && table exists" --> E["Reuse existing tables"]
+    C -- "false" --> D["regional_base.sh<br/>Create tables"]
+    E --> F["cladistic.sh<br/>Filter by clade"]
+    D --> F["cladistic.sh<br/>Filter by clade"]
+    F --> G["Export CSV + final table"]
+    G --> H["main.sh<br/>Write summary<br/>+ copy wrapper"]
+
+
+```
+
+---
+
+## Quick Start
+
+1. **Clone or navigate** to the `dbTools/export/v0` directory.  
+2. **Create/modify** a wrapper script (e.g., `r1/wrapper.sh`) to set your parameters:
+   - `REGION_TAG`, `MIN_OBS`, `MAX_RN`, `PRIMARY_ONLY`, etc.  
+   - `CLADE` or `METACLADE` if focusing on a particular subset of taxa.  
+   - Optionally `INCLUDE_OUT_OF_REGION_OBS` and `RG_FILTER_MODE`.  
+3. **Run** the wrapper script. The pipeline will:
+   - Create region-based tables (if not skipping).  
+   - Join them to `expanded_taxa` for a final set of observations.  
+   - Write a CSV with photo metadata.  
+   - Dump a summary file describing the final dataset.
+
+---
+
+## Environment Variables
+
+Below are the most commonly used variables. **All** variables are read in the wrapper, then passed to `main.sh` (and subsequently to `regional_base.sh` or `cladistic.sh`).
+
+### Database Config
+
+- **`DB_USER`**  
+  - **Description**: PostgreSQL user for executing SQL.  
+  - **Default**: `"postgres"`  
+
+- **`VERSION_VALUE`**  
+  - **Description**: Data version identifier (e.g. `"v0"`).  
+  - **Usage**: Combined with `RELEASE_VALUE` to build `DB_NAME`. Also included in logs and table references.
+
+- **`RELEASE_VALUE`**  
+  - **Description**: Additional label for the data release (e.g., `"r1"`).  
+  - **Usage**: Combined with `VERSION_VALUE` to create `DB_NAME`. Controls logic in some scripts (e.g., whether to include anomaly_score).
+
+- **`ORIGIN_VALUE`**  
+  - **Description**: Describes data provenance (e.g., `"iNat-Dec2024"`).  
+  - **Usage**: Logged in summary contexts.
+
+- **`DB_NAME`**  
+  - **Description**: Full name of the database. Typically `"ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"`.
+
+---
+
+### Export Parameters
+
+- **`REGION_TAG`**  
+  - **Description**: Specifies a broad region whose bounding box is defined in `regional_base.sh`.  
+  - **Examples**: `"NAfull"`, `"EURfull"`.  
+  - **Usage**: `regional_base.sh` calls `set_region_coordinates()` to set `$XMIN,$YMIN,$XMAX,$YMAX`.
+
+- **`MIN_OBS`**  
+  - **Description**: Minimum number of **research-grade** observations required for a species to be included in the region-based tables.  
+  - **Usage**: In `regional_base.sh`, we gather species with at least `MIN_OBS` research-grade observations inside the bounding box.  
+  - **Default**: `50`.
+
+- **`MAX_RN`**  
+  - **Description**: Maximum number of research-grade observations to be sampled per species in the final CSV.  
+  - **Usage**: In `cladistic.sh`, we do a partition-based random sampling. Observations at species rank beyond `MAX_RN` are excluded in the final CSV.  
+  - **Default**: `4000`.
+
+- **`PRIMARY_ONLY`**  
+  - **Description**: If `true`, only export the primary (position=0) photo for each observation; if `false`, include all photos.  
+  - **Usage**: In `cladistic.sh`, the final `COPY` statement filters `p.position=0` if `PRIMARY_ONLY=true`.  
+
+- **`CLADE`** / **`METACLADE`** / **`MACROCLADE`**  
+  - **Description**: Used to define the clade or group of interest.  
+  - **Usage**: In `clade_defns.sh`, we have integer-based conditions for major taxonomic ranks (e.g., `L50_taxonID=3` for birds). If `METACLADE` is set, it overrides `CLADE` or `MACROCLADE`.  
+  - **Example**: `METACLADE="terrestrial_arthropods"` or `CLADE="amphibia"`.
+
+- **`EXPORT_GROUP`**  
+  - **Description**: The final label for the exported dataset; used to name `<EXPORT_GROUP>_observations` and the CSV.  
+  - **Usage**: Also appended to summary logs, e.g., `amphibia_export_summary.txt`.
+
+- **`PROCESS_OTHER`**  
+  - **Description**: Generic boolean-like flag (default `false`).  
+  - **Usage**: Not heavily used but can gate extra steps if desired.
+
+- **`SKIP_REGIONAL_BASE`**  
+  - **Description**: If `true`, skip creating region-based tables if they already exist and are non-empty.  
+  - **Usage**: `main.sh` checks for `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs`; if present and non-empty, it is reused.  
+  - **Default**: `false`.
+
+- **`INCLUDE_OUT_OF_REGION_OBS`**  
+  - **Description**: If `true`, once a species is selected by `MIN_OBS` inside the bounding box, we include **all** observations of that species globally. If `false`, re-apply bounding box in final table.  
+  - **Usage**: Set in `regional_base.sh`. Defaults to `true` in most wrappers to increase data coverage.
+
+- **`RG_FILTER_MODE`**  
+  - **Description**: Controls how research-grade vs. non-research observations are ultimately included in the final `<EXPORT_GROUP>_observations`.  
+  - **Possible Values**:
+    1. `ONLY_RESEARCH` — Only research-grade observations (`quality_grade='research'`).
+    2. `ALL` — Include all observations, regardless of quality_grade.
+    3. `ALL_EXCLUDE_SPECIES_NON_RESEARCH` — Include everything except non-research-grade at the species level (`L10_taxonID` non-null).
+    4. `ONLY_NONRESEARCH` — Include only non-research-grade (`quality_grade!='research'`).
+    5. `ONLY_NONRESEARCH_EXCLUDE_SPECIES` — Include only non-research-grade, but also exclude species-level assignments (`quality_grade!='research' AND L10_taxonID IS NULL`).
+    6. `ONLY_NONRESEARCH_WIPE_SPECIES_LABEL` — Include only non-research-grade, but keep any records with a species-level guess. The `L10_taxonID` is forcibly set to `NULL` so the model does not see a species label.  
+  - **Usage**: `cladistic.sh` uses a SQL CASE block to apply the correct filter logic. If the mode is unrecognized, it defaults to `ALL`. The final CSV export currently retains a separate step that filters photos by research-grade for sampling (e.g., `o.quality_grade='research'`), so you may wish to unify that logic if desired.
+
+- **`INCLUDE_MINOR_RANKS_IN_ANCESTORS`**
+
+- **`MIN_OCCURRENCES_PER_RANK`**
+---
+
+### Paths
+
+- **`DB_CONTAINER`**  
+  - **Description**: Docker container name running PostgreSQL (often `"ibridaDB"`).  
+  - **Usage**: Scripts run `docker exec ${DB_CONTAINER} psql ...`.
+
+- **`HOST_EXPORT_BASE_PATH`**  
+  - **Description**: Host filesystem path to store exports.  
+  - **Default**: `"/datasets/ibrida-data/exports"`.
+
+- **`CONTAINER_EXPORT_BASE_PATH`**  
+  - **Description**: Container path mapping to `HOST_EXPORT_BASE_PATH`.  
+  - **Default**: `"/exports"`.
+
+- **`EXPORT_SUBDIR`**  
+  - **Description**: A subdirectory typically combining `VERSION_VALUE`, `RELEASE_VALUE`, and other parameters (e.g., `"v0/r1/primary_only_50min_4000max"`).  
+  - **Usage**: `main.sh` assembles final output paths from `CONTAINER_EXPORT_BASE_PATH/$EXPORT_SUBDIR` and `HOST_EXPORT_BASE_PATH/$EXPORT_SUBDIR`.
+
+- **`BASE_DIR`**  
+  - **Description**: Path to the export scripts inside the container.  
+  - **Usage**: Set in the wrapper to locate `common/functions.sh`, `common/regional_base.sh`, `common/cladistic.sh`, etc.
+
+---
+
+## Export Flow & Scripts
+
+Below is the **script-by-script** overview:
+
+1. **`wrapper.sh`**  
+   - You define all environment variables needed for your particular export (see above).  
+   - Sets `WRAPPER_PATH="$0"` so the pipeline can copy the wrapper into the output directory for reproducibility.  
+   - Calls `main.sh`.
+
+2. **`main.sh`**  
+   - Validates environment variables.  
+   - Creates the export directory (`EXPORT_SUBDIR`).  
+   - **Optional**: If `SKIP_REGIONAL_BASE=true`, checks whether region-based tables already exist.  
+   - Sources `regional_base.sh` if needed.  
+   - Calls `cladistic.sh` to do the final clade-based filtering and CSV export.  
+   - Gathers final stats (e.g., #observations, #taxa) from `<EXPORT_GROUP>_observations`.  
+   - Writes a single summary file (`${EXPORT_GROUP}_export_summary.txt`).  
+   - Optionally copies the wrapper script into the export folder.
+
+3. **`regional_base.sh`**  
+   - Sets bounding box coordinates for the region (`REGION_TAG`).  
+   - Creates `<REGION_TAG>_min${MIN_OBS}_all_taxa`, selecting species with at least `MIN_OBS` research-grade obs.  
+   - Creates `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs`, either global or region-limited based on `INCLUDE_OUT_OF_REGION_OBS`.
+
+4. **`cladistic.sh`**  
+   - Loads `clade_defns.sh` to interpret `CLADE`, `METACLADE`, or `MACROCLADE`.  
+   - Joins `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs` to `expanded_taxa` and filters for active taxa matching the clade condition. Applies `RG_FILTER_MODE` to the final table. Produces `<EXPORT_GROUP>_observations`.  
+   - Exports a CSV with photo metadata, applying `PRIMARY_ONLY` and random sampling of up to `MAX_RN` observations per species.
+</file: export.md>
+
+</codebase_context>
