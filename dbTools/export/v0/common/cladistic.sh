@@ -75,9 +75,6 @@ DROP TABLE IF EXISTS \"${TABLE_NAME}\" CASCADE;
 # -------------------------------------------------------------------------------
 # Step B) Construct a WHERE clause & rewriting logic based on RG_FILTER_MODE
 # -------------------------------------------------------------------------------
-# Typically, we interpret RG_FILTER_MODE to decide how to handle research vs. non-research
-# observations. Possibly we wipe the L10_taxonID for non-research, or exclude them, etc.
-
 rg_where_condition="TRUE"
 rg_l10_col="e.\"L10_taxonID\""
 
@@ -111,14 +108,13 @@ print_progress "Building final table \"${TABLE_NAME}\" from ${ANCESTORS_OBS_TABL
 # -------------------------------------------------------------------------------
 # Step C) Create <EXPORT_GROUP>_observations table by joining to expanded_taxa
 # -------------------------------------------------------------------------------
-# In theory, ${ANCESTORS_OBS_TABLE} has taxon_id referencing the desired region/clade
-# observations. We join with expanded_taxa for additional columns. Then we apply
-# RG_FILTER_MODE logic.
-
 execute_sql "
 CREATE TABLE \"${TABLE_NAME}\" AS
 SELECT
     o.${OBS_COLUMNS},
+    -- NEW: carry over the boolean in_region from the ancestor-based table
+    o.in_region,
+
     e.\"taxonID\"       AS expanded_taxonID,
     e.\"rankLevel\"     AS expanded_rankLevel,
     e.\"name\"          AS expanded_name,
@@ -197,11 +193,10 @@ if [ "${PRIMARY_ONLY}" = true ]; then
     pos_condition="p.position=0"
 fi
 
-# ------------------------------------------------------------------------------
-# 1) Let's define a list of columns from the <EXPORT_GROUP>_observations table
-#    that we want in our final CSV. We'll call them "obs_columns_for_union".
-#    We'll also add the photo columns explicitly.
-# ------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
+# 1) We define a list of columns from <EXPORT_GROUP>_observations that we want
+#    in our final CSV, plus the photo columns. Ensure we include in_region.
+# -------------------------------------------------------------------------------
 obs_columns_for_union="
     observation_uuid,
     observer_id,
@@ -212,6 +207,7 @@ obs_columns_for_union="
     quality_grade,
     observed_on,
     anomaly_score,
+    in_region,        -- ADDED to ensure we get the in/out-of-region flag
     expanded_taxonID,
     expanded_rankLevel,
     expanded_name,
@@ -247,7 +243,6 @@ obs_columns_for_union="
     L70_taxonID
 "
 
-# We also want photo columns in the final CSV:
 photo_columns_for_union="
     photo_uuid,
     photo_id,
@@ -258,11 +253,9 @@ photo_columns_for_union="
     position
 "
 
-# ------------------------------------------------------------------------------
-# 2) We'll do the subselect for "capped_research_species", selecting ALL above
-#    columns + an internal row_number() as 'rn'. We'll *not* include 'rn' in the
-#    final union, so we'll put that in a subselect.
-# ------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
+# 2) Do the subselect for "capped_research_species", selecting all columns + row_number.
+# -------------------------------------------------------------------------------
 debug_columns_capped="
 SELECT 'DEBUG: capped_research_species columns => ' ||
        array_to_string(array[
@@ -300,6 +293,7 @@ COPY (
         o.quality_grade,
         o.observed_on,
         o.anomaly_score,
+        o.in_region,  -- INCLUDE in_region
         o.expanded_taxonID,
         o.expanded_rankLevel,
         o.expanded_name,
@@ -359,7 +353,6 @@ COPY (
 
     everything_else AS (
       SELECT
-        -- exact same columns, but no row_number
         o.observation_uuid,
         o.observer_id,
         o.latitude,
@@ -369,6 +362,7 @@ COPY (
         o.quality_grade,
         o.observed_on,
         o.anomaly_score,
+        o.in_region,  -- INCLUDE in_region
         o.expanded_taxonID,
         o.expanded_rankLevel,
         o.expanded_name,
@@ -418,10 +412,6 @@ COPY (
         AND NOT (o.quality_grade='research' AND o.\"L10_taxonID\" IS NOT NULL)
     )
 
-  -- ----------------------------------------------------------------------------
-  -- Now build the final union, but for the first subselect, we only want
-  -- rows where 'rn' <= ${MAX_RN}. Note that we do NOT select 'rn' in the union columns.
-  -- ----------------------------------------------------------------------------
   SELECT
     observation_uuid,
     observer_id,
@@ -432,6 +422,7 @@ COPY (
     quality_grade,
     observed_on,
     anomaly_score,
+    in_region,
     expanded_taxonID,
     expanded_rankLevel,
     expanded_name,
@@ -487,6 +478,7 @@ COPY (
     quality_grade,
     observed_on,
     anomaly_score,
+    in_region,
     expanded_taxonID,
     expanded_rankLevel,
     expanded_name,

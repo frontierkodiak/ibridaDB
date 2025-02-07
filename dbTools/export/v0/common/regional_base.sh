@@ -188,15 +188,6 @@ check_and_build_ancestors() {
   );
   "
 
-  # ---------------------------------------------------------------------------
-  # insert_ancestors_for_root():
-  #
-  # For a given single root (rank_part=50, root_taxid=47158, etc.),
-  # we gather all species from <ALL_SP_TABLE> that have e.L50_taxonID=47158,
-  # then unroll their ancestors via CROSS JOIN LATERAL on the columns L5..L70,
-  # look up each ancestor's rankLevel from expanded_taxa, and keep only those
-  # with rankLevel < boundary_rank. Insert them into ANCESTORS_TABLE.
-  # ---------------------------------------------------------------------------
   local insert_ancestors_for_root
   insert_ancestors_for_root() {
     local root_pair="$1"  # e.g. "50=47158"
@@ -352,10 +343,25 @@ check_and_build_ancestors_obs() {
   local OBS_COLUMNS
   OBS_COLUMNS="$(get_obs_columns)"
 
+  # ---------------------------------------------------------------------------
+  # ADDED FEATURE: Always store an `in_region` boolean for each observation
+  # ---------------------------------------------------------------------------
+  # If INCLUDE_OUT_OF_REGION_OBS=true, we do NOT filter by bounding box in the
+  # WHERE clause, but we compute a boolean:
+  #    COALESCE(ST_Within(geom, ST_MakeEnvelope(...)), false) AS in_region
+  #
+  # If INCLUDE_OUT_OF_REGION_OBS=false, we do filter by bounding box
+  #    AND geom && ST_MakeEnvelope(...)
+  # and simply store in_region=TRUE for all rows.
+
+  local BBOX="ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326)"
+
   if [ "${INCLUDE_OUT_OF_REGION_OBS}" = "true" ]; then
     execute_sql "
     CREATE TABLE \"${ANCESTORS_OBS_TABLE}\" AS
-    SELECT ${OBS_COLUMNS}
+    SELECT
+      ${OBS_COLUMNS},
+      COALESCE(ST_Within(geom, ${BBOX}), false) AS in_region
     FROM observations
     WHERE taxon_id IN (
       SELECT taxon_id
@@ -365,13 +371,15 @@ check_and_build_ancestors_obs() {
   else
     execute_sql "
     CREATE TABLE \"${ANCESTORS_OBS_TABLE}\" AS
-    SELECT ${OBS_COLUMNS}
+    SELECT
+      ${OBS_COLUMNS},
+      true AS in_region
     FROM observations
     WHERE taxon_id IN (
       SELECT taxon_id
       FROM \"${ANCESTORS_TABLE}\"
     )
-    AND geom && ST_MakeEnvelope(${XMIN}, ${YMIN}, ${XMAX}, ${YMAX}, 4326);
+    AND geom && ${BBOX};
     "
   fi
 }
