@@ -232,4 +232,5 @@ Below is the **script-by-script** overview:
 
 # FUTURE
 
-- [ ] Preferentially select in-region obs in the random sampling step (when we are applying the MAX_RN cap)
+- [x] Preferentially select in-region obs in the random sampling step (when we are applying the MAX_RN cap)
+  - Implemented: preferential in-region sampling” for research-grade observations when applying the MAX_RN cap. In other words, for each species (L10_taxonID), all in-region observations are sampled first in random order; only if the total number of in-region observations is less than MAX_RN do out-of-region observations get pulled in (also in random order) to fill out the remainder of the cap.

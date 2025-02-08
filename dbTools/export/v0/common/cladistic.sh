@@ -112,7 +112,7 @@ execute_sql "
 CREATE TABLE \"${TABLE_NAME}\" AS
 SELECT
     o.${OBS_COLUMNS},
-    -- NEW: carry over the boolean in_region from the ancestor-based table
+    -- Keep in_region from the ancestor-based table
     o.in_region,
 
     e.\"taxonID\"       AS expanded_taxonID,
@@ -195,7 +195,7 @@ fi
 
 # -------------------------------------------------------------------------------
 # 1) We define a list of columns from <EXPORT_GROUP>_observations that we want
-#    in our final CSV, plus the photo columns. Ensure we include in_region.
+#    in our final CSV, plus the photo columns. We also keep in_region.
 # -------------------------------------------------------------------------------
 obs_columns_for_union="
     observation_uuid,
@@ -207,7 +207,7 @@ obs_columns_for_union="
     quality_grade,
     observed_on,
     anomaly_score,
-    in_region,        -- ADDED to ensure we get the in/out-of-region flag
+    in_region,
     expanded_taxonID,
     expanded_rankLevel,
     expanded_name,
@@ -254,7 +254,12 @@ photo_columns_for_union="
 "
 
 # -------------------------------------------------------------------------------
-# 2) Do the subselect for "capped_research_species", selecting all columns + row_number.
+# 2) Do the subselect for "capped_research_species". This is where we implement
+#    the new "preferentially select in-region obs" logic in the random sampling.
+#    We do so by ordering first on in_region DESC (or effectively
+#    CASE WHEN in_region THEN 0 ELSE 1 END), then by random().
+#    That ensures we gather all in-region observations *first* up to the limit,
+#    and only sample out-of-region if the in-region count < MAX_RN.
 # -------------------------------------------------------------------------------
 debug_columns_capped="
 SELECT 'DEBUG: capped_research_species columns => ' ||
@@ -293,7 +298,7 @@ COPY (
         o.quality_grade,
         o.observed_on,
         o.anomaly_score,
-        o.in_region,  -- INCLUDE in_region
+        o.in_region,  -- Keep in_region
         o.expanded_taxonID,
         o.expanded_rankLevel,
         o.expanded_name,
@@ -338,9 +343,14 @@ COPY (
         p.position,
 
         -- 3. row_number for limiting research-grade
+        --    We prefer in-region first by sorting in_region=true before false,
+        --    and then random() within each subset. That ensures we fill the
+        --    MAX_RN mostly with in-region rows if available.
         ROW_NUMBER() OVER (
           PARTITION BY o.\"L10_taxonID\"
-          ORDER BY random()
+          ORDER BY
+            CASE WHEN o.in_region THEN 0 ELSE 1 END,
+            random()
         ) AS rn
 
       FROM \"${TABLE_NAME}\" o
@@ -362,7 +372,7 @@ COPY (
         o.quality_grade,
         o.observed_on,
         o.anomaly_score,
-        o.in_region,  -- INCLUDE in_region
+        o.in_region,
         o.expanded_taxonID,
         o.expanded_rankLevel,
         o.expanded_name,
@@ -412,6 +422,7 @@ COPY (
         AND NOT (o.quality_grade='research' AND o.\"L10_taxonID\" IS NOT NULL)
     )
 
+  -- Now build the final union:
   SELECT
     observation_uuid,
     observer_id,
