@@ -13,6 +13,7 @@ Below is an overview of:
     - [Export Parameters](#export-parameters)
     - [Paths](#paths)
   - [Export Flow \& Scripts](#export-flow--scripts)
+- [FUTURE](#future)
 
 A **placeholder** for a mermaid diagram is provided below. You can generate or modify the diagram according to your team’s preferences and paste it in there.  
 
@@ -225,3 +226,10 @@ Below is the **script-by-script** overview:
    - Loads `clade_defns.sh` to interpret `CLADE`, `METACLADE`, or `MACROCLADE`.  
    - Joins `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs` to `expanded_taxa` and filters for active taxa matching the clade condition. Applies `RG_FILTER_MODE` to the final table. Produces `<EXPORT_GROUP>_observations`.  
    - Exports a CSV with photo metadata, applying `PRIMARY_ONLY` and random sampling of up to `MAX_RN` observations per species.
+
+
+---
+
+# FUTURE
+
+- [ ] Preferentially select in-region obs in the random sampling step (when we are applying the MAX_RN cap)
