@@ -98,12 +98,11 @@ download_file() {
 # List of all valid files to download (excluding "no data" regions)
 files=(
     # # N60-N90
-    # "elv_n60w180.tar" "elv_n60w150.tar" "elv_n60w120.tar" "elv_n60w090.tar" "elv_n60w060.tar" "elv_n60w030.tar"
-    # "elv_n60e000.tar" "elv_n60e030.tar" "elv_n60e060.tar" "elv_n60e090.tar" "elv_n60e120.tar" "elv_n60e150.tar"
+    "elv_n60w180.tar" "elv_n60w150.tar" "elv_n60w120.tar" "elv_n60w090.tar" "elv_n60w060.tar" "elv_n60w030.tar"
+    "elv_n60e000.tar" "elv_n60e030.tar" "elv_n60e060.tar" "elv_n60e090.tar" "elv_n60e120.tar" "elv_n60e150.tar"
     # # N30-N60
-    # "elv_n30w180.tar" "elv_n30w150.tar" "elv_n30w120.tar" "elv_n30w090.tar" "elv_n30w060.tar" "elv_n30w030.tar"
-    # "elv_n30e000.tar" "elv_n30e030.tar" "elv_n30e060.tar"
-    "elv_n30e090.tar" "elv_n30e120.tar" "elv_n30e150.tar"
+    "elv_n30w180.tar" "elv_n30w150.tar" "elv_n30w120.tar" "elv_n30w090.tar" "elv_n30w060.tar" "elv_n30w030.tar"
+    "elv_n30e000.tar" "elv_n30e030.tar" "elv_n30e060.tar" "elv_n30e090.tar" "elv_n30e120.tar" "elv_n30e150.tar"
     # N00-N30
     "elv_n00w180.tar" "elv_n00w120.tar" "elv_n00w090.tar" "elv_n00w060.tar" "elv_n00w030.tar"
     "elv_n00e000.tar" "elv_n00e030.tar" "elv_n00e060.tar" "elv_n00e090.tar" "elv_n00e120.tar" "elv_n00e150.tar"

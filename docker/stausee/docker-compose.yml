@@ -1,6 +1,7 @@
 services:
   ibrida:
-    image: postgis/postgis:15-3.3
+    # Use the custom image we built and pushed to Docker Hub.
+    image: frontierkodiak/ibridadb:latest
     user: "998:998"
     shm_size: '16g'
     environment:

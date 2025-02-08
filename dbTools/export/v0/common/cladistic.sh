@@ -536,3 +536,4 @@ WITH (FORMAT CSV, HEADER, DELIMITER E'\t');
 "
 
 print_progress "cladistic.sh: Finished exporting observations CSV (Step E complete)"
+print_progress "observations CSV saved to ${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv"
