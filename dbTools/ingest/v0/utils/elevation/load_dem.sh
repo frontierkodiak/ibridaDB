@@ -25,12 +25,17 @@ if [ "$#" -lt 6 ]; then
   exit 1
 fi
 
-DEM_DIR="$1"
+# Host-side paths
+HOST_DEM_DIR="$1"
 DB_NAME="$2"
 DB_USER="$3"
 DB_CONTAINER="$4"
 EPSG="$5"
 TILE_SIZE="$6"
+
+# Container-side paths (translate from host paths)
+CONTAINER_DEM_DIR="/dem/merit"  # /datasets/dem/merit -> /dem/merit
+CONTAINER_TEMP_DIR="/dem/merit/temp"
 
 # If BASE_DIR not set, default to current script's grandparent
 BASE_DIR="${BASE_DIR:-"$(cd "$(dirname "$0")/../../.." && pwd)"}"
@@ -41,27 +46,27 @@ BASE_DIR="${BASE_DIR:-"$(cd "$(dirname "$0")/../../.." && pwd)"}"
 source "${BASE_DIR}/common/functions.sh"
 
 # ------------------------------------------------------------------------------
-# 3. Prepare temporary directory
+# 3. Prepare temporary directory (use host path for mkdir)
 # ------------------------------------------------------------------------------
-TEMP_DIR="${DEM_DIR}/temp"
+TEMP_DIR="${HOST_DEM_DIR}/temp"
 ensure_directory "${TEMP_DIR}"
 
-print_progress "Loading DEM data from ${DEM_DIR} into ${DB_NAME}"
+print_progress "Loading DEM data from ${HOST_DEM_DIR} into ${DB_NAME}"
 
 # ------------------------------------------------------------------------------
 # 4. Loop over .tar files, extract, load via raster2pgsql
 # ------------------------------------------------------------------------------
-for tarfile in "${DEM_DIR}"/*.tar; do
+for tarfile in "${HOST_DEM_DIR}"/*.tar; do
   if [ ! -f "${tarfile}" ]; then
     # If no .tar files exist, skip
     continue
   fi
 
-  # Extract
+  # Extract (using host paths)
   print_progress "Extracting ${tarfile}..."
   tar -xf "${tarfile}" -C "${TEMP_DIR}"
 
-  # Find any .tif file(s)
+  # Find any .tif file(s) (using host paths)
   found_tifs=($(find "${TEMP_DIR}" -type f -name '*.tif'))
   if [ "${#found_tifs[@]}" -eq 0 ]; then
     echo "Warning: No .tif found in ${tarfile}; skipping."
@@ -72,14 +77,18 @@ for tarfile in "${DEM_DIR}"/*.tar; do
   # Load each TIF
   for tiffile in "${found_tifs[@]}"; do
     print_progress "Loading ${tiffile} into PostGIS (EPSG=${EPSG}, tile=${TILE_SIZE})"
-    # Use raster2pgsql, pipe to docker exec
-    raster2pgsql -s "${EPSG}" -t "${TILE_SIZE}" -I "${tiffile}" elevation_raster \
+    
+    # Convert host path to container path for the TIF file
+    CONTAINER_TIFFILE="${CONTAINER_TEMP_DIR}/$(basename "$(dirname "${tiffile}")")/$(basename "${tiffile}")"
+    
+    # Run raster2pgsql inside the container with container paths
+    docker exec "${DB_CONTAINER}" raster2pgsql -a -s "${EPSG}" -t "${TILE_SIZE}" -I "${CONTAINER_TIFFILE}" elevation_raster \
       | docker exec -i "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}"
 
     send_notification "[OK] Loaded DEM tile: $(basename "${tiffile}") into ${DB_NAME}"
   done
 
-  # Cleanup extracted files
+  # Cleanup extracted files (using host path)
   rm -rf "${TEMP_DIR:?}"/*
 done
 

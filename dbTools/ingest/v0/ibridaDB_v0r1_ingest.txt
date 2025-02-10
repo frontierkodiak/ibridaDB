@@ -1,24 +1,24 @@
 <codebase_context>
 
 <dirtree: /home/caleb/repo/ibridaDB/dbTools/ingest/v0>
-|-- common (420 lines)
-|   |-- functions.sh (46)
+|-- common (507 lines)
+|   |-- functions.sh (42)
 |   |-- geom.sh (50)
-|   |-- main.sh (172)
+|   |-- main.sh (263)
 |   \-- vers_origin.sh (152)
 |-- r1 (102)
 |   |-- structure.sql (49)
 |   \-- wrapper.sh (53)
 |-- readme.md (100)
-\-- utils (61)
+\-- utils (478)
     |-- add_release.sh (55)
-    \-- elevation (6)
-        |-- create_elevation_table.sh (1)
-        |-- create_elevation_table.sql (1)
-        |-- load_dem.sh (1)
-        |-- main.sh (1)
-        |-- update_elevation.sh (1)
-        \-- wrapper.sh (1)
+    \-- elevation (423)
+        |-- create_elevation_table.sh (55)
+        |-- create_elevation_table.sql (15)
+        |-- load_dem.sh (97)
+        |-- main.sh (79)
+        |-- update_elevation.sh (115)
+        \-- wrapper.sh (62)
 </dirtree: /home/caleb/repo/ibridaDB/dbTools/ingest/v0>
 
 <file: readme.md>
@@ -126,177 +126,267 @@ cp /home/caleb/repo/ibridaDB/dbTools/ingest/v0/r1/wrapper.sh /home/caleb/repo/ib
 
 <file: common/main.sh>
 #!/bin/bash
-
+#
+# main.sh
+#
+# Core ingestion logic for a given database release. Creates the database,
+# imports CSV data, configures geometry, version columns, etc. Now also
+# optionally calls the elevation pipeline if ENABLE_ELEVATION=true.
+#
 # This script expects the following variables to be set by the wrapper:
-# - DB_USER
-# - DB_TEMPLATE
-# - NUM_PROCESSES
-# - BASE_DIR
-# - SOURCE
-# - ORIGIN_VALUE
-# - VERSION_VALUE
-# - RELEASE_VALUE
-# - DB_NAME
-# - DB_CONTAINER
-# - METADATA_PATH
-# - STRUCTURE_SQL
+#   - DB_USER
+#   - DB_TEMPLATE
+#   - NUM_PROCESSES
+#   - BASE_DIR
+#   - SOURCE
+#   - ORIGIN_VALUE
+#   - VERSION_VALUE
+#   - RELEASE_VALUE
+#   - DB_NAME
+#   - DB_CONTAINER
+#   - METADATA_PATH
+#   - STRUCTURE_SQL
+#   - ENABLE_ELEVATION (new; optional, defaults to "false" if not set)
+#
+# Example usage:
+#   ENABLE_ELEVATION=true /home/caleb/repo/ibridaDB/dbTools/ingest/v0/r1/wrapper.sh
+#
 
-# Validate required variables
+set -euo pipefail
+
+# ------------------------------------------------------------------------------
+# 1. Validate required variables
+# ------------------------------------------------------------------------------
 required_vars=(
-    "DB_USER" "DB_TEMPLATE" "NUM_PROCESSES" "BASE_DIR" 
-    "SOURCE" "ORIGIN_VALUE" "VERSION_VALUE" "DB_NAME" 
+    "DB_USER" "DB_TEMPLATE" "NUM_PROCESSES" "BASE_DIR"
+    "SOURCE" "ORIGIN_VALUE" "VERSION_VALUE" "DB_NAME"
     "DB_CONTAINER" "METADATA_PATH" "STRUCTURE_SQL"
 )
 
 for var in "${required_vars[@]}"; do
-    if [ -z "${!var}" ]; then
+    if [ -z "${!var:-}" ]; then
         echo "Error: Required variable $var is not set"
         exit 1
     fi
 done
 
-# Function to execute SQL commands
-execute_sql() {
-    local sql="$1"
-    docker exec ${DB_CONTAINER} psql -U ${DB_USER} -d "${DB_NAME}" -c "$sql"
-}
+# Default ENABLE_ELEVATION to "false" if not defined
+ENABLE_ELEVATION="${ENABLE_ELEVATION:-false}"
 
-# Function to execute SQL commands on default postgres database
+# ------------------------------------------------------------------------------
+# 2. Source shared functions
+# ------------------------------------------------------------------------------
+source "${BASE_DIR}/common/functions.sh"
+
+print_progress "Starting core ingestion for ${DB_NAME}"
+send_notification "[INFO] Starting ingestion for ${DB_NAME}"
+
+# ------------------------------------------------------------------------------
+# 3. Create Database
+# ------------------------------------------------------------------------------
+print_progress "Creating database ${DB_NAME} from template ${DB_TEMPLATE}"
 execute_sql_postgres() {
     local sql="$1"
-    docker exec ${DB_CONTAINER} psql -U ${DB_USER} -c "$sql"
+    docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -c "$sql"
 }
 
-# Function to print progress
-print_progress() {
-    echo "======================================"
-    echo "$1"
-    echo "======================================"
-}
+execute_sql_postgres "DROP DATABASE IF EXISTS \"${DB_NAME}\";"
+execute_sql_postgres "CREATE DATABASE \"${DB_NAME}\" WITH TEMPLATE ${DB_TEMPLATE} OWNER ${DB_USER};"
 
-# Create database
-print_progress "Creating database"
-execute_sql_postgres "DROP DATABASE IF EXISTS \"$DB_NAME\";"
-execute_sql_postgres "CREATE DATABASE \"$DB_NAME\" WITH TEMPLATE $DB_TEMPLATE OWNER $DB_USER;"
+# ------------------------------------------------------------------------------
+# 4. Create tables from structure SQL
+# ------------------------------------------------------------------------------
+print_progress "Creating tables from ${STRUCTURE_SQL}"
+if [ ! -f "${STRUCTURE_SQL}" ]; then
+  echo "Error: STRUCTURE_SQL file not found: ${STRUCTURE_SQL}"
+  exit 1
+fi
 
-# Create tables from structure file
-print_progress "Creating tables"
-cat "${STRUCTURE_SQL}" | docker exec -i ${DB_CONTAINER} psql -U ${DB_USER} -d "${DB_NAME}"
+cat "${STRUCTURE_SQL}" | docker exec -i "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}"
 
-# Import data
-print_progress "Importing data"
+# ------------------------------------------------------------------------------
+# 5. Import data
+# ------------------------------------------------------------------------------
+print_progress "Importing CSV data from ${METADATA_PATH}"
 execute_sql "
 BEGIN;
 
-COPY observations FROM '${METADATA_PATH}/observations.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
-COPY photos FROM '${METADATA_PATH}/photos.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
-COPY taxa FROM '${METADATA_PATH}/taxa.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
-COPY observers FROM '${METADATA_PATH}/observers.csv' DELIMITER E'\t' QUOTE E'\b' CSV HEADER;
+COPY observations
+FROM '${METADATA_PATH}/observations.csv'
+DELIMITER E'\t'
+QUOTE E'\b'
+CSV HEADER;
+
+COPY photos
+FROM '${METADATA_PATH}/photos.csv'
+DELIMITER E'\t'
+QUOTE E'\b'
+CSV HEADER;
+
+COPY taxa
+FROM '${METADATA_PATH}/taxa.csv'
+DELIMITER E'\t'
+QUOTE E'\b'
+CSV HEADER;
+
+COPY observers
+FROM '${METADATA_PATH}/observers.csv'
+DELIMITER E'\t'
+QUOTE E'\b'
+CSV HEADER;
 
 COMMIT;
 "
 
-# Create indexes
-print_progress "Creating indexes"
+# ------------------------------------------------------------------------------
+# 6. Create indexes
+# ------------------------------------------------------------------------------
+print_progress "Creating base indexes"
 execute_sql "
 BEGIN;
 
-CREATE INDEX index_photos_photo_uuid ON photos USING btree (photo_uuid);
-CREATE INDEX index_photos_observation_uuid ON photos USING btree (observation_uuid);
-CREATE INDEX index_photos_position ON photos USING btree (position);
-CREATE INDEX index_photos_photo_id ON photos USING btree (photo_id);
-CREATE INDEX index_taxa_taxon_id ON taxa USING btree (taxon_id);
-CREATE INDEX index_observers_observers_id ON observers USING btree (observer_id);
-CREATE INDEX index_observations_observer_id ON observations USING btree (observer_id);
-CREATE INDEX index_observations_quality ON observations USING btree (quality_grade);
-CREATE INDEX index_observations_taxon_id ON observations USING btree (taxon_id);
-CREATE INDEX index_taxa_active ON taxa USING btree (active);
+CREATE INDEX index_photos_photo_uuid         ON photos USING btree (photo_uuid);
+CREATE INDEX index_photos_observation_uuid   ON photos USING btree (observation_uuid);
+CREATE INDEX index_photos_position           ON photos USING btree (position);
+CREATE INDEX index_photos_photo_id           ON photos USING btree (photo_id);
+CREATE INDEX index_taxa_taxon_id             ON taxa   USING btree (taxon_id);
+CREATE INDEX index_observers_observers_id    ON observers USING btree (observer_id);
+CREATE INDEX index_observations_observer_id  ON observations USING btree (observer_id);
+CREATE INDEX index_observations_quality      ON observations USING btree (quality_grade);
+CREATE INDEX index_observations_taxon_id     ON observations USING btree (taxon_id);
+CREATE INDEX index_taxa_active               ON taxa USING btree (active);
 
 COMMIT;
 "
 
-# Create conditional index for anomaly_score if it exists
+# Conditional index for anomaly_score
 execute_sql "
 DO \$\$
 BEGIN
     IF EXISTS (
-        SELECT 1 
-        FROM information_schema.columns 
-        WHERE table_name = 'observations' 
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'observations'
         AND column_name = 'anomaly_score'
     ) THEN
         CREATE INDEX idx_observations_anomaly ON observations (anomaly_score);
     END IF;
 END \$\$;"
 
-# Add geom column
-print_progress "Adding geom column"
+# ------------------------------------------------------------------------------
+# 7. Add geom column & compute geometry in parallel
+# ------------------------------------------------------------------------------
+print_progress "Adding geom column to observations"
 execute_sql "ALTER TABLE observations ADD COLUMN geom public.geometry;"
 
-# Run parallel geom calculations
-print_progress "Running parallel geom calculations"
-"${BASE_DIR}/common/geom.sh" "$DB_NAME" "observations" "$NUM_PROCESSES" "$BASE_DIR"
+print_progress "Populating geom column in parallel"
+"${BASE_DIR}/common/geom.sh" "${DB_NAME}" "observations" "${NUM_PROCESSES}" "${BASE_DIR}"
 
 # Create geom index
-print_progress "Creating geom index"
-execute_sql "
-BEGIN;
-CREATE INDEX observations_geom ON observations USING GIST (geom);
-COMMIT;
-"
+print_progress "Creating GIST index on geom"
+execute_sql "CREATE INDEX observations_geom ON observations USING GIST (geom);"
 
-# Vacuum analyze
-print_progress "Vacuum analyze"
+# ------------------------------------------------------------------------------
+# 8. Vacuum
+# ------------------------------------------------------------------------------
+print_progress "Vacuum/Analyze after geometry load"
 execute_sql "VACUUM ANALYZE;"
 
-# Add origin, version, and release columns in parallel
-print_progress "Adding origin, version, and release columns"
+# ------------------------------------------------------------------------------
+# 9. Add origin, version, and release columns
+# ------------------------------------------------------------------------------
+print_progress "Adding origin/version/release columns in parallel"
 execute_sql "
 BEGIN;
 
-ALTER TABLE taxa ADD COLUMN origin VARCHAR(255);
-ALTER TABLE observers ADD COLUMN origin VARCHAR(255);
-ALTER TABLE observations ADD COLUMN origin VARCHAR(255);
-ALTER TABLE photos ADD COLUMN origin VARCHAR(255);
-ALTER TABLE photos ADD COLUMN version VARCHAR(255);
-ALTER TABLE observations ADD COLUMN version VARCHAR(255);
-ALTER TABLE observers ADD COLUMN version VARCHAR(255);
-ALTER TABLE taxa ADD COLUMN version VARCHAR(255);
-ALTER TABLE photos ADD COLUMN release VARCHAR(255);
-ALTER TABLE observations ADD COLUMN release VARCHAR(255);
-ALTER TABLE observers ADD COLUMN release VARCHAR(255);
-ALTER TABLE taxa ADD COLUMN release VARCHAR(255);
+ALTER TABLE taxa         ADD COLUMN origin   VARCHAR(255);
+ALTER TABLE observers    ADD COLUMN origin   VARCHAR(255);
+ALTER TABLE observations ADD COLUMN origin   VARCHAR(255);
+ALTER TABLE photos       ADD COLUMN origin   VARCHAR(255);
+
+ALTER TABLE photos       ADD COLUMN version  VARCHAR(255);
+ALTER TABLE observations ADD COLUMN version  VARCHAR(255);
+ALTER TABLE observers    ADD COLUMN version  VARCHAR(255);
+ALTER TABLE taxa         ADD COLUMN version  VARCHAR(255);
+
+ALTER TABLE photos       ADD COLUMN release  VARCHAR(255);
+ALTER TABLE observations ADD COLUMN release  VARCHAR(255);
+ALTER TABLE observers    ADD COLUMN release  VARCHAR(255);
+ALTER TABLE taxa         ADD COLUMN release  VARCHAR(255);
 
 COMMIT;
 "
 
-# Run parallel updates for origin, version, and release columns
-print_progress "Running parallel updates for origin, version, and release columns"
-"${BASE_DIR}/common/vers_origin.sh" "$DB_NAME" "$NUM_PROCESSES" "$ORIGIN_VALUE" "$VERSION_VALUE" "$RELEASE_VALUE"
+print_progress "Populating origin/version/release columns"
+"${BASE_DIR}/common/vers_origin.sh" "${DB_NAME}" "${NUM_PROCESSES}" "${ORIGIN_VALUE}" "${VERSION_VALUE}" "${RELEASE_VALUE}"
 
-# Create indexes for origin, version, and release columns
-print_progress "Creating indexes for origin, version, and release columns"
+# ------------------------------------------------------------------------------
+# 10. Create GIN indexes for origin/version/release
+# ------------------------------------------------------------------------------
+print_progress "Creating GIN indexes for origin/version/release"
 execute_sql "
 BEGIN;
 
-CREATE INDEX index_taxa_origins ON taxa USING GIN (to_tsvector('simple', origin));
-CREATE INDEX index_taxa_name ON taxa USING GIN (to_tsvector('simple', name));
-CREATE INDEX index_observers_origins ON observers USING GIN (to_tsvector('simple', origin));
+CREATE INDEX index_taxa_origins        ON taxa        USING GIN (to_tsvector('simple', origin));
+CREATE INDEX index_taxa_name           ON taxa        USING GIN (to_tsvector('simple', name));
+CREATE INDEX index_observers_origins   ON observers   USING GIN (to_tsvector('simple', origin));
 CREATE INDEX index_observations_origins ON observations USING GIN (to_tsvector('simple', origin));
-CREATE INDEX index_photos_origins ON photos USING GIN (to_tsvector('simple', origin));
-CREATE INDEX index_photos_version ON photos USING GIN (to_tsvector('simple', version));
+CREATE INDEX index_photos_origins      ON photos      USING GIN (to_tsvector('simple', origin));
+
+CREATE INDEX index_photos_version      ON photos      USING GIN (to_tsvector('simple', version));
 CREATE INDEX index_observations_version ON observations USING GIN (to_tsvector('simple', version));
-CREATE INDEX index_observers_version ON observers USING GIN (to_tsvector('simple', version));
-CREATE INDEX index_taxa_version ON taxa USING GIN (to_tsvector('simple', version));
-CREATE INDEX index_photos_release ON photos USING GIN (to_tsvector('simple', release));
+CREATE INDEX index_observers_version   ON observers   USING GIN (to_tsvector('simple', version));
+CREATE INDEX index_taxa_version        ON taxa        USING GIN (to_tsvector('simple', version));
+
+CREATE INDEX index_photos_release      ON photos      USING GIN (to_tsvector('simple', release));
 CREATE INDEX index_observations_release ON observations USING GIN (to_tsvector('simple', release));
-CREATE INDEX index_observers_release ON observers USING GIN (to_tsvector('simple', release));
-CREATE INDEX index_taxa_release ON taxa USING GIN (to_tsvector('simple', release));
+CREATE INDEX index_observers_release   ON observers   USING GIN (to_tsvector('simple', release));
+CREATE INDEX index_taxa_release        ON taxa        USING GIN (to_tsvector('simple', release));
 
 COMMIT;
 "
 
-print_progress "Database setup complete"
+# ------------------------------------------------------------------------------
+# 11. Optional Elevation Flow
+# ------------------------------------------------------------------------------
+if [ "${ENABLE_ELEVATION}" == "true" ]; then
+  print_progress "ENABLE_ELEVATION=true, proceeding with elevation pipeline"
+  send_notification "[INFO] Elevation pipeline triggered for ${DB_NAME}"
+
+  # Either call the 'wrapper.sh' or call 'main.sh' directly.
+  # We'll illustrate direct call to main.sh here: (note; makes sense to direct call here, wrapper is for standalone use)
+  ELEVATION_SCRIPT="${BASE_DIR}/utils/elevation/main.sh"
+
+  # Example: pass your dem directory, concurrency, etc. 
+  # If your release wrapper already sets DEM_DIR, EPSG, etc. environment variables, you can do:
+  DEM_DIR="${DEM_DIR:-"/datasets/dem/merit"}"
+  EPSG="${EPSG:-"4326"}"
+  TILE_SIZE="${TILE_SIZE:-"100x100"}"
+
+  if [ -x "${ELEVATION_SCRIPT}" ]; then
+    "${ELEVATION_SCRIPT}" \
+      "${DB_NAME}" \
+      "${DB_USER}" \
+      "${DB_CONTAINER}" \
+      "${DEM_DIR}" \
+      "${NUM_PROCESSES}" \
+      "${EPSG}" \
+      "${TILE_SIZE}"
+  else
+    echo "Warning: Elevation script not found or not executable at ${ELEVATION_SCRIPT}"
+  fi
+
+  print_progress "Elevation pipeline complete for ${DB_NAME}"
+else
+  print_progress "ENABLE_ELEVATION=false, skipping elevation pipeline"
+  send_notification "[INFO] Skipping elevation pipeline for ${DB_NAME}"
+fi
+
+# ------------------------------------------------------------------------------
+# 12. Final notice
+# ------------------------------------------------------------------------------
+print_progress "Database setup complete for ${DB_NAME}"
+send_notification "[OK] Ingestion (and optional elevation) complete for ${DB_NAME}"
 </file: common/main.sh>
 
 <file: common/vers_origin.sh>
@@ -467,15 +557,11 @@ execute_sql() {
     docker exec ${DB_CONTAINER} psql -U ${DB_USER} -d "${DB_NAME}" -c "$sql"
 }
 
-# Function to send ntfy notification
-send_notification() {
-    local message="$1"
-    # Attempt curl with:
-    # - max time of 5 seconds (-m 5)
-    # - silent mode (-s)
-    # - show errors but don't include in output (-S)
-    # Redirect stderr to /dev/null to suppress error messages
-    curl -m 5 -sS -d "$message" polliserve:8089/ibridaDB 2>/dev/null || true
+# Function to print progress
+print_progress() {
+    echo "======================================"
+    echo "$1"
+    echo "======================================"
 }
 
 # Function to ensure directory exists with proper permissions
@@ -723,27 +809,469 @@ print_progress "Release column added and populated successfully"
 </file: utils/add_release.sh>
 
 <file: utils/elevation/main.sh>
+#!/bin/bash
+#
+# main.sh
+#
+# High-level orchestration for setting up elevation data:
+#   1) create_elevation_table.sh
+#   2) load_dem.sh
+#   3) update_elevation.sh
+#
+# Usage:
+#   main.sh <DB_NAME> <DB_USER> <DB_CONTAINER> <DEM_DIR> <NUM_PROCESSES> [EPSG=4326] [TILE_SIZE=100x100]
+#
+# Example:
+#   main.sh ibrida-v0-r1 postgres ibridaDB /datasets/dem/merit 16 4326 100x100
+#
+# Notes:
+#   - Called by wrapper.sh typically, but can be run standalone.
+#   - We rely on the geometry column (observations.geom) to already exist!
 
+set -euo pipefail
+
+# ------------------------------------------------------------------------------
+# 1. Parse arguments
+# ------------------------------------------------------------------------------
+if [ "$#" -lt 5 ]; then
+  echo "Usage: $0 <DB_NAME> <DB_USER> <DB_CONTAINER> <DEM_DIR> <NUM_PROCESSES> [EPSG] [TILE_SIZE]"
+  exit 1
+fi
+
+DB_NAME="$1"
+DB_USER="$2"
+DB_CONTAINER="$3"
+DEM_DIR="$4"
+NUM_PROCESSES="$5"
+EPSG="${6:-4326}"
+TILE_SIZE="${7:-100x100}"
+
+# If BASE_DIR not set, default to current script's grandparent
+BASE_DIR="${BASE_DIR:-"$(cd "$(dirname "$0")/../../.." && pwd)"}"
+
+# ------------------------------------------------------------------------------
+# 2. Source shared functions
+# ------------------------------------------------------------------------------
+source "${BASE_DIR}/common/functions.sh"
+
+print_progress "=== Elevation: main.sh start ==="
+send_notification "[INFO] Starting elevation main flow for DB=${DB_NAME}"
+
+# ------------------------------------------------------------------------------
+# 3. Step 1: Create elevation_raster table
+# ------------------------------------------------------------------------------
+"${BASE_DIR}/utils/elevation/create_elevation_table.sh" \
+  "${DB_NAME}" \
+  "${DB_USER}" \
+  "${DB_CONTAINER}"
+
+# ------------------------------------------------------------------------------
+# 4. Step 2: Load DEM data
+# ------------------------------------------------------------------------------
+"${BASE_DIR}/utils/elevation/load_dem.sh" \
+  "${DEM_DIR}" \
+  "${DB_NAME}" \
+  "${DB_USER}" \
+  "${DB_CONTAINER}" \
+  "${EPSG}" \
+  "${TILE_SIZE}"
+
+# ------------------------------------------------------------------------------
+# 5. Step 3: Update observations with elevation
+# ------------------------------------------------------------------------------
+"${BASE_DIR}/utils/elevation/update_elevation.sh" \
+  "${DB_NAME}" \
+  "${DB_USER}" \
+  "${DB_CONTAINER}" \
+  "${NUM_PROCESSES}"
+
+print_progress "=== Elevation: main.sh complete ==="
+send_notification "[OK] Elevation pipeline complete for DB=${DB_NAME}"
 </file: utils/elevation/main.sh>
 
 <file: utils/elevation/load_dem.sh>
+#!/bin/bash
+#
+# load_dem.sh
+#
+# Loads MERIT DEM tiles from .tar archives into the elevation_raster table via raster2pgsql.
+#
+# Usage:
+#   load_dem.sh <DEM_DIR> <DB_NAME> <DB_USER> <DB_CONTAINER> <EPSG> <TILE_SIZE>
+#
+# Example:
+#   load_dem.sh /datasets/dem/merit ibrida-v0-r1 postgres ibridaDB 4326 100x100
+#
+# Notes:
+#   - Expects .tar files each containing .tif(s).
+#   - Uses raster2pgsql to tile (-t <TILE_SIZE>) and index (-I).
+#   - Calls print_progress and send_notification from functions.sh.
 
+set -euo pipefail
+
+# ------------------------------------------------------------------------------
+# 1. Parse arguments
+# ------------------------------------------------------------------------------
+if [ "$#" -lt 6 ]; then
+  echo "Usage: $0 <DEM_DIR> <DB_NAME> <DB_USER> <DB_CONTAINER> <EPSG> <TILE_SIZE>"
+  exit 1
+fi
+
+# Host-side paths
+HOST_DEM_DIR="$1"
+DB_NAME="$2"
+DB_USER="$3"
+DB_CONTAINER="$4"
+EPSG="$5"
+TILE_SIZE="$6"
+
+# Container-side paths (translate from host paths)
+CONTAINER_DEM_DIR="/dem/merit"  # /datasets/dem/merit -> /dem/merit
+CONTAINER_TEMP_DIR="/dem/merit/temp"
+
+# If BASE_DIR not set, default to current script's grandparent
+BASE_DIR="${BASE_DIR:-"$(cd "$(dirname "$0")/../../.." && pwd)"}"
+
+# ------------------------------------------------------------------------------
+# 2. Source shared functions
+# ------------------------------------------------------------------------------
+source "${BASE_DIR}/common/functions.sh"
+
+# ------------------------------------------------------------------------------
+# 3. Prepare temporary directory (use host path for mkdir)
+# ------------------------------------------------------------------------------
+TEMP_DIR="${HOST_DEM_DIR}/temp"
+ensure_directory "${TEMP_DIR}"
+
+print_progress "Loading DEM data from ${HOST_DEM_DIR} into ${DB_NAME}"
+
+# ------------------------------------------------------------------------------
+# 4. Loop over .tar files, extract, load via raster2pgsql
+# ------------------------------------------------------------------------------
+for tarfile in "${HOST_DEM_DIR}"/*.tar; do
+  if [ ! -f "${tarfile}" ]; then
+    # If no .tar files exist, skip
+    continue
+  fi
+
+  # Extract (using host paths)
+  print_progress "Extracting ${tarfile}..."
+  tar -xf "${tarfile}" -C "${TEMP_DIR}"
+
+  # Find any .tif file(s) (using host paths)
+  found_tifs=($(find "${TEMP_DIR}" -type f -name '*.tif'))
+  if [ "${#found_tifs[@]}" -eq 0 ]; then
+    echo "Warning: No .tif found in ${tarfile}; skipping."
+    rm -rf "${TEMP_DIR:?}"/*
+    continue
+  fi
+
+  # Load each TIF
+  for tiffile in "${found_tifs[@]}"; do
+    print_progress "Loading ${tiffile} into PostGIS (EPSG=${EPSG}, tile=${TILE_SIZE})"
+    
+    # Convert host path to container path for the TIF file
+    CONTAINER_TIFFILE="${CONTAINER_TEMP_DIR}/$(basename "$(dirname "${tiffile}")")/$(basename "${tiffile}")"
+    
+    # Run raster2pgsql inside the container with container paths
+    docker exec "${DB_CONTAINER}" raster2pgsql -a -s "${EPSG}" -t "${TILE_SIZE}" -I "${CONTAINER_TIFFILE}" elevation_raster \
+      | docker exec -i "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}"
+
+    send_notification "[OK] Loaded DEM tile: $(basename "${tiffile}") into ${DB_NAME}"
+  done
+
+  # Cleanup extracted files (using host path)
+  rm -rf "${TEMP_DIR:?}"/*
+done
+
+print_progress "DEM loading complete."
+send_notification "[OK] Completed loading DEM data into ${DB_NAME}"
 </file: utils/elevation/load_dem.sh>
 
 <file: utils/elevation/update_elevation.sh>
+#!/bin/bash
+#
+# update_elevation.sh
+#
+# Populates observations.elevation_meters from the elevation_raster table
+# using ST_Value(raster, geometry). Runs in parallel for efficiency.
+#
+# Usage:
+#   update_elevation.sh <DB_NAME> <DB_USER> <DB_CONTAINER> <NUM_PROCESSES>
+#
+# Environment Variables (expected):
+#   - We rely on functions.sh for print_progress, execute_sql, etc.
+#
+# Notes:
+#   - If ST_Value(...) is out of coverage (ocean or no-data area),
+#     elevation_meters will remain NULL.
+#   - We call VACUUM ANALYZE at the end to optimize performance.
 
+set -euo pipefail
+
+# ------------------------------------------------------------------------------
+# 1. Parse arguments
+# ------------------------------------------------------------------------------
+if [ "$#" -lt 4 ]; then
+  echo "Usage: $0 <DB_NAME> <DB_USER> <DB_CONTAINER> <NUM_PROCESSES>"
+  exit 1
+fi
+
+DB_NAME="$1"
+DB_USER="$2"
+DB_CONTAINER="$3"
+NUM_PROCESSES="$4"
+
+# If BASE_DIR not set, default to current script's grandparent
+BASE_DIR="${BASE_DIR:-"$(cd "$(dirname "$0")/../../.." && pwd)"}"
+
+# ------------------------------------------------------------------------------
+# 2. Source shared functions
+# ------------------------------------------------------------------------------
+source "${BASE_DIR}/common/functions.sh"
+
+# ------------------------------------------------------------------------------
+# 3. Ensure the column 'elevation_meters' exists on observations
+# ------------------------------------------------------------------------------
+print_progress "Ensuring observations.elevation_meters column exists"
+execute_sql "ALTER TABLE observations ADD COLUMN IF NOT EXISTS elevation_meters numeric(10,2);" 
+
+# ------------------------------------------------------------------------------
+# 4. Determine row count, compute batch size
+# ------------------------------------------------------------------------------
+print_progress "Determining row count in observations"
+TOTAL_ROWS=$(docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -t -c "SELECT COUNT(*) FROM observations;" | tr -d ' ')
+if [ -z "${TOTAL_ROWS}" ] || [ "${TOTAL_ROWS}" -eq 0 ]; then
+  echo "No observations found. Skipping elevation update."
+  exit 0
+fi
+
+BATCH_SIZE=$((TOTAL_ROWS / NUM_PROCESSES + 1))
+send_notification "[INFO] Elevation update starting: ${TOTAL_ROWS} rows in total, batch size=${BATCH_SIZE}"
+
+# ------------------------------------------------------------------------------
+# 5. Parallel update function
+# ------------------------------------------------------------------------------
+update_chunk() {
+  local offset="$1"
+  local limit="$2"
+  local chunk_id="$3"
+
+  print_progress "Elevation update chunk #${chunk_id} (offset=${offset}, limit=${limit})"
+
+  # Build an inline SQL
+  local sql="
+    UPDATE observations
+    SET elevation_meters = ST_Value(er.rast, observations.geom)
+    FROM elevation_raster er
+    WHERE ST_Intersects(er.rast, observations.geom)
+      AND observations.ctid IN (
+        SELECT ctid FROM observations
+        ORDER BY ctid
+        OFFSET ${offset}
+        LIMIT ${limit}
+      );
+  "
+
+  # Run the update
+  execute_sql "${sql}"
+
+  print_progress "Chunk #${chunk_id} complete"
+  send_notification "[OK] Elevation update chunk #${chunk_id} done"
+}
+
+# ------------------------------------------------------------------------------
+# 6. Launch parallel updates
+# ------------------------------------------------------------------------------
+pids=()
+for ((i=0; i<NUM_PROCESSES; i++)); do
+  OFFSET=$((i * BATCH_SIZE))
+  update_chunk "${OFFSET}" "${BATCH_SIZE}" "${i}" &
+  pids+=($!)
+done
+
+for pid in "${pids[@]}"; do
+  wait "$pid"
+done
+
+print_progress "All elevation updates completed for ${TOTAL_ROWS} rows."
+send_notification "[OK] All elevation updates completed"
+
+# ------------------------------------------------------------------------------
+# 7. Final VACUUM ANALYZE
+# ------------------------------------------------------------------------------
+print_progress "Running VACUUM ANALYZE on observations..."
+execute_sql "VACUUM ANALYZE observations;"
+send_notification "[OK] VACUUM ANALYZE on observations complete"
 </file: utils/elevation/update_elevation.sh>
 
 <file: utils/elevation/wrapper.sh>
+#!/bin/bash
+#
+# wrapper.sh
+#
+# A wrapper that sets environment variables / parameters and calls the
+# elevation main.sh. This is useful for a one-off scenario on an existing DB,
+# or for hooking into your ingestion flow after geometry is set.
+#
+# Usage:
+#   wrapper.sh
+#   (no arguments; you can edit the variables in-script)
+#
+# Example:
+#   chmod +x wrapper.sh
+#   ./wrapper.sh
+#
+# Required Tools:
+#   - Docker
+#   - raster2pgsql
+#
 
+set -euo pipefail
+
+# ------------------------------------------------------------------------------
+# 1. Configuration
+# ------------------------------------------------------------------------------
+export DB_NAME="ibrida-v0-r1"
+export DB_USER="postgres"
+export DB_CONTAINER="ibridaDB"
+export DEM_DIR="/datasets/dem/merit"
+export NUM_PROCESSES="16"
+export EPSG="4326"
+export TILE_SIZE="100x100"
+export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/ingest/v0"
+
+# ------------------------------------------------------------------------------
+# 2. Logging / Sourcing
+# ------------------------------------------------------------------------------
+LOG_FILE="$(dirname "$(readlink -f "$0")")/wrapper_$(date +%Y%m%d_%H%M%S).log"
+echo "Starting elevation wrapper at $(date)" | tee -a "${LOG_FILE}"
+
+source "${BASE_DIR}/common/functions.sh"
+
+print_progress "Invoking elevation main script" | tee -a "${LOG_FILE}"
+send_notification "[INFO] Elevation wrapper invoked"
+
+# ------------------------------------------------------------------------------
+# 3. Call main.sh
+# ------------------------------------------------------------------------------
+"${BASE_DIR}/utils/elevation/main.sh" \
+  "${DB_NAME}" \
+  "${DB_USER}" \
+  "${DB_CONTAINER}" \
+  "${DEM_DIR}" \
+  "${NUM_PROCESSES}" \
+  "${EPSG}" \
+  "${TILE_SIZE}" \
+  2>&1 | tee -a "${LOG_FILE}"
+
+print_progress "Elevation wrapper complete" | tee -a "${LOG_FILE}"
+send_notification "[OK] Elevation wrapper flow finished successfully"
 </file: utils/elevation/wrapper.sh>
 
 <file: utils/elevation/create_elevation_table.sh>
+#!/bin/bash
+#
+# create_elevation_table.sh
+#
+# Creates or ensures the elevation_raster table exists in the target database,
+# using create_elevation_table.sql. Index is also ensured via IF NOT EXISTS.
+#
+# Usage:
+#   create_elevation_table.sh <DB_NAME> <DB_USER> <DB_CONTAINER>
+#
+# Environment Variables:
+#   - BASE_DIR (optional if create_elevation_table.sql is elsewhere)
+# 
+# This script relies on helper functions from functions.sh for consistency.
 
+set -euo pipefail
+
+# ------------------------------------------------------------------------------
+# 1. Parse arguments
+# ------------------------------------------------------------------------------
+if [ "$#" -lt 3 ]; then
+  echo "Usage: $0 <DB_NAME> <DB_USER> <DB_CONTAINER>"
+  exit 1
+fi
+
+DB_NAME="$1"
+DB_USER="$2"
+DB_CONTAINER="$3"
+
+# If BASE_DIR not set, default to current script's grandparent
+BASE_DIR="${BASE_DIR:-"$(cd "$(dirname "$0")/../../.." && pwd)"}"
+
+# ------------------------------------------------------------------------------
+# 2. Source shared functions
+# ------------------------------------------------------------------------------
+# We assume common/functions.sh is up two levels from 'elevation' subdir
+source "${BASE_DIR}/common/functions.sh"
+
+# ------------------------------------------------------------------------------
+# 3. Run
+# ------------------------------------------------------------------------------
+print_progress "Creating elevation_raster table in database '${DB_NAME}'"
+
+SQL_FILE="${BASE_DIR}/utils/elevation/create_elevation_table.sql"
+if [ ! -f "${SQL_FILE}" ]; then
+  echo "Error: Missing SQL file at ${SQL_FILE}"
+  exit 1
+fi
+
+# We do not have a dedicated 'execute_sql_file' helper, so we cat + pipe:
+cat "${SQL_FILE}" | docker exec -i "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}"
+
+print_progress "elevation_raster table is created or already exists."
+send_notification "[OK] Created/verified elevation_raster table in ${DB_NAME}"
 </file: utils/elevation/create_elevation_table.sh>
 
 <file: utils/elevation/create_elevation_table.sql>
+-- create_elevation_table.sql
+--
+-- Creates the "elevation_raster" table to store MERIT DEM raster data,
+-- along with a GIST index for efficient spatial lookups.
 
+CREATE TABLE IF NOT EXISTS elevation_raster (
+    rid SERIAL PRIMARY KEY,
+    rast raster,
+    filename TEXT
+);
+
+CREATE INDEX IF NOT EXISTS elevation_raster_st_convexhull_idx
+    ON elevation_raster
+    USING gist (ST_ConvexHull(rast));
 </file: utils/elevation/create_elevation_table.sql>
+
+<file: ../../../README.md>
+# ibridaDB
+
+## Build Image
+
+This project requires the use of the `raster2pgsql` CLI tool for importing DEM data. The official PostGIS Docker image (e.g. `postgis/postgis:15-3.3`) does not include this command by default in its runtime environment. Therefore, we extend the official image by installing the PostGIS package (which contains `raster2pgsql`) and copying the binary into the final image.
+
+### Steps to Build and Push the Custom Image
+
+1. **Build the image:**
+
+   ```bash
+   cd ~/repo/ibridaDB/docker && docker build -t frontierkodiak/ibridadb:latest .
+   ```
+
+2. **Push the image to Docker Hub:**
+
+   Make sure you’re logged in as user `frontierkodiak`:
+
+   ```bash
+   docker login
+   docker push frontierkodiak/ibridadb:latest
+   ```
+
+```bash
+cd ~/repo/ibridaDB/docker && docker build -t frontierkodiak/ibridadb:latest . --no-cache && docker push frontierkodiak/ibridadb:latest
+```
+
+This image will be used in our docker-compose configuration to run the ibridaDB instance with the required raster CLI tools available.
+</file: ../../../README.md>
 
 </codebase_context>

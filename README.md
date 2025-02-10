@@ -21,4 +21,8 @@ This project requires the use of the `raster2pgsql` CLI tool for importing DEM d
    docker push frontierkodiak/ibridadb:latest
    ```
 
+```bash
+cd ~/repo/ibridaDB/docker && docker build -t frontierkodiak/ibridadb:latest . --no-cache && docker push frontierkodiak/ibridadb:latest
+```
+
 This image will be used in our docker-compose configuration to run the ibridaDB instance with the required raster CLI tools available.

@@ -1,6 +1,5 @@
 services:
   ibrida:
-    # Use the custom image we built and pushed to Docker Hub.
     image: frontierkodiak/ibridadb:latest
     user: "998:998"
     shm_size: '16g'
@@ -16,6 +15,7 @@ services:
       - /database/ibridaDB:/var/lib/postgresql/data
       - /datasets/ibrida-data/exports:/exports
       - /datasets/ibrida-data/intake:/metadata
+      - /datasets/dem:/dem
     ports:
       - "5432:5432"
     container_name: ibridaDB
