@@ -17,19 +17,24 @@ print_progress() {
 
 get_obs_columns() {
     # Start with standard columns
-    local cols="observation_uuid, observer_id, latitude, longitude, positional_accuracy, taxon_id, quality_grade, observed_on"
+    local cols="observation_uuid, observer_id, latitude, longitude"
     
-    # TEMPORARY HOTFIX: Commenting out version tracking columns until bulk update is complete
-    # Add version tracking columns
-    # cols="${cols}, origin, version, release"
+    # Add elevation_meters if export is enabled.
+    if [ "${INCLUDE_ELEVATION_EXPORT:-true}" = "true" ] && [ "${RELEASE_VALUE:-r1}" != "r0" ]; then
+        cols="${cols}, elevation_meters"
+    fi
     
-    # Check if anomaly_score exists in this release
-    if [[ "${RELEASE_VALUE}" == "r1" ]]; then
+    # Then add the remaining columns
+    cols="${cols}, positional_accuracy, taxon_id, quality_grade, observed_on"
+    
+    # If anomaly_score exists for any release value other than r0, add it.
+    if [[ "${RELEASE_VALUE}" != "r0" ]]; then
         cols="${cols}, anomaly_score"
     fi
     
     echo "$cols"
 }
+
 
 # Function to ensure directory exists with proper permissions
 ensure_directory() {

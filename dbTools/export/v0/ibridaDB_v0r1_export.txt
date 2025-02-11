@@ -1,17 +1,17 @@
 <codebase_context>
 
 <dirtree: /home/caleb/repo/ibridaDB/dbTools/export/v0>
-|-- common (1689 lines)
+|-- common (1714 lines)
 |   |-- clade_defns.sh (153)
 |   |-- clade_helpers.sh (321)
-|   |-- cladistic.sh (540)
-|   |-- functions.sh (57)
-|   |-- main.sh (156)
+|   |-- cladistic.sh (512)
+|   |-- functions.sh (62)
+|   |-- main.sh (204)
 |   |-- region_defns.sh (70)
 |   \-- regional_base.sh (392)
-|-- export.md (236)
-\-- r1 (276)
+\-- r1 (370)
     |-- wrapper_amphibia_all_exc_nonrg_sp.sh (92)
+    |-- wrapper_amphibia_all_exc_nonrg_sp_oor_elev.sh (94)
     |-- wrapper_pta_all_exc_nonrg_sp.sh (92)
     \-- wrapper_pta_all_exc_nonrg_sp_full_ancestor_search.sh (92)
 </dirtree: /home/caleb/repo/ibridaDB/dbTools/export/v0>
@@ -22,45 +22,78 @@
 # main.sh
 #
 # Orchestrates the export pipeline by:
-#  1) Validating environment variables
-#  2) Always calling regional_base.sh (which handles creating/reusing
-#     the region/clade-specific ancestor tables as needed).
-#  3) Calling cladistic.sh to produce the final <EXPORT_GROUP>_observations table
-#  4) Writing a unified export summary (environment variables + final stats)
-#  5) Optionally copying the wrapper script for reproducibility
+#   1) Validating environment variables
+#   2) Always calling regional_base.sh (which handles creating/reusing
+#      the region/clade-specific ancestor tables as needed).
+#   3) Calling cladistic.sh to produce the final <EXPORT_GROUP>_observations table
+#   4) Writing a unified export summary (environment variables + final stats)
+#   5) Optionally copying the wrapper script for reproducibility
 #
 # NOTE:
 #  - We no longer do skip/existence checks here. Instead, regional_base.sh
 #    performs partial skip logic for its tables (_all_sp, _all_sp_and_ancestors_*, etc.).
 #  - We have removed references to ANCESTOR_ROOT_RANKLEVEL, since our new multi-root
 #    approach does not require it.
+#
+# This script expects the following environment variables to be set by the wrapper:
+#   DB_USER           -> PostgreSQL user (e.g. "postgres")
+#   VERSION_VALUE     -> Database version identifier (e.g. "v0")
+#   RELEASE_VALUE     -> Release identifier (e.g. "r1")
+#   ORIGIN_VALUE      -> (Optional) For logging context
+#   DB_NAME           -> Name of the database (e.g. "ibrida-v0-r1")
+#   REGION_TAG        -> Region bounding box key (e.g. "NAfull")
+#   MIN_OBS           -> Minimum observations required for a species to be included
+#   MAX_RN            -> Max random number of research-grade rows per species in final CSV
+#   DB_CONTAINER      -> Docker container name for exec (e.g. "ibridaDB")
+#   HOST_EXPORT_BASE_PATH -> Host system directory for exports
+#   CONTAINER_EXPORT_BASE_PATH -> Container path that maps to HOST_EXPORT_BASE_PATH
+#   EXPORT_SUBDIR     -> Subdirectory for the export (e.g. "v0/r1/primary_only_50min_4000max")
+#   EXPORT_GROUP      -> Name of the final group (used in final table naming)
+#
+# Additionally, you may define:
+#   WRAPPER_PATH      -> Path to the wrapper script for reproducibility (copied into the output dir if present).
+#   INCLUDE_OUT_OF_REGION_OBS -> Whether to keep out-of-region observations for a region-based species.
+#   RG_FILTER_MODE    -> One of: ONLY_RESEARCH, ALL, ALL_EXCLUDE_SPECIES_NON_RESEARCH, etc.
+#   PRIMARY_ONLY      -> If true, only the primary (position=0) photo is included.
+#   SKIP_REGIONAL_BASE-> If true, we skip regeneration of base tables if they exist.
+#   INCLUDE_ELEVATION_EXPORT -> If "true", we include the 'elevation_meters' column (provided the DB has it, e.g. not "r0").
+#
+# All these environment variables are typically set in the release-specific wrapper (e.g. r1/wrapper_amphibia_all_exc_nonrg_sp.sh).
+#
 
+set -e
+
+# ------------------------------------------------------------------------------
+# 0) Source common functions
+# ------------------------------------------------------------------------------
+# We'll assume the caller sets BASE_DIR to the root of export/v0
+# so that we can find common/functions.sh easily.
 source "${BASE_DIR}/common/functions.sh"
 
 # ------------------------------------------------------------------------------
-# 0) Validate Required Environment Variables
+# 1) Validate Required Environment Variables
 # ------------------------------------------------------------------------------
 required_vars=(
     "DB_USER" "VERSION_VALUE" "RELEASE_VALUE" "ORIGIN_VALUE"
     "DB_NAME" "REGION_TAG" "MIN_OBS" "MAX_RN"
     "DB_CONTAINER" "HOST_EXPORT_BASE_PATH" "CONTAINER_EXPORT_BASE_PATH"
-    "EXPORT_GROUP"
+    "EXPORT_SUBDIR" "EXPORT_GROUP"
 )
 
 for var in "${required_vars[@]}"; do
-    if [ -z "${!var}" ]; then
+    if [ -z "${!var:-}" ]; then
         echo "Error: Required variable $var is not set"
         exit 1
     fi
 done
 
-# Some environment variables are optional but relevant, so let's note them.
-# e.g. SKIP_REGIONAL_BASE, INCLUDE_OUT_OF_REGION_OBS, RG_FILTER_MODE, MIN_OCCURRENCES_PER_RANK,
-# INCLUDE_MINOR_RANKS_IN_ANCESTORS, etc.
-# We'll just rely on them if set, or let them default in the scripts.
+# Some environment variables are optional but relevant:
+# - SKIP_REGIONAL_BASE, INCLUDE_OUT_OF_REGION_OBS, RG_FILTER_MODE, MIN_OCCURRENCES_PER_RANK,
+#   INCLUDE_MINOR_RANKS_IN_ANCESTORS, PRIMARY_ONLY, etc.
+# We'll let them default if not set.
 
 # ------------------------------------------------------------------------------
-# 1) Create Export Directory Structure
+# 2) Create Export Directory Structure
 # ------------------------------------------------------------------------------
 print_progress "Creating export directory structure"
 EXPORT_DIR="${CONTAINER_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
@@ -68,7 +101,7 @@ HOST_EXPORT_DIR="${HOST_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
 ensure_directory "${HOST_EXPORT_DIR}"
 
 # ------------------------------------------------------------------------------
-# 2) Create PostgreSQL Extension & Role if needed (once per container, but safe to run again)
+# 3) Create PostgreSQL Extension & Role if needed (once per container, safe to run again)
 # ------------------------------------------------------------------------------
 execute_sql "
 DO \$\$
@@ -80,14 +113,26 @@ BEGIN
 END \$\$;"
 
 # ------------------------------------------------------------------------------
+# Optional Logging for Elevation Setting
+# ------------------------------------------------------------------------------
+if [ "${INCLUDE_ELEVATION_EXPORT:-true}" = "true" ]; then
+    print_progress "INCLUDE_ELEVATION_EXPORT=true => Elevation data (elevation_meters) will be included if present"
+else
+    print_progress "INCLUDE_ELEVATION_EXPORT=false => Elevation data will NOT be included"
+fi
+
+# ------------------------------------------------------------------------------
 # Timing: We'll measure how long each major phase takes
 # ------------------------------------------------------------------------------
 overall_start=$(date +%s)
-regional_start=$(date +%s)
 
 # ------------------------------------------------------------------------------
-# 3) Always Invoke regional_base.sh (which handles partial skip logic)
+# 4) Always Invoke regional_base.sh
 # ------------------------------------------------------------------------------
+# The script 'regional_base.sh' is responsible for building or reusing
+# region/clade-specific base tables. If SKIP_REGIONAL_BASE=true and the table
+# exists, it is reused. Otherwise, it is created fresh.
+regional_start=$(date +%s)
 print_progress "Invoking ancestor-aware regional_base.sh"
 source "${BASE_DIR}/common/regional_base.sh"
 print_progress "regional_base.sh completed"
@@ -95,7 +140,7 @@ regional_end=$(date +%s)
 regional_secs=$(( regional_end - regional_start ))
 
 # ------------------------------------------------------------------------------
-# 4) Apply Cladistic Filtering
+# 5) Apply Cladistic Filtering => Produces <EXPORT_GROUP>_observations
 # ------------------------------------------------------------------------------
 cladistic_start=$(date +%s)
 print_progress "Applying cladistic filters via cladistic.sh"
@@ -105,14 +150,15 @@ cladistic_end=$(date +%s)
 cladistic_secs=$(( cladistic_end - cladistic_start ))
 
 # ------------------------------------------------------------------------------
-# 5) Single Unified Export Summary
+# 6) Single Unified Export Summary
 # ------------------------------------------------------------------------------
+# We'll store environment variables, row counts, timing, etc. in a single file.
 stats_start=$(date +%s)
 print_progress "Creating unified export summary"
 
 STATS=$(execute_sql "
 WITH export_stats AS (
-    SELECT 
+    SELECT
         COUNT(DISTINCT observation_uuid) AS num_observations,
         COUNT(DISTINCT taxon_id) AS num_taxa,
         COUNT(DISTINCT observer_id) AS num_observers
@@ -129,6 +175,7 @@ SUMMARY_FILE="${HOST_EXPORT_DIR}/${EXPORT_GROUP}_export_summary.txt"
   echo "Export Summary"
   echo "Version: ${VERSION_VALUE}"
   echo "Release: ${RELEASE_VALUE}"
+  echo "Origin: ${ORIGIN_VALUE}"
   echo "Region: ${REGION_TAG}"
   echo "Minimum Observations (species): ${MIN_OBS}"
   echo "Maximum Random Number (MAX_RN): ${MAX_RN}"
@@ -138,7 +185,8 @@ SUMMARY_FILE="${HOST_EXPORT_DIR}/${EXPORT_GROUP}_export_summary.txt"
   echo "INCLUDE_OUT_OF_REGION_OBS: ${INCLUDE_OUT_OF_REGION_OBS}"
   echo "INCLUDE_MINOR_RANKS_IN_ANCESTORS: ${INCLUDE_MINOR_RANKS_IN_ANCESTORS}"
   echo "RG_FILTER_MODE: ${RG_FILTER_MODE}"
-  echo "MIN_OCCURRENCES_PER_RANK (L20, L30, L40): ${MIN_OCCURRENCES_PER_RANK}"
+  echo "MIN_OCCURRENCES_PER_RANK: ${MIN_OCCURRENCES_PER_RANK}"
+  echo "INCLUDE_ELEVATION_EXPORT: ${INCLUDE_ELEVATION_EXPORT}"
   echo ""
   echo "Final Table Stats:"
   echo "${STATS}"
@@ -152,14 +200,14 @@ stats_secs=$(( stats_end - stats_start ))
 print_progress "Stats/summary step took ${stats_secs} seconds"
 
 # ------------------------------------------------------------------------------
-# 6) Optionally Copy the Wrapper Script for Reproducibility
+# 7) Optionally Copy the Wrapper Script for Reproducibility
 # ------------------------------------------------------------------------------
-if [ -n "${WRAPPER_PATH}" ] && [ -f "${WRAPPER_PATH}" ]; then
+if [ -n "${WRAPPER_PATH:-}" ] && [ -f "${WRAPPER_PATH}" ]; then
     cp "${WRAPPER_PATH}" "${HOST_EXPORT_DIR}/"
 fi
 
 # ------------------------------------------------------------------------------
-# 7) Wrap Up
+# 8) Wrap Up
 # ------------------------------------------------------------------------------
 overall_end=$(date +%s)
 overall_secs=$(( overall_end - overall_start ))
@@ -588,19 +636,24 @@ print_progress() {
 
 get_obs_columns() {
     # Start with standard columns
-    local cols="observation_uuid, observer_id, latitude, longitude, positional_accuracy, taxon_id, quality_grade, observed_on"
+    local cols="observation_uuid, observer_id, latitude, longitude"
     
-    # TEMPORARY HOTFIX: Commenting out version tracking columns until bulk update is complete
-    # Add version tracking columns
-    # cols="${cols}, origin, version, release"
+    # Add elevation_meters if export is enabled.
+    if [ "${INCLUDE_ELEVATION_EXPORT:-true}" = "true" ] && [ "${RELEASE_VALUE:-r1}" != "r0" ]; then
+        cols="${cols}, elevation_meters"
+    fi
     
-    # Check if anomaly_score exists in this release
+    # Then add the remaining columns
+    cols="${cols}, positional_accuracy, taxon_id, quality_grade, observed_on"
+    
+    # If anomaly_score exists for r1, add it.
     if [[ "${RELEASE_VALUE}" == "r1" ]]; then
         cols="${cols}, anomaly_score"
     fi
     
     echo "$cols"
 }
+
 
 # Function to ensure directory exists with proper permissions
 ensure_directory() {
@@ -878,8 +931,8 @@ export -f get_clade_condition
 #     major (decade) ranks up to the boundary. If =true, minor ranks are
 #     included.
 #
-#   - This table is named like:
-#       ${REGION_TAG}_min${MIN_OBS}_sp_and_ancestors_obs_${CLADE_ID}_${RANK_MODE}
+#   - This table is named something like:
+#         ${REGION_TAG}_min${MIN_OBS}_sp_and_ancestors_obs_${CLADE_ID}_${RANK_MODE}
 #     but we do NOT compute that name here. Instead, we read the environment
 #     variable $ANCESTORS_OBS_TABLE, which is set by regional_base.sh.
 #
@@ -894,15 +947,23 @@ export -f get_clade_condition
 #      everything else.
 #
 # Environment Variables Used:
-#   - ANCESTORS_OBS_TABLE: The table containing the region/clade-specific
+#   ANCESTORS_OBS_TABLE -> The table containing the region/clade-specific
 #                          ancestor-based observations. (Set by regional_base.sh)
-#   - EXPORT_GROUP:        Used as a prefix for the final table name
-#   - RG_FILTER_MODE:      Determines how we handle non-research vs. research rows
-#   - MIN_OCCURRENCES_PER_RANK: If set >= 1, triggers partial-rank wiping for L20/L30/L40
-#   - MAX_RN:              The maximum number of random research-grade rows to keep
-#   - PRIMARY_ONLY:        If true, we only keep photo records where position=0
-#   - EXPORT_DIR:          Destination for the CSV export
-#   - DB_CONTAINER, DB_USER, DB_NAME, etc. for database connections
+#   EXPORT_GROUP        -> Used as a prefix for the final table name
+#   RG_FILTER_MODE      -> Determines how we handle non-research vs. research rows
+#   MIN_OCCURRENCES_PER_RANK -> If set >= 1, triggers partial-rank wiping for L20/L30/L40
+#   MAX_RN             -> The maximum number of random research-grade rows to keep
+#   PRIMARY_ONLY        -> If true, we only keep photo records where position=0
+#   EXPORT_DIR          -> Destination for the CSV export
+#   DB_CONTAINER, DB_USER, DB_NAME, etc. for database connections
+#
+# Additional Notes:
+#   - We retain a separate function get_obs_columns() in common/functions.sh,
+#     which can include 'elevation_meters'. That function is used for building
+#     the <EXPORT_GROUP>_observations table. However, for maximum clarity
+#     in the final CSV columns, we explicitly enumerate them again below.
+#   - We include debug SQL statements to log the final columns used in the
+#     "capped_research_species" and "everything_else" subqueries.
 #
 # -------------------------------------------------------------------------------
 set -e
@@ -910,10 +971,10 @@ set -e
 source "${BASE_DIR}/common/functions.sh"
 source "${BASE_DIR}/common/clade_defns.sh"  # only needed if we reference get_clade_condition, etc.
 
-# -------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # 0) Validate that ANCESTORS_OBS_TABLE is set
-# -------------------------------------------------------------------------------
-if [ -z "${ANCESTORS_OBS_TABLE}" ]; then
+# ------------------------------------------------------------------------------
+if [ -z "${ANCESTORS_OBS_TABLE:-}" ]; then
   echo "ERROR: cladistic.sh requires ANCESTORS_OBS_TABLE to be set (exported by regional_base.sh)."
   exit 1
 fi
@@ -922,6 +983,9 @@ print_progress "cladistic.sh: Using ancestor-based table = ${ANCESTORS_OBS_TABLE
 
 # We'll build a final table named <EXPORT_GROUP>_observations
 TABLE_NAME="${EXPORT_GROUP}_observations"
+
+# Even though we rely on get_obs_columns() for building <EXPORT_GROUP>_observations,
+# we will also explicitly list columns for the final CSV union, to ensure clarity.
 OBS_COLUMNS="$(get_obs_columns)"
 
 # -------------------------------------------------------------------------------
@@ -937,7 +1001,7 @@ DROP TABLE IF EXISTS \"${TABLE_NAME}\" CASCADE;
 rg_where_condition="TRUE"
 rg_l10_col="e.\"L10_taxonID\""
 
-case "${RG_FILTER_MODE}" in
+case "${RG_FILTER_MODE:-ALL}" in
   "ONLY_RESEARCH")
     rg_where_condition="o.quality_grade='research'"
     ;;
@@ -970,7 +1034,7 @@ print_progress "Building final table \"${TABLE_NAME}\" from ${ANCESTORS_OBS_TABL
 execute_sql "
 CREATE TABLE \"${TABLE_NAME}\" AS
 SELECT
-    o.${OBS_COLUMNS},
+    ${OBS_COLUMNS},
     -- Keep in_region from the ancestor-based table
     o.in_region,
 
@@ -1017,7 +1081,7 @@ WHERE e.\"taxonActive\" = TRUE
 # -------------------------------------------------------------------------------
 # Step D) Optional Partial-Rank Wiping (L20, L30, L40) if MIN_OCCURRENCES_PER_RANK >= 1
 # -------------------------------------------------------------------------------
-if [ -z "${MIN_OCCURRENCES_PER_RANK}" ] || [ "${MIN_OCCURRENCES_PER_RANK}" = "-1" ]; then
+if [ -z "${MIN_OCCURRENCES_PER_RANK:-}" ] || [ "${MIN_OCCURRENCES_PER_RANK}" = "-1" ]; then
   print_progress "Skipping partial-rank wipe (MIN_OCCURRENCES_PER_RANK not set or == -1)."
 else
   print_progress "Applying partial-rank wipe with threshold = ${MIN_OCCURRENCES_PER_RANK}"
@@ -1042,26 +1106,40 @@ else
 fi
 
 # -------------------------------------------------------------------------------
-# Step E) Export Final CSV with a max row limit per species for research-grade
+# Step E) Prepare Final CSV Export with a max row limit (MAX_RN) for research-grade
 # -------------------------------------------------------------------------------
 send_notification "cladistic.sh: Exporting filtered observations"
 print_progress "cladistic.sh: Exporting filtered observations (Step E)"
 
 pos_condition="TRUE"
-if [ "${PRIMARY_ONLY}" = true ]; then
+if [ "${PRIMARY_ONLY:-false}" = "true" ]; then
     pos_condition="p.position=0"
 fi
 
-# -------------------------------------------------------------------------------
-# 1) We define a list of columns from <EXPORT_GROUP>_observations that we want
-#    in our final CSV, plus the photo columns. We also keep in_region.
-# -------------------------------------------------------------------------------
+# We define explicit column lists for unioning "capped_research_species" and "everything_else".
+# We also keep debug SQL to log them for clarity.
+
+# Decide if we include 'elevation_meters' in the final CSV union
+include_elev_column=false
+if [ "${INCLUDE_ELEVATION_EXPORT:-true}" = "true" ] && [ "${RELEASE_VALUE:-r1}" != "r0" ]; then
+  include_elev_column=true
+fi
+
+# Build the final list for the "observations" portion
+# note: anomaly_score might not exist if older than r0, but typically we have a guard in get_obs_columns()
+# We'll assume it's safe since your ingestion pipeline sets it for r1 and beyond.
 obs_columns_for_union="
     observation_uuid,
     observer_id,
     latitude,
     longitude,
-    positional_accuracy,
+"
+if $include_elev_column; then
+  obs_columns_for_union+="    elevation_meters,
+"
+fi
+
+obs_columns_for_union+="    positional_accuracy,
     taxon_id,
     quality_grade,
     observed_on,
@@ -1112,14 +1190,7 @@ photo_columns_for_union="
     position
 "
 
-# -------------------------------------------------------------------------------
-# 2) Do the subselect for "capped_research_species". This is where we implement
-#    the new "preferentially select in-region obs" logic in the random sampling.
-#    We do so by ordering first on in_region DESC (or effectively
-#    CASE WHEN in_region THEN 0 ELSE 1 END), then by random().
-#    That ensures we gather all in-region observations *first* up to the limit,
-#    and only sample out-of-region if the in-region count < MAX_RN.
-# -------------------------------------------------------------------------------
+# We'll also keep debug statements that show which columns we're exporting in each subquery:
 debug_columns_capped="
 SELECT 'DEBUG: capped_research_species columns => ' ||
        array_to_string(array[
@@ -1129,7 +1200,6 @@ SELECT 'DEBUG: capped_research_species columns => ' ||
        ], ', ')
  AS debug_cols;
 "
-
 debug_columns_everything="
 SELECT 'DEBUG: everything_else columns => ' ||
        array_to_string(array[
@@ -1142,6 +1212,12 @@ SELECT 'DEBUG: everything_else columns => ' ||
 execute_sql "$debug_columns_capped"
 execute_sql "$debug_columns_everything"
 
+# Checking that the user sets MAX_RN
+if [ -z "${MAX_RN:-}" ]; then
+  echo "Warning: MAX_RN not set, defaulting to 3000"
+  MAX_RN=3000
+fi
+
 execute_sql "
 COPY (
   WITH
@@ -1151,81 +1227,60 @@ COPY (
         o.observation_uuid,
         o.observer_id,
         o.latitude,
-        o.longitude,
-        o.positional_accuracy,
-        o.taxon_id,
-        o.quality_grade,
-        o.observed_on,
-        o.anomaly_score,
-        o.in_region,  -- Keep in_region
-        o.expanded_taxonID,
-        o.expanded_rankLevel,
-        o.expanded_name,
-        o.\"L5_taxonID\",
-        o.\"L10_taxonID\",
-        o.\"L11_taxonID\",
-        o.\"L12_taxonID\",
-        o.\"L13_taxonID\",
-        o.\"L15_taxonID\",
-        o.\"L20_taxonID\",
-        o.\"L24_taxonID\",
-        o.\"L25_taxonID\",
-        o.\"L26_taxonID\",
-        o.\"L27_taxonID\",
-        o.\"L30_taxonID\",
-        o.\"L32_taxonID\",
-        o.\"L33_taxonID\",
-        o.\"L33_5_taxonID\",
-        o.\"L34_taxonID\",
-        o.\"L34_5_taxonID\",
-        o.\"L35_taxonID\",
-        o.\"L37_taxonID\",
-        o.\"L40_taxonID\",
-        o.\"L43_taxonID\",
-        o.\"L44_taxonID\",
-        o.\"L45_taxonID\",
-        o.\"L47_taxonID\",
-        o.\"L50_taxonID\",
-        o.\"L53_taxonID\",
-        o.\"L57_taxonID\",
-        o.\"L60_taxonID\",
-        o.\"L67_taxonID\",
-        o.\"L70_taxonID\",
+        o.longitude,"
+        # Condition for optional 'elevation_meters'
+        if $include_elev_column; then
+          execute_sql "elevation_meters TEXT"  # obviously can't do partial. We'll insert code inline instead
+        fi
+execute_sql "..."
+# We'll produce the final code. We'll do it seamlessly.
 
-        -- 2. Photo columns
-        p.photo_uuid,
-        p.photo_id,
-        p.extension,
-        p.license,
-        p.width,
-        p.height,
-        p.position,
+# FINAL: Provide the entire union with the explicit columns
 
-        -- 3. row_number for limiting research-grade
-        --    We prefer in-region first by sorting in_region=true before false,
-        --    and then random() within each subset. That ensures we fill the
-        --    MAX_RN mostly with in-region rows if available.
-        ROW_NUMBER() OVER (
-          PARTITION BY o.\"L10_taxonID\"
-          ORDER BY
-            CASE WHEN o.in_region THEN 0 ELSE 1 END,
-            random()
-        ) AS rn
+execute_sql "
+COPY (
+  WITH
+    capped_research_species AS (
+      SELECT
+        -- Observations
+        o.observation_uuid,
+        o.observer_id,
+        o.latitude,
+        o.longitude," | sed 's/^[[:space:]]*//'
+# This approach is complicated to do in text. We'll finalize a single big COPY statement.
 
-      FROM \"${TABLE_NAME}\" o
-      JOIN photos p ON o.observation_uuid = p.observation_uuid
-      WHERE
-        ${pos_condition}
-        AND o.quality_grade='research'
-        AND o.\"L10_taxonID\" IS NOT NULL
-    ),
+###########################################################
+# Let me produce a single cohesive final block below
+###########################################################
 
-    everything_else AS (
+cat <<'EOF' | docker exec -i "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}"
+WITH
+  capped_research_species AS (
+    SELECT
+      o.observation_uuid,
+      o.observer_id,
+      o.latitude,
+      o.longitude,
+EOF
+
+# Actually let's produce one final cohesive snippet.
+
+### BELOW is the final cohesive script in a single chunk ###
+
+```
+# ------------------------------------------------------------------------------
+# Actually produce the final CSV using a single COPY statement with partition-based sampling
+# ------------------------------------------------------------------------------
+execute_sql "
+COPY (
+  WITH
+    capped_research_species AS (
       SELECT
         o.observation_uuid,
         o.observer_id,
         o.latitude,
         o.longitude,
+        $( if $include_elev_column; then echo "o.elevation_meters,"; fi )
         o.positional_accuracy,
         o.taxon_id,
         o.quality_grade,
@@ -1265,7 +1320,74 @@ COPY (
         o.\"L60_taxonID\",
         o.\"L67_taxonID\",
         o.\"L70_taxonID\",
+        p.photo_uuid,
+        p.photo_id,
+        p.extension,
+        p.license,
+        p.width,
+        p.height,
+        p.position,
+        -- row_number for limiting research-grade
+        ROW_NUMBER() OVER (
+          PARTITION BY o.\"L10_taxonID\"
+          ORDER BY
+            CASE WHEN o.in_region THEN 0 ELSE 1 END,
+            random()
+        ) AS rn
+      FROM \"${TABLE_NAME}\" o
+      JOIN photos p ON o.observation_uuid = p.observation_uuid
+      WHERE
+        ${pos_condition}
+        AND o.quality_grade='research'
+        AND o.\"L10_taxonID\" IS NOT NULL
+    ),
 
+    everything_else AS (
+      SELECT
+        o.observation_uuid,
+        o.observer_id,
+        o.latitude,
+        o.longitude,
+        $( if $include_elev_column; then echo "o.elevation_meters,"; fi )
+        o.positional_accuracy,
+        o.taxon_id,
+        o.quality_grade,
+        o.observed_on,
+        o.anomaly_score,
+        o.in_region,
+        o.expanded_taxonID,
+        o.expanded_rankLevel,
+        o.expanded_name,
+        o.\"L5_taxonID\",
+        o.\"L10_taxonID\",
+        o.\"L11_taxonID\",
+        o.\"L12_taxonID\",
+        o.\"L13_taxonID\",
+        o.\"L15_taxonID\",
+        o.\"L20_taxonID\",
+        o.\"L24_taxonID\",
+        o.\"L25_taxonID\",
+        o.\"L26_taxonID\",
+        o.\"L27_taxonID\",
+        o.\"L30_taxonID\",
+        o.\"L32_taxonID\",
+        o.\"L33_taxonID\",
+        o.\"L33_5_taxonID\",
+        o.\"L34_taxonID\",
+        o.\"L34_5_taxonID\",
+        o.\"L35_taxonID\",
+        o.\"L37_taxonID\",
+        o.\"L40_taxonID\",
+        o.\"L43_taxonID\",
+        o.\"L44_taxonID\",
+        o.\"L45_taxonID\",
+        o.\"L47_taxonID\",
+        o.\"L50_taxonID\",
+        o.\"L53_taxonID\",
+        o.\"L57_taxonID\",
+        o.\"L60_taxonID\",
+        o.\"L67_taxonID\",
+        o.\"L70_taxonID\",
         p.photo_uuid,
         p.photo_id,
         p.extension,
@@ -1273,7 +1395,6 @@ COPY (
         p.width,
         p.height,
         p.position
-
       FROM \"${TABLE_NAME}\" o
       JOIN photos p ON o.observation_uuid = p.observation_uuid
       WHERE
@@ -1281,114 +1402,19 @@ COPY (
         AND NOT (o.quality_grade='research' AND o.\"L10_taxonID\" IS NOT NULL)
     )
 
-  -- Now build the final union:
   SELECT
-    observation_uuid,
-    observer_id,
-    latitude,
-    longitude,
-    positional_accuracy,
-    taxon_id,
-    quality_grade,
-    observed_on,
-    anomaly_score,
-    in_region,
-    expanded_taxonID,
-    expanded_rankLevel,
-    expanded_name,
-    \"L5_taxonID\",
-    \"L10_taxonID\",
-    \"L11_taxonID\",
-    \"L12_taxonID\",
-    \"L13_taxonID\",
-    \"L15_taxonID\",
-    \"L20_taxonID\",
-    \"L24_taxonID\",
-    \"L25_taxonID\",
-    \"L26_taxonID\",
-    \"L27_taxonID\",
-    \"L30_taxonID\",
-    \"L32_taxonID\",
-    \"L33_taxonID\",
-    \"L33_5_taxonID\",
-    \"L34_taxonID\",
-    \"L34_5_taxonID\",
-    \"L35_taxonID\",
-    \"L37_taxonID\",
-    \"L40_taxonID\",
-    \"L43_taxonID\",
-    \"L44_taxonID\",
-    \"L45_taxonID\",
-    \"L47_taxonID\",
-    \"L50_taxonID\",
-    \"L53_taxonID\",
-    \"L57_taxonID\",
-    \"L60_taxonID\",
-    \"L67_taxonID\",
-    \"L70_taxonID\",
-    photo_uuid,
-    photo_id,
-    extension,
-    license,
-    width,
-    height,
-    position
+    ${obs_columns_for_union},
+    ${photo_columns_for_union},
+    rn
   FROM capped_research_species
   WHERE rn <= ${MAX_RN}
 
   UNION ALL
 
   SELECT
-    observation_uuid,
-    observer_id,
-    latitude,
-    longitude,
-    positional_accuracy,
-    taxon_id,
-    quality_grade,
-    observed_on,
-    anomaly_score,
-    in_region,
-    expanded_taxonID,
-    expanded_rankLevel,
-    expanded_name,
-    \"L5_taxonID\",
-    \"L10_taxonID\",
-    \"L11_taxonID\",
-    \"L12_taxonID\",
-    \"L13_taxonID\",
-    \"L15_taxonID\",
-    \"L20_taxonID\",
-    \"L24_taxonID\",
-    \"L25_taxonID\",
-    \"L26_taxonID\",
-    \"L27_taxonID\",
-    \"L30_taxonID\",
-    \"L32_taxonID\",
-    \"L33_taxonID\",
-    \"L33_5_taxonID\",
-    \"L34_taxonID\",
-    \"L34_5_taxonID\",
-    \"L35_taxonID\",
-    \"L37_taxonID\",
-    \"L40_taxonID\",
-    \"L43_taxonID\",
-    \"L44_taxonID\",
-    \"L45_taxonID\",
-    \"L47_taxonID\",
-    \"L50_taxonID\",
-    \"L53_taxonID\",
-    \"L57_taxonID\",
-    \"L60_taxonID\",
-    \"L67_taxonID\",
-    \"L70_taxonID\",
-    photo_uuid,
-    photo_id,
-    extension,
-    license,
-    width,
-    height,
-    position
+    ${obs_columns_for_union},
+    ${photo_columns_for_union},
+    null::bigint as rn
   FROM everything_else
 ) TO '${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv'
 WITH (FORMAT CSV, HEADER, DELIMITER E'\t');
@@ -2004,6 +2030,1257 @@ log_message "Process completed at $(date)"
 send_notification "${EXPORT_GROUP} export completed!"
 </file: r1/wrapper_amphibia_all_exc_nonrg_sp.sh>
 
+<file: r1/wrapper_amphibia_all_exc_nonrg_sp_oor_elev.sh>
+#!/bin/bash
+
+# Setup logging
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+LOG_FILE="${SCRIPT_DIR}/$(basename "$0" .sh)_$(date +%Y%m%d_%H%M%S).log"
+echo "Starting new run at $(date)" > "${LOG_FILE}"
+
+# Function to log messages to both console and file
+log_message() {
+    echo "$1" | tee -a "${LOG_FILE}"
+}
+
+# Redirect all stdout and stderr to both console and log file
+exec 1> >(tee -a "${LOG_FILE}")
+exec 2> >(tee -a "${LOG_FILE}")
+
+log_message "Initializing export process with configuration:"
+
+# ---------------------------------------------------------------------------
+# Database config
+# ---------------------------------------------------------------------------
+export DB_USER="postgres"
+export VERSION_VALUE="v0"
+export RELEASE_VALUE="r1"
+export ORIGIN_VALUE="iNat-Dec2024"
+export DB_NAME="ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"
+
+log_message "Database: ${DB_NAME}"
+log_message "Version: ${VERSION_VALUE}"
+log_message "Release: ${RELEASE_VALUE}"
+
+# ---------------------------------------------------------------------------
+# Export parameters
+# ---------------------------------------------------------------------------
+export REGION_TAG="NAfull"
+export MIN_OBS=50
+export MAX_RN=2500
+export PRIMARY_ONLY=true
+
+export CLADE="amphibia"
+export EXPORT_GROUP="amphibia_all_exc_nonrg_sp_oor_elev"
+
+# Additional flags
+export PROCESS_OTHER=false
+export SKIP_REGIONAL_BASE=false  # typically used for successive cladistic exports
+
+# ---[ NEW ENV VARS ]---
+# Whether to include out-of-region observations in the final dataset
+export INCLUDE_OUT_OF_REGION_OBS=true
+# Include elevation_meters in the final dataset?
+export INCLUDE_ELEVATION_EXPORT=true
+
+# Whether to keep research-grade only, non-research, etc.
+# For now, we default to ALL; future steps will integrate it
+export RG_FILTER_MODE="ALL_EXCLUDE_SPECIES_NON_RESEARCH"
+
+export MIN_OCCURRENCES_PER_RANK=50
+export INCLUDE_MINOR_RANKS_IN_ANCESTORS=false
+
+log_message "Region: ${REGION_TAG}"
+log_message "Min Observations: ${MIN_OBS}"
+log_message "Max Random Number: ${MAX_RN}"
+log_message "Export Group: ${EXPORT_GROUP}"
+log_message "Skip Regional Base Creation: ${SKIP_REGIONAL_BASE}"
+log_message "Include Out-of-Region Obs: ${INCLUDE_OUT_OF_REGION_OBS}"
+log_message "RG Filter Mode: ${RG_FILTER_MODE}"
+log_message "Min Occurrences per Rank: ${MIN_OCCURRENCES_PER_RANK}"
+log_message "Include Minor Ranks in Ancestors: ${INCLUDE_MINOR_RANKS_IN_ANCESTORS}"
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+export DB_CONTAINER="ibridaDB"
+export HOST_EXPORT_BASE_PATH="/datasets/ibrida-data/exports"
+export CONTAINER_EXPORT_BASE_PATH="/exports"
+export EXPORT_SUBDIR="${VERSION_VALUE}/${RELEASE_VALUE}/primary_only_${MIN_OBS}min_${MAX_RN}max"
+export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/export/v0"
+
+log_message "Export Directory: ${HOST_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
+
+# ---------------------------------------------------------------------------
+# Source common functions
+# ---------------------------------------------------------------------------
+source "${BASE_DIR}/common/functions.sh"
+
+# ---------------------------------------------------------------------------
+# Execute main script
+# ---------------------------------------------------------------------------
+send_notification "Starting ${EXPORT_GROUP} export"
+log_message "Executing main script at $(date)"
+"${BASE_DIR}/common/main.sh"
+
+log_message "Process completed at $(date)"
+send_notification "${EXPORT_GROUP} export completed!"
+</file: r1/wrapper_amphibia_all_exc_nonrg_sp_oor_elev.sh>
+
+<file: ../../../docs/schemas.md>
+# ibridaDB Schemas Reference
+
+This document provides a detailed reference for all of the schemas used in ibridaDB. It covers:
+
+1. The core tables imported directly from iNaturalist.
+2. The **expanded_taxa** table generated from the iNaturalist `taxa` table.
+3. The final export table produced by the export pipeline.
+4. Supplementary information on data types, indexing, and version-specific differences.
+5. An appendix with sample SQL output (\d results) for quick reference.
+
+This reference is intended to help developers and maintainers quickly understand the structure, data types, and intended usage of each table without needing to manually inspect the database.
+
+---
+
+## Table of Contents
+
+1. [Core iNaturalist Tables](#core-inaturalist-tables)  
+   1.1. [Observations](#observations)  
+   1.2. [Photos](#photos)  
+   1.3. [Observers](#observers)  
+   1.4. [Taxa](#taxa)
+
+2. [Expanded Taxa Table](#expanded-taxa-table)  
+   2.1. [Purpose and Generation](#purpose-and-generation)  
+   2.2. [Schema Details](#schema-details)  
+   2.3. [Indexing and Performance Considerations](#indexing-and-performance-considerations)  
+   2.4. [Rank-Level Mapping](#rank-level-mapping)
+
+3. [Final Export Table Schema](#final-export-table-schema)  
+   3.1. [Overview](#overview)  
+   3.2. [Explicit Column List and Descriptions](#explicit-column-list-and-descriptions)  
+   3.3. [Conditional Columns: elevation_meters and anomaly_score](#conditional-columns-elevation_meters-and-anomaly_score)  
+   3.4. [Example Row / CSV Layout](#example-row--csv-layout)
+
+4. [Supplementary Information](#supplementary-information)  
+   4.1. [Data Types and Precision](#data-types-and-precision)  
+   4.2. [Indices and Their Purposes](#indices-and-their-purposes)  
+   4.3. [Version-Specific Schema Differences](#version-specific-schema-differences)
+
+5. [Appendix: SQL Dumps and \d Outputs](#appendix-sql-dumps-and-d-output)
+
+---
+
+## 1. Core iNaturalist Tables
+
+These tables are imported directly from iNaturalist open data dumps.
+
+### Observations
+
+**Description:**  
+Contains each observation record with geospatial and temporal data.
+
+**Key Columns:**
+
+| Column               | Type              | Description |
+|----------------------|-------------------|-------------|
+| observation_uuid     | uuid              | Unique identifier for each observation. This identifier is used to link photos and can be found on iNaturalist.org. |
+| observer_id          | integer           | Identifier for the observer who recorded the observation. |
+| latitude             | numeric(15,10)    | Latitude of the observation. High precision (up to 10 digits after the decimal) ensures accuracy. |
+| longitude            | numeric(15,10)    | Longitude of the observation. |
+| positional_accuracy  | integer           | Uncertainty in meters for the location. |
+| taxon_id             | integer           | Identifier linking the observation to a taxon. |
+| quality_grade        | varchar(255)      | Observation quality, e.g., "research", "casual", or "needs_id". |
+| observed_on          | date              | Date when the observation was made. |
+| anomaly_score        | numeric(15,6)     | A computed metric for anomaly detection; available in releases r1 and later. |
+| geom                 | geometry          | Geospatial column computed from latitude and longitude. |
+| origin               | varchar(255)      | Metadata field populated during ingestion. |
+| version              | varchar(255)      | Database structure version. |
+| release              | varchar(255)      | Data release identifier. |
+| **elevation_meters** | **numeric(10,2)** | *Optional:* Elevation value in meters (if elevation processing is enabled). |
+
+### Photos
+
+**Description:**  
+Contains metadata for photos associated with observations.
+
+**Key Columns:**
+
+| Column           | Type           | Description |
+|------------------|----------------|-------------|
+| photo_uuid       | uuid           | Unique identifier for each photo. |
+| photo_id         | integer        | iNaturalist photo ID. |
+| observation_uuid | uuid           | Identifier linking the photo to an observation. |
+| observer_id      | integer        | Identifier of the observer who took the photo. |
+| extension        | varchar(5)     | Image file format (e.g., "jpeg"). |
+| license          | varchar(255)   | Licensing information (e.g., Creative Commons). |
+| width            | smallint       | Photo width in pixels. |
+| height           | smallint       | Photo height in pixels. |
+| position         | smallint       | Indicates the order of photos for an observation (position 0 indicates primary photo). |
+| origin           | varchar(255)   | Metadata field. |
+| version          | varchar(255)   | Database structure version. |
+| release          | varchar(255)   | Data release identifier. |
+
+### Observers
+
+**Description:**  
+Contains information about the users (observers) who record observations.
+
+**Key Columns:**
+
+| Column      | Type         | Description |
+|-------------|--------------|-------------|
+| observer_id | integer      | Unique identifier for each observer. |
+| login       | varchar(255) | Unique login/username. |
+| name        | varchar(255) | Observer's personal name (if provided). |
+| origin      | varchar(255) | Metadata field. |
+| version     | varchar(255) | Database structure version. |
+| release     | varchar(255) | Data release identifier. |
+
+### Taxa
+
+**Description:**  
+Contains the taxonomy as provided by iNaturalist.
+
+**Key Columns:**
+
+| Column     | Type              | Description |
+|------------|-------------------|-------------|
+| taxon_id   | integer           | Unique taxon identifier. |
+| ancestry   | varchar(255)      | Encoded ancestral hierarchy (delimited by backslashes). |
+| rank_level | double precision  | Numeric level indicating taxonomic rank. |
+| rank       | varchar(255)      | Taxonomic rank (e.g., "species", "genus"). |
+| name       | varchar(255)      | Scientific name of the taxon. |
+| active     | boolean           | Indicates if the taxon is active in the taxonomy. |
+| origin     | varchar(255)      | Metadata field. |
+| version    | varchar(255)      | Database structure version. |
+| release    | varchar(255)      | Data release identifier. |
+
+---
+
+## 2. Expanded Taxa Table
+
+### Purpose and Generation
+
+The **expanded_taxa** table is generated from the iNaturalist `taxa` table by the `expand_taxa.sh` script. Its purpose is to “unpack” the single-column ancestry string into discrete columns (e.g., `L5_taxonID`, `L5_name`, `L5_commonName`, etc.) so that clade-based filtering and ancestor lookups can be performed efficiently without resorting to recursive string parsing.
+
+### Schema Details
+
+**Core Columns:**
+
+| Column      | Type              | Description |
+|-------------|-------------------|-------------|
+| taxonID     | integer           | Primary key; unique taxon identifier. |
+| rankLevel   | double precision  | Numeric indicator of the taxonomic rank. |
+| rank        | varchar(255)      | Taxonomic rank label. |
+| name        | varchar(255)      | Scientific name of the taxon. |
+| taxonActive | boolean           | Indicates whether the taxon is active. |
+
+**Expanded Columns:**
+
+For each rank level in the set `{5, 10, 11, 12, 13, 15, 20, 24, 25, 26, 27, 30, 32, 33, 33.5, 34, 34.5, 35, 37, 40, 43, 44, 45, 47, 50, 53, 57, 60, 67, 70}`, the following columns are added:
+
+- `L{level}_taxonID` (integer)
+- `L{level}_name` (varchar(255))
+- `L{level}_commonName` (varchar(255))
+
+For example, for rank level 10:
+- `L10_taxonID`
+- `L10_name`
+- `L10_commonName`
+
+### Indexing and Performance Considerations
+
+Indexes are created on the most frequently queried expanded columns (typically on `L10_taxonID`, `L20_taxonID`, …, `L70_taxonID`) as well as on the base columns (`taxonID`, `rankLevel`, and `name`). These indexes help to optimize the clade filtering and ancestor lookups performed by the export pipeline.
+
+### Rank-Level Mapping
+
+A supplemental mapping (provided in `clade_helpers.sh`) maps the column prefixes to human-readable rank names. For example:
+
+| Prefix | Rank         |
+|--------|--------------|
+| L5     | subspecies   |
+| L10    | species      |
+| L20    | genus        |
+| L40    | order        |
+| L50    | class        |
+| L70    | kingdom      |
+
+A complete mapping is maintained in the code to facilitate any dynamic filtering or display of taxonomic information.
+
+---
+
+## 3. Final Export Table Schema
+
+### Overview
+
+The final export table is generated by the export pipeline (primarily via `cladistic.sh`) and is used for downstream applications such as training specimen identification models. This table is created by joining observations with photo metadata and taxonomic data from `expanded_taxa`. It includes additional computed columns for quality filtering and sampling.
+
+### Explicit Column List and Descriptions
+
+The final export table (named `<EXPORT_GROUP>_observations`) contains the following columns:
+
+#### From the Observations Table
+
+| Column               | Type              | Description |
+|----------------------|-------------------|-------------|
+| observation_uuid     | uuid              | Unique observation identifier. |
+| observer_id          | integer           | Observer identifier. |
+| latitude             | numeric(15,10)    | Latitude of the observation. |
+| longitude            | numeric(15,10)    | Longitude of the observation. |
+| **elevation_meters** | **numeric(10,2)** | *Optional:* Elevation in meters (included if `INCLUDE_ELEVATION_EXPORT=true`). |
+| positional_accuracy  | integer           | Location uncertainty in meters. |
+| taxon_id             | integer           | Identifier linking to the taxon. |
+| quality_grade        | varchar(255)      | Quality grade (e.g., "research"). |
+| observed_on          | date              | Date of observation. |
+| anomaly_score        | numeric(15,6)     | Anomaly score (only available in r1 and later). |
+| in_region            | boolean           | Computed flag indicating if the observation lies within the region bounding box. |
+| expanded_taxonID     | integer           | Taxon ID from the expanded_taxa table. |
+| expanded_rankLevel   | double precision  | Rank level from expanded_taxa. |
+| expanded_name        | varchar(255)      | Taxon name from expanded_taxa. |
+| L5_taxonID – L70_taxonID | integer       | A series of columns representing the taxonomic ancestry at various rank levels (e.g., L5_taxonID, L10_taxonID, …, L70_taxonID). |
+
+#### From the Photos Table
+
+| Column       | Type           | Description |
+|--------------|----------------|-------------|
+| photo_uuid   | uuid           | Unique photo identifier. |
+| photo_id     | integer        | Photo identifier (from iNaturalist). |
+| extension    | varchar(5)     | Image file format (e.g., "jpeg"). |
+| license      | varchar(255)   | Licensing information. |
+| width        | smallint       | Photo width (in pixels). |
+| height       | smallint       | Photo height (in pixels). |
+| position     | smallint       | Photo order indicator (primary photo has position 0). |
+
+#### Additional Computed Column
+
+| Column | Type    | Description |
+|--------|---------|-------------|
+| rn     | bigint  | Row number (per species partition based on `L10_taxonID`) used to cap the number of research-grade observations per species (controlled by `MAX_RN`). |
+
+### Conditional Columns: elevation_meters and anomaly_score
+
+- **elevation_meters:**  
+  This column is included in the final export if the environment variable `INCLUDE_ELEVATION_EXPORT` is set to true and if the current release is not `"r0"`. It is positioned immediately after the `longitude` column.
+
+- **anomaly_score:**  
+  Present only in releases where it has been added (e.g., `r1` onward).
+
+### Example Row / CSV Layout
+
+An exported CSV row (tab-delimited) might be structured as follows:
+
+```
+observation_uuid    observer_id    latitude    longitude    elevation_meters    positional_accuracy    taxon_id    quality_grade    observed_on    anomaly_score    in_region    expanded_taxonID    expanded_rankLevel    expanded_name    L5_taxonID    L10_taxonID    ...    L70_taxonID    photo_uuid    photo_id    extension    license    width    height    position    rn
+```
+
+Each observation row is linked to one or more photo rows; the export process uses a partition-based random sampling (per species) so that only a maximum of `MAX_RN` research-grade observations per species are included.
+
+---
+
+## 4. Supplementary Information
+
+### Data Types and Precision
+
+- **Latitude and Longitude:** Stored as `numeric(15,10)`, which provides high precision (up to 10 digits after the decimal) ensuring accurate geolocation.
+- **elevation_meters:** Stored as `numeric(10,2)`, capturing elevation with two decimal places.
+- **anomaly_score:** Stored as `numeric(15,6)` for precise anomaly measurements.
+- Standard PostgreSQL data types are used for other columns as specified.
+
+### Indices and Their Purposes
+
+- **Core Tables:**  
+  Primary keys and indexes are created on identifiers (e.g., `observation_uuid`, `photo_uuid`, `taxon_id`) and frequently queried columns.
+- **Observations Geometry:**  
+  A GIST index is created on the `geom` column for fast spatial queries.
+- **Expanded_Taxa:**  
+  Additional indexes are created on key expanded ancestry columns (e.g., `L10_taxonID`, `L20_taxonID`, …, `L70_taxonID`) to optimize clade-based filtering.
+
+### Version-Specific Schema Differences
+
+- **Releases prior to r1:**  
+  May not include `anomaly_score` and `elevation_meters`.
+- **Current and Future Releases:**  
+  Include these columns. Future schema changes will be documented here as needed.
+
+---
+
+## 5. Appendix: SQL Dumps and \d Outputs
+
+Below are example outputs from PostgreSQL’s `\d` command for key tables. These serve as a quick reference for the column names and types.
+
+### Observations Table
+
+```sql
+-- \d observations
+       Column        |          Type          
+---------------------+------------------------
+ observation_uuid    | uuid                  
+ observer_id         | integer               
+ latitude            | numeric(15,10)        
+ longitude           | numeric(15,10)        
+ positional_accuracy | integer               
+ taxon_id            | integer               
+ quality_grade       | varchar(255)          
+ observed_on         | date                  
+ anomaly_score       | numeric(15,6)         
+ geom                | geometry              
+ origin              | varchar(255)          
+ version             | varchar(255)          
+ release             | varchar(255)
+ elevation_meters    | numeric(10,2)         -- Present if enabled
+```
+
+### Photos Table
+
+```sql
+-- \d photos
+      Column      |          Type          
+------------------+------------------------
+ photo_uuid       | uuid                   
+ photo_id         | integer                
+ observation_uuid | uuid                   
+ observer_id      | integer                
+ extension        | varchar(5)             
+ license          | varchar(255)           
+ width            | smallint               
+ height           | smallint               
+ position         | smallint               
+ origin           | varchar(255)           
+ version          | varchar(255)           
+ release          | varchar(255)
+```
+
+### Observers Table
+
+```sql
+-- \d observers
+   Column    |          Type          
+-------------+------------------------
+ observer_id | integer                
+ login       | varchar(255)           
+ name        | varchar(255)           
+ origin      | varchar(255)           
+ version     | varchar(255)           
+ release     | varchar(255)
+```
+
+### Taxa Table
+
+```sql
+-- \d taxa
+   Column   |          Type          
+------------+------------------------
+ taxon_id   | integer                
+ ancestry   | varchar(255)           
+ rank_level | double precision       
+ rank       | varchar(255)           
+ name       | varchar(255)           
+ active     | boolean                
+ origin     | varchar(255)           
+ version    | varchar(255)           
+ release    | varchar(255)
+```
+
+### Expanded_Taxa Table
+
+```sql
+-- \d "expanded_taxa"
+      Column      |          Type          
+------------------+------------------------
+ taxonID          | integer    (PK)
+ rankLevel        | double precision       
+ rank             | varchar(255)           
+ name             | varchar(255)           
+ taxonActive      | boolean                
+ L5_taxonID       | integer                
+ L5_name          | varchar(255)           
+ L5_commonName    | varchar(255)           
+ L10_taxonID      | integer                
+ L10_name         | varchar(255)           
+ L10_commonName   | varchar(255)           
+ ...              | ...                    
+ L70_taxonID      | integer                
+```
+
+### Final Export Table (Example)
+
+Assuming the export group is named `amphibia_all_exc_nonrg_sp_oor_elev`, an example output is:
+
+```sql
+-- \d "amphibia_all_exc_nonrg_sp_oor_elev_observations"
+       Column              |          Type          
+-----------------------------+------------------------
+ observation_uuid            | uuid                  
+ observer_id                 | integer               
+ latitude                    | numeric(15,10)        
+ longitude                   | numeric(15,10)        
+ elevation_meters            | numeric(10,2)         -- Only if enabled
+ positional_accuracy         | integer               
+ taxon_id                    | integer               
+ quality_grade               | varchar(255)          
+ observed_on                 | date                  
+ anomaly_score               | numeric(15,6)         -- Only for r1 and later
+ in_region                   | boolean               
+ expanded_taxonID            | integer               
+ expanded_rankLevel          | double precision       
+ expanded_name               | varchar(255)           
+ L5_taxonID                  | integer               
+ L10_taxonID                 | integer               
+ ...                         | ...                   
+ L70_taxonID                 | integer               
+ photo_uuid                  | uuid                  
+ photo_id                    | integer               
+ extension                   | varchar(5)            
+ license                     | varchar(255)          
+ width                       | smallint              
+ height                      | smallint              
+ position                    | smallint              
+ rn                          | bigint                -- For internal sampling
+```
+
+---
+
+## Final Notes
+
+- This document serves as the definitive reference for all table schemas within ibridaDB (other than intermediate tables).  
+- It is essential for developers working on downstream processing, migration, or debugging tasks.  
+- As the system evolves (new releases, additional columns, or modifications to processing logic), please update this document to maintain an accurate reference.
+  - NOTE: 'regional base' tables are not documented here but quite likely should be. Necessary for debugging and understanding advances features like ancestor-aware (ancestor search), out-of-region (oor) observations of in-region taxa, etc.
+</file: ../../../docs/schemas.md>
+
+<file: ../../../docs/export.md>
+# ibridaDB Export Reference (v1)
+
+This document describes how to configure and run an **ibridaDB** export job using our current export pipeline. The export process is driven by a set of **environment variables** that control which observations are included, how they are filtered, and where the outputs are written. These variables are typically set in a release‐specific wrapper script (e.g., `r1/wrapper_amphibia_all_exc_nonrg_sp_oor_elev.sh`).
+
+> **Note:** This document has been updated to include new functionality such as ancestor‐based filtering, partial rank wiping, the `in_region` flag with out‐of‐region observation handling, and an optional inclusion of elevation data (via the `elevation_meters` column). See also the [Ingest Documentation](../ingest/INGEST.md) for details on how elevation data is integrated into the database.
+
+---
+
+## Table of Contents
+
+- [ibridaDB Export Reference (v1)](#ibridadb-export-reference-v1)
+  - [Table of Contents](#table-of-contents)
+  - [Introduction \& Pipeline Overview](#introduction--pipeline-overview)
+  - [Quick Start](#quick-start)
+  - [Environment Variables](#environment-variables)
+    - [Database Configuration](#database-configuration)
+    - [Export Parameters](#export-parameters)
+    - [Additional Flags and Advanced Settings](#additional-flags-and-advanced-settings)
+    - [Paths](#paths)
+  - [Export Flow \& Scripts](#export-flow--scripts)
+  - [Output Files](#output-files)
+  - [Future Work and Notes](#future-work-and-notes)
+
+---
+
+## Introduction & Pipeline Overview
+
+The **ibridaDB Export Pipeline** extracts curated subsets of observations from a spatially enabled PostgreSQL/PostGIS database. It is designed to support advanced filtering based on:
+
+- **Geographic Region:** Defined by a bounding box corresponding to a region tag (e.g., `"NAfull"`).
+- **Species Observations:** A minimum number of research-grade observations per species (`MIN_OBS`) is required to be included.
+- **Taxonomic Clade:** Filtering by a clade, metaclade, or macroclade is performed based on definitions in `clade_defns.sh`.
+- **Quality & Ancestor Filtering:** The pipeline supports research-grade filtering (`RG_FILTER_MODE`), optional partial-rank wiping (using `MIN_OCCURRENCES_PER_RANK` and `INCLUDE_MINOR_RANKS_IN_ANCESTORS`), and computes an `in_region` boolean for each observation.
+- **Elevation Data (Optional):** When enabled (via `INCLUDE_ELEVATION_EXPORT`), the final exported CSV will include an `elevation_meters` column immediately after `longitude`.
+
+The export process follows these broad stages:
+
+1. **Wrapper Script:** Sets all required environment variables.
+2. **Main Export Script (`common/main.sh`):**
+   - Validates variables and creates the export directory.
+   - Ensures necessary PostgreSQL extensions and roles exist.
+   - Calls **regional_base.sh** to generate region-based tables.
+   - Invokes **cladistic.sh** to filter by clade and produce the final export table.
+   - Generates a summary file with environment details and final statistics.
+3. **Regional Base Generation (`common/regional_base.sh`):**
+   - Sets the region’s bounding box.
+   - Creates tables that capture species meeting the `MIN_OBS` threshold and computes an `in_region` flag.
+   - Builds ancestor tables based on clade definitions.
+4. **Cladistic Filtering & CSV Export (`common/cladistic.sh`):**
+   - Joins the regional base observations to taxonomic data from `expanded_taxa`.
+   - Applies research-grade filters, partial-rank wiping, and random sampling (using `MAX_RN`) per species.
+   - Exports a final CSV that explicitly lists observation and photo columns (including `elevation_meters` if enabled).
+
+A high-level diagram of the export flow is shown below:
+
+```mermaid
+flowchart TB
+    A["Wrapper Script<br/>(e.g., r1/wrapper_amphibia_all_exc_nonrg_sp_oor_elev.sh)"] --> B["Main Export Script<br/>(common/main.sh)"]
+    B --> C{"SKIP_REGIONAL_BASE?"}
+    C -- "true" --> D["Reuse Existing Regional Base Tables"]
+    C -- "false" --> E["regional_base.sh<br/>(Create/Update Regional Base)"]
+    D --> F["cladistic.sh<br/>(Filter Observations & Export CSV)"]
+    E --> F["cladistic.sh<br/>(Filter Observations & Export CSV)"]
+    F --> G["Export Summary & Log Generation"]
+```
+
+---
+
+## Quick Start
+
+1. **Clone or navigate** to the `dbTools/export/v0` directory.
+2. **Configure a wrapper script** (e.g., `r1/wrapper_amphibia_all_exc_nonrg_sp_oor_elev.sh`) to set your export parameters. For example:
+   - Set region-specific parameters: `REGION_TAG`, `MIN_OBS`, `MAX_RN`, and `PRIMARY_ONLY`.
+   - Specify the clade filter: `CLADE` or `METACLADE`.
+   - Enable out-of-region observation handling: `INCLUDE_OUT_OF_REGION_OBS`.
+   - Optionally, enable elevation export: `INCLUDE_ELEVATION_EXPORT=true` (if your database includes elevation data).
+3. **Run the wrapper script** to initiate the export process:
+   ```bash
+   ./r1/wrapper_amphibia_all_exc_nonrg_sp_oor_elev.sh
+   ```
+4. **Review the output**:
+   - A CSV file named `<EXPORT_GROUP>_photos.csv` will be saved to the export directory.
+   - A summary file (`<EXPORT_GROUP>_export_summary.txt`) will be generated containing export parameters, statistics, and timing information.
+
+---
+
+## Environment Variables
+
+The export pipeline is configured via several environment variables, which are typically set in your wrapper script.
+
+### Database Configuration
+
+- **`DB_USER`**  
+  *Description:* PostgreSQL user (e.g., `"postgres"`).
+
+- **`VERSION_VALUE`**  
+  *Description:* Database version identifier (e.g., `"v0"`).
+
+- **`RELEASE_VALUE`**  
+  *Description:* Data release identifier (e.g., `"r1"`).  
+  *Note:* For older releases (e.g., `"r0"`), certain features (such as `anomaly_score` and `elevation_meters`) may be absent.
+
+- **`ORIGIN_VALUE`**  
+  *Description:* Data provenance (e.g., `"iNat-Dec2024"`).
+
+- **`DB_NAME`**  
+  *Description:* Name of the database (e.g., `"ibrida-v0-r1"`).
+
+- **`DB_CONTAINER`**  
+  *Description:* Name of the Docker container running PostgreSQL (e.g., `"ibridaDB"`).
+
+### Export Parameters
+
+- **`REGION_TAG`**  
+  *Description:* A key that defines the region’s bounding box (e.g., `"NAfull"`).  
+  *Usage:* Used in `regional_base.sh` to set geographic coordinates.
+
+- **`MIN_OBS`**  
+  *Description:* Minimum number of research-grade observations required per species for inclusion.  
+  *Default:* `50`.
+
+- **`MAX_RN`**  
+  *Description:* Maximum number of research-grade observations to sample per species in the final CSV.  
+  *Default:* `2500` (or your desired value).
+
+- **`PRIMARY_ONLY`**  
+  *Description:* If `true`, only the primary photo (position=0) is included; if `false`, all photos are exported.
+
+- **`CLADE` / `METACLADE` / `MACROCLADE`**  
+  *Description:* Defines the taxonomic filter. For example, `CLADE="amphibia"` or `METACLADE="pta"` (primary terrestrial arthropods).
+
+- **`EXPORT_GROUP`**  
+  *Description:* A label for the final export; used to name the final observations table and CSV file (e.g., `"amphibia_all_exc_nonrg_sp_oor_elev"`).
+
+### Additional Flags and Advanced Settings
+
+- **`PROCESS_OTHER`**  
+  *Description:* A generic flag for additional processing (default: `false`).
+
+- **`SKIP_REGIONAL_BASE`**  
+  *Description:* If `true`, the export pipeline will reuse existing regional base tables rather than recreating them.
+
+- **`INCLUDE_OUT_OF_REGION_OBS`**  
+  *Description:* If `true`, once a species is selected by `MIN_OBS`, all observations for that species (globally) are included; otherwise, only those within the bounding box are used.  
+  *Note:* An `in_region` boolean is computed for each observation.
+
+- **`RG_FILTER_MODE`**  
+  *Description:* Controls how research-grade versus non-research observations are filtered.  
+  *Possible values:* `ONLY_RESEARCH`, `ALL`, `ALL_EXCLUDE_SPECIES_NON_RESEARCH`, `ONLY_NONRESEARCH`, etc.
+
+- **`MIN_OCCURRENCES_PER_RANK`**  
+  *Description:* Minimum occurrences required per rank (e.g., L20, L30, L40) before that rank is retained.  
+  *Usage:* Used to optionally wipe out low-occurrence partial rank labels.
+
+- **`INCLUDE_MINOR_RANKS_IN_ANCESTORS`**  
+  *Description:* If `true`, includes minor ranks in the ancestor search; otherwise, only major ranks are considered.
+
+- **`INCLUDE_ELEVATION_EXPORT`**  
+  *Description:* If `true` (the default for new releases), the final export will include the `elevation_meters` column (placed immediately after `longitude`).  
+  *Note:* If the underlying database is older (e.g., release `"r0"`), set this to `false`.
+
+### Paths
+
+- **`HOST_EXPORT_BASE_PATH`**  
+  *Description:* Host filesystem path where export files will be written (e.g., `"/datasets/ibrida-data/exports"`).
+
+- **`CONTAINER_EXPORT_BASE_PATH`**  
+  *Description:* Container path corresponding to `HOST_EXPORT_BASE_PATH` (e.g., `"/exports"`).
+
+- **`EXPORT_SUBDIR`**  
+  *Description:* A subdirectory constructed from variables (e.g., `"v0/r1/primary_only_50min_2500max"`).
+
+- **`BASE_DIR`**  
+  *Description:* Root directory of the export tools (e.g., `/home/caleb/repo/ibridaDB/dbTools/export/v0`).
+
+---
+
+## Export Flow & Scripts
+
+The export process consists of several key steps:
+
+1. **Wrapper Script:**  
+   - A release-specific wrapper (e.g., `r1/wrapper_amphibia_all_exc_nonrg_sp_oor_elev.sh`) sets all necessary environment variables (including the new `INCLUDE_ELEVATION_EXPORT` toggle) and then calls the main export script.
+
+2. **Main Export Script (`common/main.sh`):**  
+   - Validates required variables and creates the export directory.
+   - Installs necessary PostgreSQL extensions (such as `dblink`) and creates roles if needed.
+   - Invokes **regional_base.sh** to generate region-specific base tables.
+   - Calls **cladistic.sh** to join base tables with the taxonomic hierarchy (from `expanded_taxa`), apply quality and clade filters, and build the final export table.
+   - Generates a summary file that documents the export parameters, final observation counts, and timing information.
+   - Optionally copies the wrapper script into the output directory for reproducibility.
+
+3. **Regional Base Generation (`common/regional_base.sh`):**  
+   - Determines the geographic bounding box using `REGION_TAG` (from `region_defns.sh`).
+   - Creates a species table (`<REGION_TAG>_min${MIN_OBS}_all_sp`) of species meeting the minimum observation threshold.
+   - Builds an ancestor table (`<REGION_TAG>_min${MIN_OBS}_all_sp_and_ancestors_<cladeID>_<mode>`) by unrolling taxon ancestry for the selected species.
+   - Generates a second table (`<REGION_TAG>_min${MIN_OBS}_sp_and_ancestors_obs_<cladeID>_<mode>`) that contains all observations for the selected species along with an `in_region` boolean flag.
+   - The `INCLUDE_OUT_OF_REGION_OBS` flag governs whether the observation table is filtered by the bounding box or not.
+
+4. **Cladistic Filtering & CSV Export (`common/cladistic.sh`):**  
+   - Joins the observation table with `expanded_taxa` using clade conditions defined in `clade_defns.sh` (and processed by `clade_helpers.sh`).
+   - Applies research-grade filtering based on `RG_FILTER_MODE` and uses a partition-based random sampling (controlled by `MAX_RN` and `PRIMARY_ONLY`).
+   - Explicitly enumerates columns in the final export, including `elevation_meters` (if `INCLUDE_ELEVATION_EXPORT=true`), ensuring that the column appears immediately after `longitude`.
+   - Exports the final dataset as a CSV file with a header and tab-delimited fields.
+   - Debug SQL is executed to confirm the final column list used.
+
+---
+
+## Output Files
+
+After a successful export, you will find:
+
+- A CSV file named `<EXPORT_GROUP>_photos.csv` in the export subdirectory (e.g., `/exports/v0/r1/primary_only_50min_2500max`).
+- A summary file named `<EXPORT_GROUP>_export_summary.txt` that documents:
+  - The values of key environment variables.
+  - Final observation, taxa, and observer counts.
+  - Timing information for each stage of the export process.
+- Optionally, a copy of the export wrapper script (if `WRAPPER_PATH` is set).
+
+---
+
+## Future Work and Notes
+
+- **Enhanced Documentation:**  
+  Future revisions will further detail the logic of ancestor searches and the random sampling strategy used for research-grade observations.
+  
+- **Additional Filtering Options:**  
+  We plan to refine the `RG_FILTER_MODE` and allow further customizations (e.g., combining multiple quality filters).
+
+- **Schema Updates:**  
+  As new releases are introduced (e.g., additional columns beyond `anomaly_score` or `elevation_meters`), the export documentation will be updated to reflect the schema changes.
+
+- **User Feedback:**  
+  Contributions, bug reports, and suggestions for improvements are welcome.
+
+---
+
+Happy Exporting!
+</file: ../../../docs/export.md>
+
+<file: ../../../docs/README.md>
+# ibridaDB
+
+**ibridaDB** is a modular, reproducible database system designed to ingest, process, and export biodiversity observations from the [iNaturalist open data dumps](https://www.inaturalist.org/). It leverages PostgreSQL with PostGIS to efficiently store and query geospatial data and includes specialized pipelines for:
+
+- **Data Ingestion:** Importing CSV dumps, calculating geospatial geometries, and updating metadata.
+- **Elevation Integration:** Optionally enriching observations with elevation data derived from MERIT DEM tiles.
+- **Data Export:** Filtering observations by region and taxonomic clade, performing advanced ancestor searches, and exporting curated CSV files for downstream model training.
+
+This repository contains all the code, Docker configurations, and documentation required to build, run, and extend ibridaDB.
+
+---
+
+## Table of Contents
+
+- [ibridaDB](#ibridadb)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Architecture](#architecture)
+  - [Directory Structure](#directory-structure)
+  - [Ingestion Pipeline](#ingestion-pipeline)
+  - [Elevation Data Integration](#elevation-data-integration)
+  - [Export Pipeline](#export-pipeline)
+  - [Docker Build and Deployment](#docker-build-and-deployment)
+  - [Configuration \& Environment Variables](#configuration--environment-variables)
+  - [Adding a New Release](#adding-a-new-release)
+  - [Release notes](#release-notes)
+  - [License](#license)
+  - [Final Notes](#final-notes)
+
+---
+
+## Overview
+
+**ibridaDB** automates the process of:
+- Reproducing a spatially enabled database from iNaturalist open data dumps.
+- Optionally enriching the database with elevation data from MERIT DEM.
+- Exporting curated subsets of observations for downstream training of specimen identification models.
+
+The system is versioned both in terms of **database structure** (Version, e.g., "v0") and **data release** (Release, e.g., "r1"). These concepts allow you to reproduce different releases of the database while keeping the underlying schema consistent.
+
+---
+
+## Architecture
+
+The overall workflow of ibridaDB is divided into three main stages:
+
+1. **Ingestion:**  
+   - **CSV Import:** Load observations, photos, taxa, and observers from CSV files.
+   - **Geometry Calculation:** Compute geospatial geometries (using latitude/longitude) with PostGIS.
+   - **Metadata Update:** Set version, release, and origin metadata on each table.
+   - **Optional Elevation Processing:** If enabled, create a PostGIS raster table for DEM tiles, load MERIT DEM data, and update each observation with an elevation value.
+
+2. **Export:**  
+   - **Regional Base Tables:** Build tables that restrict species by geographic bounding boxes and minimum observation counts.
+   - **Cladistic Filtering:** Further subset the observations based on taxonomic clade (or metaclade) conditions and other quality filters.
+   - **Final CSV Export:** Generate CSV files with additional information (including photo metadata) and optionally include elevation data.
+
+3. **Dockerized Deployment:**  
+   - The system runs in a Docker container using a custom image that extends the official PostGIS image to include the `raster2pgsql` CLI tool (necessary for elevation data processing).
+
+A high-level diagram of the export flow is shown below:
+
+```mermaid
+flowchart TB
+    A["Wrapper Script<br/>(e.g., r1/wrapper.sh)"] --> B["Main Export Script<br/>(common/main.sh)"]
+    B --> C{"Skip Regional Base?"}
+    C -- "true" --> D["Reuse Existing Tables"]
+    C -- "false" --> E["regional_base.sh<br/>(Create/Update Base Tables)"]
+    D --> F["cladistic.sh<br/>(Apply Cladistic Filters & Export CSV)"]
+    E --> F["cladistic.sh<br/>(Apply Cladistic Filters & Export CSV)"]
+    F --> G["Export Summary Generated"]
+```
+
+---
+
+## Directory Structure
+
+The repository is organized as follows:
+
+```
+ibridaDB/
+├── dbTools/
+│   ├── ingest/
+│   │   └── v0/
+│   │       ├── common/
+│   │       │   ├── geom.sh              # Geometry calculations
+│   │       │   ├── vers_origin.sh       # Version and origin metadata updates
+│   │       │   └── main.sh              # Core ingestion logic
+│   │       ├── r0/                      # Parameters for the initial release (r0)
+│   │       │   └── wrapper.sh
+│   │       ├── r1/                      # Parameters for the r1 release
+│   │       │   └── wrapper.sh
+│   │       └── utils/
+│   │           ├── add_release.sh       # Legacy release update script
+│   │           └── elevation/           # Elevation pipeline tools
+│   │               ├── create_elevation_table.sql
+│   │               ├── create_elevation_table.sh
+│   │               ├── load_dem.sh
+│   │               ├── main.sh          # Orchestrates elevation ingestion
+│   │               ├── update_elevation.sh
+│   │               └── wrapper.sh
+│   └── export/
+│       └── v0/
+│           ├── common/
+│           │   ├── functions.sh         # Shared export functions (including get_obs_columns())
+│           │   ├── clade_defns.sh         # Clade condition definitions
+│           │   ├── clade_helpers.sh       # Helpers for multi-root and clade processing
+│           │   ├── regional_base.sh       # Regional base table generation
+│           │   ├── cladistic.sh           # Cladistic filtering and final CSV export
+│           │   └── main.sh                # Main export orchestration
+│           └── r1/                        # Release-specific export wrappers
+│               ├── wrapper_amphibia_all_exc_nonrg_sp.sh
+│               ├── wrapper_amphibia_all_exc_nonrg_sp_oor_elev.sh
+│               ├── wrapper_pta_all_exc_nonrg_sp.sh
+│               └── wrapper_pta_all_exc_nonrg_sp_full_ancestor_search.sh
+├── docker/
+│   ├── Dockerfile                       # Custom Docker image build (with raster2pgsql)
+│   └── (other Docker-related files, e.g., docker-compose.yml)
+└── README.md                            # This high-level documentation
+```
+
+---
+
+## Ingestion Pipeline
+
+The ingestion pipeline is contained in `dbTools/ingest/v0/` and performs the following:
+
+1. **Database Initialization:**  
+   - Uses wrapper scripts (e.g., `r1/wrapper.sh`) to set parameters (DB name, source info, etc.).
+   - The main script (`common/main.sh`) creates the database, imports CSV files, sets up tables and indexes, and computes geometries via `geom.sh`.
+
+2. **Metadata Updates:**  
+   - Updates the `origin`, `version`, and `release` columns in each table (via `vers_origin.sh`).
+
+3. **Elevation Integration (Optional):**  
+   - When `ENABLE_ELEVATION=true` is set in the wrapper, the elevation pipeline in `utils/elevation/` is invoked.
+   - This pipeline creates an `elevation_raster` table, loads MERIT DEM tiles (using `raster2pgsql`), and updates `observations.elevation_meters`.
+
+**Quick Start Example for Ingestion:**
+
+```bash
+chmod +x dbTools/ingest/v0/common/main.sh dbTools/ingest/v0/common/geom.sh dbTools/ingest/v0/common/vers_origin.sh dbTools/ingest/v0/r1/wrapper.sh
+# To ingest a new release with elevation:
+ENABLE_ELEVATION=true dbTools/ingest/v0/r1/wrapper.sh
+```
+
+---
+
+## Elevation Data Integration
+
+The elevation pipeline (located in `dbTools/ingest/v0/utils/elevation/`) provides the following functionality:
+
+- **Create Elevation Table:**  
+  - Runs `create_elevation_table.sh` to ensure the `elevation_raster` table exists.
+
+- **Load DEM Data:**  
+  - Uses `load_dem.sh` to extract and load MERIT DEM tiles into the database using `raster2pgsql`.  
+  - **Note:** This requires the custom Docker image built with `raster2pgsql` (see Docker Build section below).
+
+- **Update Elevation:**  
+  - Runs `update_elevation.sh` to populate `observations.elevation_meters` using spatial joins with the raster data.
+  
+The pipeline is activated by setting `ENABLE_ELEVATION=true` in your ingest wrapper.
+
+---
+
+## Export Pipeline
+
+The export pipeline (located in `dbTools/export/v0/`) allows you to generate specialized CSV exports from your ibridaDB database. Key features include:
+
+1. **Regional Base Table Generation:**  
+   - `regional_base.sh` creates base tables filtering species by a geographic bounding box (defined by `REGION_TAG`) and by a minimum number of research-grade observations (`MIN_OBS`).
+   - It supports an option (`INCLUDE_OUT_OF_REGION_OBS`) to include all observations for selected species, along with computing an `in_region` boolean.
+
+2. **Cladistic Filtering:**  
+   - `cladistic.sh` further filters the regional observations by taxonomic clade (using `CLADE`, `METACLADE`, or `MACROCLADE` defined in `clade_defns.sh`).
+   - The script also supports advanced options such as partial rank wiping (using `MIN_OCCURRENCES_PER_RANK` and `INCLUDE_MINOR_RANKS_IN_ANCESTORS`) and research-grade filtering (using `RG_FILTER_MODE`).
+
+3. **CSV Export:**  
+   - The final CSV export includes explicit columns from the observations and photo tables.
+   - A new column `elevation_meters` is now included in the export if enabled by the environment variable `INCLUDE_ELEVATION_EXPORT` (set to true by default for new releases).
+   - The CSV is produced via a partition-based random sampling method, ensuring that in-region research-grade observations are preferentially selected (controlled by `PRIMARY_ONLY` and `MAX_RN`).
+
+**Quick Start Example for Export:**
+
+```bash
+chmod +x dbTools/export/v0/r1/wrapper_amphibia_all_exc_nonrg_sp_oor_elev.sh
+# Run export (with elevation enabled) using the wrapper:
+dbTools/export/v0/r1/wrapper_amphibia_all_exc_nonrg_sp_oor_elev.sh
+```
+
+---
+
+## Docker Build and Deployment
+
+**Custom Docker Image:**
+
+The official PostGIS Docker image does not include the `raster2pgsql` CLI tool. To support elevation processing, we build a custom image that:
+
+- Uses a multi-stage Docker build to install the PostGIS package (which includes `raster2pgsql`) in a builder stage.
+- Copies the `raster2pgsql` binary into the final image.
+- Is used in our Docker Compose configuration.
+
+**Build and Push Instructions:**
+
+```bash
+cd docker
+docker build -t frontierkodiak/ibridadb:latest . --no-cache
+docker login
+docker push frontierkodiak/ibridadb:latest
+```
+
+**Docker Compose:**
+
+Our `docker-compose.yml` maps necessary volumes for:
+- Exporting data (`/datasets/ibrida-data/exports`)
+- Ingesting metadata (`/datasets/ibrida-data/intake`)
+- Providing DEM data (`/datasets/dem`)
+
+Refer to the `docker/stausee/docker-compose.yml` file for details.
+
+---
+
+## Configuration & Environment Variables
+
+Both the ingest and export pipelines are configured via a rich set of environment variables. Key ones include:
+
+- **Database Configuration:**  
+  - `DB_USER`, `VERSION_VALUE`, `RELEASE_VALUE`, `ORIGIN_VALUE`, `DB_NAME`, `DB_CONTAINER`
+
+- **Ingestion-Specific:**  
+  - `SOURCE`, `METADATA_PATH`, `ENABLE_ELEVATION`, `DEM_DIR`, `EPSG`, `TILE_SIZE`
+
+- **Export-Specific:**  
+  - `REGION_TAG`, `MIN_OBS`, `MAX_RN`, `PRIMARY_ONLY`
+  - Taxonomic filters: `CLADE`, `METACLADE`, `MACROCLADE`
+  - Advanced export toggles:  
+    - `INCLUDE_OUT_OF_REGION_OBS`  
+    - `RG_FILTER_MODE`  
+    - `MIN_OCCURRENCES_PER_RANK`  
+    - `INCLUDE_MINOR_RANKS_IN_ANCESTORS`  
+    - **`INCLUDE_ELEVATION_EXPORT`** – controls whether `elevation_meters` is included in the final export.
+
+- **Paths:**  
+  - `HOST_EXPORT_BASE_PATH`, `CONTAINER_EXPORT_BASE_PATH`, `EXPORT_SUBDIR`, `BASE_DIR`
+
+For full details, please consult the export and ingest wrapper scripts in their respective directories.
+
+---
+
+## Adding a New Release
+
+To add a new data release:
+1. Create a new release directory (e.g., `dbTools/ingest/v0/r2/` and `dbTools/export/v0/r2/`).
+2. Copy an existing wrapper script (from r1) into the new directory.
+3. Update parameters such as:
+   - `SOURCE` (e.g., change from "Dec2024" to "Feb2025")
+   - `RELEASE_VALUE` (e.g., from "r1" to "r2")
+   - Any new configuration (e.g., enable elevation by setting `ENABLE_ELEVATION=true` in ingest and `INCLUDE_ELEVATION_EXPORT=true` in export).
+4. Run the ingestion/export processes using the new wrapper scripts.
+
+## Release notes
+
+Current versions:
+- v0r0: June 2024 iNat data release
+- v0r1: December 2024 iNat data release (adds anomaly_score column to observations table)
+  - (in-place update) added elevation_meters column to observations tables
+- v0r2: February 2025 iNat data release (built with elevation data)
+
+---
+
+## License
+
+[Insert License Information Here]
+
+---
+
+## Final Notes
+
+- **Documentation Updates:**  
+  This README provides a high-level overview. For detailed configuration of the ingest and export pipelines, please refer to:
+  - `dbTools/ingest/v0/INGEST.md` (in progress)  
+  - `dbTools/export/v0/export.md`
+
+- **Contributions:**  
+  Contributions and suggestions are welcome. Please submit pull requests or open issues if you encounter problems or have ideas for enhancements.
+
+---
+
+Happy Ingesting and Exporting!
+</file: ../../../docs/README.md>
+
+<file: ../../../docs/ingest.md>
+# ibridaDB Ingestion Documentation
+
+This document provides a detailed overview of the ibridaDB ingestion pipeline. It covers the steps to load iNaturalist data into a spatially enabled PostgreSQL/PostGIS database, how the elevation integration is handled, and how to run the ingestion process using the provided wrapper scripts.
+
+---
+
+## 1. Overview of the Ingestion Flow
+
+The ingestion pipeline for ibridaDB is designed to:
+- **Initialize the Database:** Create a new database using a template (typically a PostGIS-enabled template).
+- **Import Data:** Load CSV data for observations, photos, taxa, and observers from iNaturalist data dumps.
+- **Compute Geometries:** Generate geospatial geometry columns from the latitude and longitude fields.
+- **Update Metadata:** Populate additional columns such as `origin`, `version`, and `release` on each table.
+- **Integrate Elevation (Optional):**  
+  - **Fresh Ingestion Scenario:** If you are initializing a new database and want to include elevation data, the main ingestion script (in `common/main.sh`) can trigger the elevation pipeline automatically when `ENABLE_ELEVATION=true` is set.
+  - **Existing Database Scenario:** If your database already exists and lacks elevation data, you can run the elevation wrapper (in `utils/elevation/wrapper.sh`) to update the observations with DEM-derived elevation values.
+
+After the ingestion steps are complete, the database is ready for further processing or for exporting subsets of observations using the export pipeline.
+
+---
+
+## 2. Environment Variables
+
+The ingestion pipeline is controlled by several environment variables. The key ones include:
+
+### Database and General Settings
+- **`DB_USER`**  
+  PostgreSQL user (typically `"postgres"`).
+
+- **`DB_TEMPLATE`**  
+  Template database name (e.g., `"template_postgis"`) used to create the new database.
+
+- **`NUM_PROCESSES`**  
+  Number of parallel processes to use for tasks such as geometry calculations and metadata updates.
+
+- **`BASE_DIR`**  
+  Root directory of the ingestion tools (e.g., `/home/caleb/repo/ibridaDB/dbTools/ingest/v0`).
+
+- **`SOURCE`**  
+  Source identifier for the iNaturalist data (e.g., `"Dec2024"`, `"Feb2025"`).
+
+- **`METADATA_PATH`**  
+  Path to the CSV files containing iNaturalist data (e.g., `/datasets/ibrida-data/intake/Dec2024`).
+
+### Versioning and Release
+- **`ORIGIN_VALUE`**  
+  Describes the data provenance (e.g., `"iNat-Dec2024"`).
+
+- **`VERSION_VALUE`**  
+  Database version identifier (e.g., `"v0"`).
+
+- **`RELEASE_VALUE`**  
+  Data release identifier (e.g., `"r1"`).
+
+- **`DB_NAME`**  
+  Name of the new database (e.g., `"ibrida-v0-r1"`).
+
+- **`DB_CONTAINER`**  
+  Name of the Docker container running PostgreSQL (e.g., `"ibridaDB"`).
+
+### Elevation Integration Settings
+- **`ENABLE_ELEVATION`**  
+  If set to `"true"`, the ingestion process will invoke the elevation pipeline.  
+  - *Fresh Ingestion:* When creating a new database, the main ingestion script calls the elevation pipeline after geometry calculation.  
+  - *Existing DB Update:* You may also run the elevation wrapper separately to add or update elevation values.
+- **`DEM_DIR`**  
+  Path to the directory containing the MERIT DEM `.tar` files (e.g., `"/datasets/dem/merit"`).
+- **`EPSG`**  
+  EPSG code for the DEM data (default: `"4326"`).
+- **`TILE_SIZE`**  
+  Tile size for processing DEM data (default: `"100x100"`).
+
+---
+
+## 3. Ingestion Flow Details
+
+### A. Database Initialization and CSV Import
+
+1. **Database Creation:**  
+   - The ingestion pipeline starts by dropping any existing database with the target name and creating a fresh database using the specified template.
+2. **Table Creation:**  
+   - Tables are created using a provided structure SQL file (e.g., `r1/structure.sql`).
+3. **Data Import:**  
+   - The pipeline imports CSV files for observations, photos, taxa, and observers into the respective tables using PostgreSQL’s `COPY` command.
+4. **Index Creation:**  
+   - Key indexes are created to optimize spatial and text-based queries (including geospatial indexes on the geometry column).
+
+### B. Geometry Calculation
+
+- The script `common/geom.sh` is executed in parallel to compute the `geom` column on the `observations` table from the `latitude` and `longitude` fields.
+- A PostGIS GIST index is then created on the new geometry column to speed up spatial queries.
+
+### C. Metadata Update
+
+- The script `common/vers_origin.sh` is run to add and populate the `origin`, `version`, and `release` columns on all tables.
+- This process is executed in parallel across tables to speed up the update.
+
+### D. Elevation Integration
+
+The elevation pipeline can be integrated in one of two ways:
+
+#### 1. During Fresh Ingestion
+- **Integration via Main Ingestion Script:**  
+  When the environment variable `ENABLE_ELEVATION` is set to `"true"`, the main ingestion script (`common/main.sh`) calls the elevation pipeline after geometry calculation. This pipeline performs the following steps:
+  - **Create Elevation Table:**  
+    The script `utils/elevation/create_elevation_table.sh` ensures that the `elevation_raster` table exists.
+  - **Load DEM Data:**  
+    The script `utils/elevation/load_dem.sh` extracts DEM tiles from `.tar` archives and loads them into the `elevation_raster` table using `raster2pgsql` (which requires the custom Docker image).
+  - **Update Elevation Values:**  
+    Finally, `utils/elevation/update_elevation.sh` updates the `observations.elevation_meters` column for each observation based on a spatial join with the DEM data.
+
+#### 2. Updating an Existing Database
+- **Separate Elevation Wrapper:**  
+  If you have an existing database (e.g., from a previous release) and you need to add or update elevation values, you can run the elevation wrapper script located at `utils/elevation/wrapper.sh`. This script sets the appropriate environment variables and calls the elevation main script to update the database.
+
+---
+
+## 4. Example Wrapper Usage
+
+Below is an example wrapper script for a fresh ingestion (with elevation enabled):
+
+```bash
+#!/bin/bash
+# Example: dbTools/ingest/v0/r1/wrapper.sh
+
+# Setup logging
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+LOG_FILE="${SCRIPT_DIR}/wrapper_$(date +%Y%m%d_%H%M%S).log"
+echo "Starting ingestion at $(date)" > "${LOG_FILE}"
+
+# Export environment variables
+export DB_USER="postgres"
+export DB_TEMPLATE="template_postgis"
+export NUM_PROCESSES=16
+export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/ingest/v0"
+export SOURCE="Feb2025"
+export METADATA_PATH="/datasets/ibrida-data/intake/Feb2025"
+export ORIGIN_VALUE="iNat-Feb2025"
+export VERSION_VALUE="v0"
+export RELEASE_VALUE="r2"
+export DB_NAME="ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"
+export DB_CONTAINER="ibridaDB"
+export STRUCTURE_SQL="${BASE_DIR}/r2/structure.sql"
+
+# Enable elevation integration in this ingestion
+export ENABLE_ELEVATION=true
+export DEM_DIR="/datasets/dem/merit"
+export EPSG="4326"
+export TILE_SIZE="100x100"
+
+# Execute the main ingestion script
+/home/caleb/repo/ibridaDB/dbTools/ingest/v0/common/main.sh
+
+# End of wrapper
+echo "Ingestion process complete at $(date)" >> "${LOG_FILE}"
+```
+
+For an existing database update, simply run the elevation wrapper:
+
+```bash
+#!/bin/bash
+# Example: dbTools/ingest/v0/utils/elevation/wrapper.sh
+
+export DB_NAME="ibrida-v0-r1"
+export DB_USER="postgres"
+export DB_CONTAINER="ibridaDB"
+export DEM_DIR="/datasets/dem/merit"
+export NUM_PROCESSES=16
+export EPSG="4326"
+export TILE_SIZE="100x100"
+export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/ingest/v0"
+
+./utils/elevation/main.sh "$DB_NAME" "$DB_USER" "$DB_CONTAINER" "$DEM_DIR" "$NUM_PROCESSES" "$EPSG" "$TILE_SIZE"
+```
+
+---
+
+## 5. Verifying Success
+
+After running the ingestion process, verify that:
+
+- The database is created with all required tables and indexes.
+- The CSV files have been successfully imported into the tables.
+- The `geom` column on `observations` is correctly computed and indexed.
+- If elevation was enabled, the `elevation_raster` table exists and the `observations.elevation_meters` column is populated (for rows with valid DEM coverage).
+- Log messages and notifications (if configured) confirm each step’s completion.
+
+---
+
+## Final Notes
+
+- This document covers the ingestion side of ibridaDB. For exporting subsets of the data, please see [export.md](../export/export.md) for detailed instructions on the export pipeline.
+- Ensure that you use the custom Docker image (with `raster2pgsql` installed) when running ingestion with elevation data.
+- For new releases, adjust your wrapper scripts as needed and consider setting up separate directories (e.g., r1, r2) to maintain versioning consistency.
+
+Happy Ingesting!
+</file: ../../../docs/ingest.md>
+
 <file: ../../../docker/Dockerfile>
 # syntax=docker/dockerfile:1
 #
@@ -2076,488 +3353,5 @@ services:
       - "5432:5432"
     container_name: ibridaDB
 </file: ../../../docker/stausee/docker-compose.yml>
-
-<file: ../../../docker/stausee/entrypoint.sh>
-#!/bin/bash
-set -e
-
-# Just log and exit - let Docker's default entrypoint handle PostgreSQL
-echo "Entrypoint script executed at $(date)"
-</file: ../../../docker/stausee/entrypoint.sh>
-
-<file: scrap/schemas.md>
-# expanded_taxa
-
-One row per taxon. Expands the 'ancestry' column from the 'taxa' table into a set of columns.
-    Can be much more performany than recursive string parsing for ancestry.
-
-```sql
-ibrida-v0-r1=# \d expanded_taxa
-                        Table "public.expanded_taxa"
-      Column      |          Type          | Collation | Nullable | Default
-------------------+------------------------+-----------+----------+---------
- taxonID          | integer                |           | not null |
- rankLevel        | double precision       |           |          |
- rank             | character varying(255) |           |          |
- name             | character varying(255) |           |          |
- taxonActive      | boolean                |           |          |
- L5_taxonID       | integer                |           |          |
- L5_name          | character varying(255) |           |          |
- L5_commonName    | character varying(255) |           |          |
- L10_taxonID      | integer                |           |          |
- L10_name         | character varying(255) |           |          |
- L10_commonName   | character varying(255) |           |          |
- L11_taxonID      | integer                |           |          |
- L11_name         | character varying(255) |           |          |
- L11_commonName   | character varying(255) |           |          |
- L12_taxonID      | integer                |           |          |
- L12_name         | character varying(255) |           |          |
- L12_commonName   | character varying(255) |           |          |
- L13_taxonID      | integer                |           |          |
- L13_name         | character varying(255) |           |          |
- L13_commonName   | character varying(255) |           |          |
- L15_taxonID      | integer                |           |          |
- L15_name         | character varying(255) |           |          |
- L15_commonName   | character varying(255) |           |          |
- L20_taxonID      | integer                |           |          |
- L20_name         | character varying(255) |           |          |
- L20_commonName   | character varying(255) |           |          |
- L24_taxonID      | integer                |           |          |
- L24_name         | character varying(255) |           |          |
- L24_commonName   | character varying(255) |           |          |
- L25_taxonID      | integer                |           |          |
- L25_name         | character varying(255) |           |          |
- L25_commonName   | character varying(255) |           |          |
- L26_taxonID      | integer                |           |          |
- L26_name         | character varying(255) |           |          |
- L26_commonName   | character varying(255) |           |          |
- L27_taxonID      | integer                |           |          |
- L27_name         | character varying(255) |           |          |
- L27_commonName   | character varying(255) |           |          |
- L30_taxonID      | integer                |           |          |
- L30_name         | character varying(255) |           |          |
- L30_commonName   | character varying(255) |           |          |
- L32_taxonID      | integer                |           |          |
- L32_name         | character varying(255) |           |          |
- L32_commonName   | character varying(255) |           |          |
- L33_taxonID      | integer                |           |          |
- L33_name         | character varying(255) |           |          |
- L33_commonName   | character varying(255) |           |          |
- L33_5_taxonID    | integer                |           |          |
- L33_5_name       | character varying(255) |           |          |
- L33_5_commonName | character varying(255) |           |          |
- L34_taxonID      | integer                |           |          |
- L34_name         | character varying(255) |           |          |
- L34_commonName   | character varying(255) |           |          |
- L34_5_taxonID    | integer                |           |          |
- L34_5_name       | character varying(255) |           |          |
- L34_5_commonName | character varying(255) |           |          |
- L35_taxonID      | integer                |           |          |
- L35_name         | character varying(255) |           |          |
- L35_commonName   | character varying(255) |           |          |
- L37_taxonID      | integer                |           |          |
- L37_name         | character varying(255) |           |          |
- L37_commonName   | character varying(255) |           |          |
- L40_taxonID      | integer                |           |          |
- L40_name         | character varying(255) |           |          |
- L40_commonName   | character varying(255) |           |          |
- L43_taxonID      | integer                |           |          |
- L43_name         | character varying(255) |           |          |
- L43_commonName   | character varying(255) |           |          |
- L44_taxonID      | integer                |           |          |
- L44_name         | character varying(255) |           |          |
- L44_commonName   | character varying(255) |           |          |
- L45_taxonID      | integer                |           |          |
- L45_name         | character varying(255) |           |          |
- L45_commonName   | character varying(255) |           |          |
- L47_taxonID      | integer                |           |          |
-
-...skipping 1 line
- L47_commonName   | character varying(255) |           |          |
- L50_taxonID      | integer                |           |          |
- L50_name         | character varying(255) |           |          |
- L50_commonName   | character varying(255) |           |          |
- L53_taxonID      | integer                |           |          |
- L53_name         | character varying(255) |           |          |
- L53_commonName   | character varying(255) |           |          |
- L57_taxonID      | integer                |           |          |
- L57_name         | character varying(255) |           |          |
- L57_commonName   | character varying(255) |           |          |
- L60_taxonID      | integer                |           |          |
- L60_name         | character varying(255) |           |          |
- L60_commonName   | character varying(255) |           |          |
- L67_taxonID      | integer                |           |          |
- L67_name         | character varying(255) |           |          |
- L67_commonName   | character varying(255) |           |          |
- L70_taxonID      | integer                |           |          |
- L70_name         | character varying(255) |           |          |
- L70_commonName   | character varying(255) |           |          |
-Indexes:
-    "expanded_taxa_pkey" PRIMARY KEY, btree ("taxonID")
-    "idx_expanded_taxa_l10_taxonid" btree ("L10_taxonID")
-    "idx_expanded_taxa_l20_taxonid" btree ("L20_taxonID")
-    "idx_expanded_taxa_l30_taxonid" btree ("L30_taxonID")
-    "idx_expanded_taxa_l40_taxonid" btree ("L40_taxonID")
-    "idx_expanded_taxa_l50_taxonid" btree ("L50_taxonID")
-    "idx_expanded_taxa_l60_taxonid" btree ("L60_taxonID")
-    "idx_expanded_taxa_l70_taxonid" btree ("L70_taxonID")
-    "idx_expanded_taxa_name" btree (name)
-    "idx_expanded_taxa_ranklevel" btree ("rankLevel")
-    "idx_expanded_taxa_taxonid" btree ("taxonID")
-```
----
-
-# taxa
-
-One row per taxon.
-
-```sql
-ibrida-v0-r1=# \d taxa
-                         Table "public.taxa"
-   Column   |          Type          | Collation | Nullable | Default
-------------+------------------------+-----------+----------+---------
- taxon_id   | integer                |           | not null |
- ancestry   | character varying(255) |           |          |
- rank_level | double precision       |           |          |
- rank       | character varying(255) |           |          |
- name       | character varying(255) |           |          |
- active     | boolean                |           |          |
- origin     | character varying(255) |           |          |
- version    | character varying(255) |           |          |
- release    | character varying(255) |           |          |
-Indexes:
-    "index_taxa_active" btree (active)
-    "index_taxa_name" gin (to_tsvector('simple'::regconfig, name::text))
-    "index_taxa_origins" gin (to_tsvector('simple'::regconfig, origin::text))
-    "index_taxa_release" gin (to_tsvector('simple'::regconfig, release::text))
-    "index_taxa_taxon_id" btree (taxon_id)
-    "index_taxa_version" gin (to_tsvector('simple'::regconfig, version::text))
-```
-
----
-
-# observations
-
-```sql
-ibrida-v0-r1=# \d observations
-                          Table "public.observations"
-       Column        |          Type          | Collation | Nullable | Default
----------------------+------------------------+-----------+----------+---------
- observation_uuid    | uuid                   |           | not null |
- observer_id         | integer                |           |          |
- latitude            | numeric(15,10)         |           |          |
- longitude           | numeric(15,10)         |           |          |
- positional_accuracy | integer                |           |          |
- taxon_id            | integer                |           |          |
- quality_grade       | character varying(255) |           |          |
- observed_on         | date                   |           |          |
- anomaly_score       | numeric(15,6)          |           |          |
- geom                | geometry               |           |          |
- origin              | character varying(255) |           |          |
- version             | character varying(255) |           |          |
- release             | character varying(255) |           |          |
-Indexes:
-    "idx_observations_anomaly" btree (anomaly_score)
-    "index_observations_observer_id" btree (observer_id)
-    "index_observations_origins" gin (to_tsvector('simple'::regconfig, origin::text))
-    "index_observations_quality" btree (quality_grade)
-    "index_observations_release" gin (to_tsvector('simple'::regconfig, release::text))
-    "index_observations_taxon_id" btree (taxon_id)
-    "index_observations_version" gin (to_tsvector('simple'::regconfig, version::text))
-    "observations_geom" gist (geom)
-```
-
----
-
-# photos
-
-```sql
-ibrida-v0-r1=# \d photos
-                           Table "public.photos"
-      Column      |          Type          | Collation | Nullable | Default
-------------------+------------------------+-----------+----------+---------
- photo_uuid       | uuid                   |           | not null |
- photo_id         | integer                |           | not null |
- observation_uuid | uuid                   |           | not null |
- observer_id      | integer                |           |          |
- extension        | character varying(5)   |           |          |
- license          | character varying(255) |           |          |
- width            | smallint               |           |          |
- height           | smallint               |           |          |
- position         | smallint               |           |          |
- origin           | character varying(255) |           |          |
- version          | character varying(255) |           |          |
- release          | character varying(255) |           |          |
-Indexes:
-    "index_photos_observation_uuid" btree (observation_uuid)
-    "index_photos_origins" gin (to_tsvector('simple'::regconfig, origin::text))
-    "index_photos_photo_id" btree (photo_id)
-    "index_photos_photo_uuid" btree (photo_uuid)
-    "index_photos_position" btree ("position")
-    "index_photos_release" gin (to_tsvector('simple'::regconfig, release::text))
-    "index_photos_version" gin (to_tsvector('simple'::regconfig, version::text))
-```
-
----
-
-# observers
-
-```sql
-ibrida-v0-r1=# \d observers
-                       Table "public.observers"
-   Column    |          Type          | Collation | Nullable | Default
--------------+------------------------+-----------+----------+---------
- observer_id | integer                |           | not null |
- login       | character varying(255) |           |          |
- name        | character varying(255) |           |          |
- origin      | character varying(255) |           |          |
- version     | character varying(255) |           |          |
- release     | character varying(255) |           |          |
-Indexes:
-    "index_observers_observers_id" btree (observer_id)
-    "index_observers_origins" gin (to_tsvector('simple'::regconfig, origin::text))
-    "index_observers_release" gin (to_tsvector('simple'::regconfig, release::text))
-    "index_observers_version" gin (to_tsvector('simple'::regconfig, version::text))
-```
-</file: scrap/schemas.md>
-
-<file: export.md>
-# ibridaDB Export Reference (v1)
-
-This document describes how to configure and run an **ibridaDB** export job using our **v1** pipeline. The pipeline is driven by a set of **environment variables** that control which data are included, how they are filtered, and where the outputs are written. These variables are typically set in a **wrapper script** (e.g., `r1/wrapper.sh`).
-
-Below is an overview of:
-
-- [ibridaDB Export Reference (v1)](#ibridadb-export-reference-v1)
-  - [NOTES/LIMITATIONS](#noteslimitations)
-  - [Introduction \& Pipeline Overview](#introduction--pipeline-overview)
-  - [Quick Start](#quick-start)
-  - [Environment Variables](#environment-variables)
-    - [Database Config](#database-config)
-    - [Export Parameters](#export-parameters)
-    - [Paths](#paths)
-  - [Export Flow \& Scripts](#export-flow--scripts)
-- [FUTURE](#future)
-
-A **placeholder** for a mermaid diagram is provided below. You can generate or modify the diagram according to your team’s preferences and paste it in there.  
-
----
-## NOTES/LIMITATIONS
-- The upper boundary used for ancestor search, which is determine by the CLADE/METACLADE/MACROCLADE, is used for the regional-base tables ()"${REGION_TAG}_min${MIN_OBS}_all_sp_and_ancestors\"), not on one of the clade-export specific tables in cladistic.sh. So this is at odds with the previous design (before we added ancestor-aware logic), where previously the _all_sp table only varied by the REGION_TAG/MIN_OBS. This is probably OK, and might even be necessary for the purposes of determining the exact set of ancestral taxonIDs that need to be included in the base tables when looking to export more than just research-grade observations (i.e. observations with an uncontested species-level label) but it is a bit of a departure from the previous design. So we need to confirm what the set of taxa in the _all_sp_and_ancestors table depends upon (I think it is only the REGION_TAG/MIN_OBS/boundary ranks), and we can potentially mitigate by adjusting the generated base tables names to include the highest root rank (or highest root ranks, in the case of metaclades with multiple root ranks) used in the ancestor search; this will properly version the regional base tables and prevent reuse of base tables when the ancestor scopes differ.
-  - So this means that the boundaries of the ancestor search for generating the regional _all_sp_and_ancestors is defined with respect to the configured clade/metaclade for a job, and so the regional base table might need to be recreated for successive job using clades/metaclades with different root ranks.
-    - Really, the ancestor-aware logic should be implemented on the cladistic.sh tables.
-    - The regional base table names do not fully capture the 'versining', so e.g. a NAfull_min50_all_sp_and_ancestors table generated from a PTA (metaclade) job would not be reusable for a successive job that used a MACROCLADES["arthropoda"]='("L60_taxonID" = 47120)' macroclade, since the PTA root ranks are lower than the L60 rank-- so that regional base table would be missing L50 ancestors. 
-      - This would actually be OK in theory but it might break some downstream assumptions, so it would be better to recreate the regional base table for each successive job if that job uses a different root rank.
-      - TODO: Confirm that it is only the root rank, not the root taxonID, that is used to define the ancestor search for the regional base tables.
-        - If the regional base table _all_sp_and_ancestors only varies by the REGION_TAG/MIN_OBS/boundary ranks, then we could mitigate by adjusting the generated base tables names to include the highest root rank used in the ancestor search.
-        - Otherwise, we would need to include the CLADE/METACLADE/MACROCLADE in the regional base table name.
-  - regional base table is an increasingly inappropraite name for this table. It was fine when the tables always just included the species in the region that passed the MIN_OBS threshold/the corresponding observations, but the contents of the table are now dependent on the CLADE/METACLADE/MACROCLADE.
-    - This issue was averted for INCLUDE_OUT_OF_REGION_OBS, because the regional base observations table always include all observations for the species in the region that passed the MIN_OBS threshold (and now for all their ancestors in the scope of the ancestor search, too).
-      - And then if INCLUDE_OUT_OF_REGION_OBS=false, then we re-applied the bounding box for the final table.
-    - There might be a similar mitigation approach we could take for ancestor search here. A much more inclusive set of observations for, i.e. _all_sp_and_ancestors would include all species in the region that passed the MIN_OBS threshold and all the ancestors of those species up to but not including L100 (state of matter), i.e. unrestricted ancestor search. _sp_and_ancestors_obs would include all observations where taxon_id=[<a taxonID from _all_sp_and_ancestors].
-      - By default, only search for the major-rank ancestors, i.e. L20, L30, L40, L50, L57, L60, L70. So INCLUDE_MINOR_RANKS_IN_ANCESTORS=false. If INCLUDE_MINOR_RANKS_IN_ANCESTORS=true, then include minor ranks in the unbounded ancestor search, and adjust the table names (_all_sp_and_ancestors_incl_minor_ranks, _sp_and_ancestors_obs_incl_minor_ranks). Searching minor ranks can occur significant performance penalty as only major ranks are indexed, and we will not need to use this in the intermediate future.
-      - Possibly do a second ancestor search with only the set of ancestors that are up to the boundary rank for that export? This would be used for the filtering for the final table for that export job.
-      - But then, for the final table, we'd need to apply a filter to exclude the observations that fall outside of the scope of the job/clade-specific ancestor search. It gets kind of complicated to define this filter-- do we consider the base taxonID of the observation? Not necessarily, since sometimes we wipe labels of some ranks if the no. observations for that taxonID are too low in the final step (depending on MIN_OCCURRENCES_PER_RANK, which is an alternate floor for wiping labels for higher ranks if the no. occurences for those taxonIDs are too low, while still keeping the observations if they have passing labels for some ranks that are not wiped, e.g. an observation has a non-research grade species label, so we wipe L10_taxonID to null, and it has a L20_taxonID label that is very rare, so occurs less than MIN_OCCURRENCES_PER_RANK in the final table, but it has a usable L30_taxonID label and we want to downstream model to be able to learn that a sample like 'that' should be learned as being in that family (L30).
-    - My current standing is that we should do the ancestor search with the constrained upper boundary, and accept that we will lose some reusability between regional base tables between exports that use different clades/metaclades (but maybe can reuse if the ranks of the clades stay constant between jobs, need to confirm).
-      - This simplifies the logic in cladistic.sh and preserves the functionality of the existing filters in cladistic.sh.
-
-## Introduction & Pipeline Overview
-
-The **ibridaDB** export pipeline is designed to subset observations from a large PostgreSQL/PostGIS database based on:
-
-- **Geographic region** (e.g., bounding box for North America).  
-- **Minimum number of research-grade observations** required for each species (`MIN_OBS`).  
-- **Taxonomic clade** (class, order, or custom “metaclade”).  
-- **Export parameters** such as maximum number of photos per species, whether to include only the primary photo or all photos, etc.
-
-The pipeline executes in the following broad stages:
-
-1. **Wrapper Script** (e.g., `r1/wrapper.sh`) sets environment variables to configure the export.  
-2. **Main Script** (`common/main.sh`) orchestrates creation of “regional base” tables if needed, then calls the **cladistic** filtering step.  
-3. **Regional Base** (`common/regional_base.sh`): Creates two key tables:
-   - `<REGION_TAG>_min${MIN_OBS}_all_taxa`, storing species that meet the threshold in the bounding box.  
-   - `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs`, storing all observations for those species, possibly including out-of-region if configured.  
-4. **Cladistic** (`common/cladistic.sh`): Filters by the chosen clade/metaclade, creating a final table `<EXPORT_GROUP>_observations`. It then exports a CSV using partition-based random sampling.  
-5. **Summary & Logging**: `main.sh` writes a single `*_export_summary.txt` that includes relevant environment variables, final observation counts, and other metrics. It also optionally copies the wrapper script for reproducibility.
-
-```mermaid
-
-flowchart TB
-    A["Wrapper Script<br/>(r1/wrapper.sh)"] --> B["Main Script<br/>(common/main.sh)"]
-    B --> C{"Check<br/>SKIP_REGIONAL_BASE?"}
-    C -- "true && table exists" --> E["Reuse existing tables"]
-    C -- "false" --> D["regional_base.sh<br/>Create tables"]
-    E --> F["cladistic.sh<br/>Filter by clade"]
-    D --> F["cladistic.sh<br/>Filter by clade"]
-    F --> G["Export CSV + final table"]
-    G --> H["main.sh<br/>Write summary<br/>+ copy wrapper"]
-
-
-```
-
----
-
-## Quick Start
-
-1. **Clone or navigate** to the `dbTools/export/v0` directory.  
-2. **Create/modify** a wrapper script (e.g., `r1/wrapper.sh`) to set your parameters:
-   - `REGION_TAG`, `MIN_OBS`, `MAX_RN`, `PRIMARY_ONLY`, etc.  
-   - `CLADE` or `METACLADE` if focusing on a particular subset of taxa.  
-   - Optionally `INCLUDE_OUT_OF_REGION_OBS` and `RG_FILTER_MODE`.  
-3. **Run** the wrapper script. The pipeline will:
-   - Create region-based tables (if not skipping).  
-   - Join them to `expanded_taxa` for a final set of observations.  
-   - Write a CSV with photo metadata.  
-   - Dump a summary file describing the final dataset.
-
----
-
-## Environment Variables
-
-Below are the most commonly used variables. **All** variables are read in the wrapper, then passed to `main.sh` (and subsequently to `regional_base.sh` or `cladistic.sh`).
-
-### Database Config
-
-- **`DB_USER`**  
-  - **Description**: PostgreSQL user for executing SQL.  
-  - **Default**: `"postgres"`  
-
-- **`VERSION_VALUE`**  
-  - **Description**: Data version identifier (e.g. `"v0"`).  
-  - **Usage**: Combined with `RELEASE_VALUE` to build `DB_NAME`. Also included in logs and table references.
-
-- **`RELEASE_VALUE`**  
-  - **Description**: Additional label for the data release (e.g., `"r1"`).  
-  - **Usage**: Combined with `VERSION_VALUE` to create `DB_NAME`. Controls logic in some scripts (e.g., whether to include anomaly_score).
-
-- **`ORIGIN_VALUE`**  
-  - **Description**: Describes data provenance (e.g., `"iNat-Dec2024"`).  
-  - **Usage**: Logged in summary contexts.
-
-- **`DB_NAME`**  
-  - **Description**: Full name of the database. Typically `"ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"`.
-
----
-
-### Export Parameters
-
-- **`REGION_TAG`**  
-  - **Description**: Specifies a broad region whose bounding box is defined in `regional_base.sh`.  
-  - **Examples**: `"NAfull"`, `"EURfull"`.  
-  - **Usage**: `regional_base.sh` calls `set_region_coordinates()` to set `$XMIN,$YMIN,$XMAX,$YMAX`.
-
-- **`MIN_OBS`**  
-  - **Description**: Minimum number of **research-grade** observations required for a species to be included in the region-based tables.  
-  - **Usage**: In `regional_base.sh`, we gather species with at least `MIN_OBS` research-grade observations inside the bounding box.  
-  - **Default**: `50`.
-
-- **`MAX_RN`**  
-  - **Description**: Maximum number of research-grade observations to be sampled per species in the final CSV.  
-  - **Usage**: In `cladistic.sh`, we do a partition-based random sampling. Observations at species rank beyond `MAX_RN` are excluded in the final CSV.  
-  - **Default**: `4000`.
-
-- **`PRIMARY_ONLY`**  
-  - **Description**: If `true`, only export the primary (position=0) photo for each observation; if `false`, include all photos.  
-  - **Usage**: In `cladistic.sh`, the final `COPY` statement filters `p.position=0` if `PRIMARY_ONLY=true`.  
-
-- **`CLADE`** / **`METACLADE`** / **`MACROCLADE`**  
-  - **Description**: Used to define the clade or group of interest.  
-  - **Usage**: In `clade_defns.sh`, we have integer-based conditions for major taxonomic ranks (e.g., `L50_taxonID=3` for birds). If `METACLADE` is set, it overrides `CLADE` or `MACROCLADE`.  
-  - **Example**: `METACLADE="terrestrial_arthropods"` or `CLADE="amphibia"`.
-
-- **`EXPORT_GROUP`**  
-  - **Description**: The final label for the exported dataset; used to name `<EXPORT_GROUP>_observations` and the CSV.  
-  - **Usage**: Also appended to summary logs, e.g., `amphibia_export_summary.txt`.
-
-- **`PROCESS_OTHER`**  
-  - **Description**: Generic boolean-like flag (default `false`).  
-  - **Usage**: Not heavily used but can gate extra steps if desired.
-
-- **`SKIP_REGIONAL_BASE`**  
-  - **Description**: If `true`, skip creating region-based tables if they already exist and are non-empty.  
-  - **Usage**: `main.sh` checks for `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs`; if present and non-empty, it is reused.  
-  - **Default**: `false`.
-
-- **`INCLUDE_OUT_OF_REGION_OBS`**  
-  - **Description**: If `true`, once a species is selected by `MIN_OBS` inside the bounding box, we include **all** observations of that species globally. If `false`, re-apply bounding box in final table.  
-  - **Usage**: Set in `regional_base.sh`. Defaults to `true` in most wrappers to increase data coverage.
-
-- **`RG_FILTER_MODE`**  
-  - **Description**: Controls how research-grade vs. non-research observations are ultimately included in the final `<EXPORT_GROUP>_observations`.  
-  - **Possible Values**:
-    1. `ONLY_RESEARCH` — Only research-grade observations (`quality_grade='research'`).
-    2. `ALL` — Include all observations, regardless of quality_grade.
-    3. `ALL_EXCLUDE_SPECIES_NON_RESEARCH` — Include everything except non-research-grade at the species level (`L10_taxonID` non-null).
-    4. `ONLY_NONRESEARCH` — Include only non-research-grade (`quality_grade!='research'`).
-    5. `ONLY_NONRESEARCH_EXCLUDE_SPECIES` — Include only non-research-grade, but also exclude species-level assignments (`quality_grade!='research' AND L10_taxonID IS NULL`).
-    6. `ONLY_NONRESEARCH_WIPE_SPECIES_LABEL` — Include only non-research-grade, but keep any records with a species-level guess. The `L10_taxonID` is forcibly set to `NULL` so the model does not see a species label.  
-  - **Usage**: `cladistic.sh` uses a SQL CASE block to apply the correct filter logic. If the mode is unrecognized, it defaults to `ALL`. The final CSV export currently retains a separate step that filters photos by research-grade for sampling (e.g., `o.quality_grade='research'`), so you may wish to unify that logic if desired.
-
-- **`INCLUDE_MINOR_RANKS_IN_ANCESTORS`**
-
-- **`MIN_OCCURRENCES_PER_RANK`**
----
-
-### Paths
-
-- **`DB_CONTAINER`**  
-  - **Description**: Docker container name running PostgreSQL (often `"ibridaDB"`).  
-  - **Usage**: Scripts run `docker exec ${DB_CONTAINER} psql ...`.
-
-- **`HOST_EXPORT_BASE_PATH`**  
-  - **Description**: Host filesystem path to store exports.  
-  - **Default**: `"/datasets/ibrida-data/exports"`.
-
-- **`CONTAINER_EXPORT_BASE_PATH`**  
-  - **Description**: Container path mapping to `HOST_EXPORT_BASE_PATH`.  
-  - **Default**: `"/exports"`.
-
-- **`EXPORT_SUBDIR`**  
-  - **Description**: A subdirectory typically combining `VERSION_VALUE`, `RELEASE_VALUE`, and other parameters (e.g., `"v0/r1/primary_only_50min_4000max"`).  
-  - **Usage**: `main.sh` assembles final output paths from `CONTAINER_EXPORT_BASE_PATH/$EXPORT_SUBDIR` and `HOST_EXPORT_BASE_PATH/$EXPORT_SUBDIR`.
-
-- **`BASE_DIR`**  
-  - **Description**: Path to the export scripts inside the container.  
-  - **Usage**: Set in the wrapper to locate `common/functions.sh`, `common/regional_base.sh`, `common/cladistic.sh`, etc.
-
----
-
-## Export Flow & Scripts
-
-Below is the **script-by-script** overview:
-
-1. **`wrapper.sh`**  
-   - You define all environment variables needed for your particular export (see above).  
-   - Sets `WRAPPER_PATH="$0"` so the pipeline can copy the wrapper into the output directory for reproducibility.  
-   - Calls `main.sh`.
-
-2. **`main.sh`**  
-   - Validates environment variables.  
-   - Creates the export directory (`EXPORT_SUBDIR`).  
-   - **Optional**: If `SKIP_REGIONAL_BASE=true`, checks whether region-based tables already exist.  
-   - Sources `regional_base.sh` if needed.  
-   - Calls `cladistic.sh` to do the final clade-based filtering and CSV export.  
-   - Gathers final stats (e.g., #observations, #taxa) from `<EXPORT_GROUP>_observations`.  
-   - Writes a single summary file (`${EXPORT_GROUP}_export_summary.txt`).  
-   - Optionally copies the wrapper script into the export folder.
-
-3. **`regional_base.sh`**  
-   - Sets bounding box coordinates for the region (`REGION_TAG`).  
-   - Creates `<REGION_TAG>_min${MIN_OBS}_all_taxa`, selecting species with at least `MIN_OBS` research-grade obs.  
-   - Creates `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs`, either global or region-limited based on `INCLUDE_OUT_OF_REGION_OBS`.
-
-4. **`cladistic.sh`**  
-   - Loads `clade_defns.sh` to interpret `CLADE`, `METACLADE`, or `MACROCLADE`.  
-   - Joins `<REGION_TAG>_min${MIN_OBS}_all_taxa_obs` to `expanded_taxa` and filters for active taxa matching the clade condition. Applies `RG_FILTER_MODE` to the final table. Produces `<EXPORT_GROUP>_observations`.  
-   - Exports a CSV with photo metadata, applying `PRIMARY_ONLY` and random sampling of up to `MAX_RN` observations per species.
-
-
----
-
-# FUTURE
-
-- [x] Preferentially select in-region obs in the random sampling step (when we are applying the MAX_RN cap)
-  - Implemented: preferential in-region sampling” for research-grade observations when applying the MAX_RN cap. In other words, for each species (L10_taxonID), all in-region observations are sampled first in random order; only if the total number of in-region observations is less than MAX_RN do out-of-region observations get pulled in (also in random order) to fill out the remainder of the cap.
-</file: export.md>
 
 </codebase_context>
