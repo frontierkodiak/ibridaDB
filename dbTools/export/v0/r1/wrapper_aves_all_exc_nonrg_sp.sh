@@ -38,7 +38,7 @@ export MAX_RN=2500
 export PRIMARY_ONLY=true
 
 export CLADE="aves"
-export EXPORT_GROUP="aves_all_exc_nonrg_sp_inc_out_of_region"
+export EXPORT_GROUP="aves_all_exc_nonrg_sp_inc_oor_full_ancestor_search_no_elev"
 
 # Additional flags
 export PROCESS_OTHER=false
@@ -48,12 +48,16 @@ export SKIP_REGIONAL_BASE=false  # typically used for successive cladistic expor
 # Whether to include out-of-region observations in the final dataset
 export INCLUDE_OUT_OF_REGION_OBS=true
 
+# NOTE elevation not ready yet, exclude for now
+export INCLUDE_ELEVATION_EXPORT=false
+# TODO when ready, set to true, adjust EXPORT_GROUP to include elevation
+
 # Whether to keep research-grade only, non-research, etc.
 # For now, we default to ALL; future steps will integrate it
 export RG_FILTER_MODE="ALL_EXCLUDE_SPECIES_NON_RESEARCH"
 
 export MIN_OCCURRENCES_PER_RANK=50
-export INCLUDE_MINOR_RANKS_IN_ANCESTORS=false
+export INCLUDE_MINOR_RANKS_IN_ANCESTORS=true
 
 log_message "Region: ${REGION_TAG}"
 log_message "Min Observations: ${MIN_OBS}"

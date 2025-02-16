@@ -39,8 +39,10 @@ get_obs_columns() {
 # Function to ensure directory exists with proper permissions
 ensure_directory() {
     local dir="$1"
-    mkdir -p "${dir}"
-    chmod -R 777 "${dir}"
+    if [ ! -d "${dir}" ]; then
+        mkdir -p "${dir}"
+        chmod -R 777 "${dir}"
+    fi
 }
 
 # Function to send ntfy notification

@@ -34,20 +34,23 @@ log_message "Release: ${RELEASE_VALUE}"
 # ---------------------------------------------------------------------------
 export REGION_TAG="NAfull"
 export MIN_OBS=50
-export MAX_RN=3000
+export MAX_RN=2750
 export PRIMARY_ONLY=true
 
 export METACLADE="pta" # primary_terrestrial_arthropoda
-export EXPORT_GROUP="pta_all_exc_nonrg_sp_full_ancestor_search"
+export EXPORT_GROUP="pta_all_exc_nonrg_sp_inc_oor_full_ancestor_search_no_elev"
 
 # Additional flags
 export PROCESS_OTHER=false
-export SKIP_REGIONAL_BASE=false  # typically used for successive cladistic exports
+export SKIP_REGIONAL_BASE=true  # typically used for successive cladistic exports
 
 # ---[ NEW ENV VARS ]---
 # Whether to include out-of-region observations in the final dataset
 export INCLUDE_OUT_OF_REGION_OBS=true
 
+# NOTE elevation not ready yet, exclude for now
+export INCLUDE_ELEVATION_EXPORT=false
+# TODO when ready, set to true, adjust EXPORT_GROUP to include elevation
 # Whether to keep research-grade only, non-research, etc.
 # For now, we default to ALL; future steps will integrate it
 export RG_FILTER_MODE="ALL_EXCLUDE_SPECIES_NON_RESEARCH"
