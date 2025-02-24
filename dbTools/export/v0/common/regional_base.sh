@@ -35,7 +35,16 @@ source "${BASE_DIR}/common/region_defns.sh"
 : "${INCLUDE_OUT_OF_REGION_OBS:?Error: INCLUDE_OUT_OF_REGION_OBS is not set}"
 : "${INCLUDE_MINOR_RANKS_IN_ANCESTORS:?Error: INCLUDE_MINOR_RANKS_IN_ANCESTORS is not set}"
 
+# ---------------------------------------------------------------------------
+# New Granular Control Flags
+# ---------------------------------------------------------------------------
+# If granular flags aren't explicitly set, default to the value of SKIP_REGIONAL_BASE
+# This maintains backward compatibility
+export SKIP_ALL_SP_TABLE="${SKIP_ALL_SP_TABLE:-$SKIP_REGIONAL_BASE}"
+export SKIP_ANCESTORS_TABLE="${SKIP_ANCESTORS_TABLE:-$SKIP_REGIONAL_BASE}"
+
 print_progress "=== regional_base.sh: Starting Ancestor-Aware Regional Base Generation ==="
+print_progress "Using granular control flags: SKIP_ALL_SP_TABLE=${SKIP_ALL_SP_TABLE}, SKIP_ANCESTORS_TABLE=${SKIP_ANCESTORS_TABLE}"
 
 # Retrieve bounding box for the region
 get_region_coordinates || {
@@ -71,8 +80,8 @@ check_and_build_all_sp() {
 
     if [[ -n "${numeric_count}" && "${numeric_count}" -gt 0 ]]; then
       print_progress "Table ${ALL_SP_TABLE} exists with ${numeric_count} rows"
-      if [ "${SKIP_REGIONAL_BASE}" = "true" ]; then
-        print_progress "SKIP_REGIONAL_BASE=true => reusing existing _all_sp table"
+      if [ "${SKIP_ALL_SP_TABLE}" = "true" ]; then
+        print_progress "SKIP_ALL_SP_TABLE=true => reusing existing _all_sp table"
         return 0
       else
         print_progress "Not skipping => dropping and recreating"
@@ -152,7 +161,7 @@ ANCESTORS_OBS_TABLE="${REGION_TAG}_min${MIN_OBS}_sp_and_ancestors_obs_${CLADE_ID
 # 3) Build or Reuse <REGION_TAG>_min<MIN_OBS>_all_sp_and_ancestors_<cladeID>_<mode>
 # ---------------------------------------------------------------------------
 check_and_build_ancestors() {
-  # 1) Check if the table already exists and skip if user wants SKIP_REGIONAL_BASE
+  # 1) Check if the table already exists and skip if user wants to skip ancestors
   local table_exists
   table_exists="$(execute_sql "
     SELECT 1 FROM pg_catalog.pg_tables
@@ -171,8 +180,8 @@ check_and_build_ancestors() {
 
     if [[ -n "${numeric_count}" && "${numeric_count}" -gt 0 ]]; then
       print_progress "Table ${ANCESTORS_TABLE} exists with ${numeric_count} rows"
-      if [ "${SKIP_REGIONAL_BASE}" = "true" ]; then
-        print_progress "Skipping creation of ancestors table"
+      if [ "${SKIP_ANCESTORS_TABLE}" = "true" ]; then
+        print_progress "SKIP_ANCESTORS_TABLE=true => reusing existing ancestors table"
         return 0
       else
         print_progress "Not skipping => dropping and recreating"
@@ -328,8 +337,8 @@ check_and_build_ancestors_obs() {
 
     if [[ -n "${numeric_count}" && "${numeric_count}" -gt 0 ]]; then
       print_progress "Table ${ANCESTORS_OBS_TABLE} exists with ${numeric_count} rows"
-      if [ "${SKIP_REGIONAL_BASE}" = "true" ]; then
-        print_progress "Skipping creation of ancestors_obs table"
+      if [ "${SKIP_ANCESTORS_TABLE}" = "true" ]; then
+        print_progress "SKIP_ANCESTORS_TABLE=true => reusing existing ancestors_obs table"
         return 0
       else
         print_progress "Not skipping => dropping and recreating"

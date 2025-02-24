@@ -43,7 +43,7 @@ The export process follows these broad stages:
    - Invokes **cladistic.sh** to filter by clade and produce the final export table.
    - Generates a summary file with environment details and final statistics.
 3. **Regional Base Generation (`common/regional_base.sh`):**
-   - Sets the region’s bounding box.
+   - Sets the region's bounding box.
    - Creates tables that capture species meeting the `MIN_OBS` threshold and computes an `in_region` flag.
    - Builds ancestor tables based on clade definitions.
 4. **Cladistic Filtering & CSV Export (`common/cladistic.sh`):**
@@ -56,12 +56,16 @@ A high-level diagram of the export flow is shown below:
 ```mermaid
 flowchart TB
     A["Wrapper Script<br/>(e.g., r1/wrapper_amphibia_all_exc_nonrg_sp_oor_elev.sh)"] --> B["Main Export Script<br/>(common/main.sh)"]
-    B --> C{"SKIP_REGIONAL_BASE?"}
-    C -- "true" --> D["Reuse Existing Regional Base Tables"]
-    C -- "false" --> E["regional_base.sh<br/>(Create/Update Regional Base)"]
-    D --> F["cladistic.sh<br/>(Filter Observations & Export CSV)"]
-    E --> F["cladistic.sh<br/>(Filter Observations & Export CSV)"]
-    F --> G["Export Summary & Log Generation"]
+    B --> C{"Control Flags?"}
+    C -- "SKIP_ALL_SP_TABLE=true" --> D["Reuse Existing Species Table"]
+    C -- "SKIP_ALL_SP_TABLE=false" --> E["Create/Update Species Table"]
+    C -- "SKIP_ANCESTORS_TABLE=true" --> F["Reuse Existing Ancestor Tables"]
+    C -- "SKIP_ANCESTORS_TABLE=false" --> G["Create New Ancestor Tables"]
+    D --> H["cladistic.sh<br/>(Filter Observations & Export CSV)"]
+    E --> H
+    F --> H
+    G --> H
+    H --> I["Export Summary & Log Generation"]
 ```
 
 ---
@@ -112,7 +116,7 @@ The export pipeline is configured via several environment variables, which are t
 ### Export Parameters
 
 - **`REGION_TAG`**  
-  *Description:* A key that defines the region’s bounding box (e.g., `"NAfull"`).  
+  *Description:* A key that defines the region's bounding box (e.g., `"NAfull"`).  
   *Usage:* Used in `regional_base.sh` to set geographic coordinates.
 
 - **`MIN_OBS`**  
@@ -138,7 +142,16 @@ The export pipeline is configured via several environment variables, which are t
   *Description:* A generic flag for additional processing (default: `false`).
 
 - **`SKIP_REGIONAL_BASE`**  
-  *Description:* If `true`, the export pipeline will reuse existing regional base tables rather than recreating them.
+  *Description:* Master flag that controls whether to reuse existing regional base tables rather than recreating them.  
+  *Note:* This acts as a default for the more granular flags below if they are not explicitly set.
+
+- **`SKIP_ALL_SP_TABLE`**  
+  *Description:* Controls whether to reuse or recreate the base species table. When running multiple exports for different clades against the same region with the same `MIN_OBS`, set this to `true` to reuse the common species table.  
+  *Default:* Inherits value from `SKIP_REGIONAL_BASE` if not explicitly set.
+
+- **`SKIP_ANCESTORS_TABLE`**  
+  *Description:* Controls whether to reuse or recreate the clade-specific ancestor tables. These tables are unique to each clade, so typically this should be `false` when running exports for different clades.  
+  *Default:* Inherits value from `SKIP_REGIONAL_BASE` if not explicitly set.
 
 - **`INCLUDE_OUT_OF_REGION_OBS`**  
   *Description:* If `true`, once a species is selected by `MIN_OBS`, all observations for that species (globally) are included; otherwise, only those within the bounding box are used.  
@@ -192,9 +205,9 @@ The export process consists of several key steps:
 
 3. **Regional Base Generation (`common/regional_base.sh`):**  
    - Determines the geographic bounding box using `REGION_TAG` (from `region_defns.sh`).
-   - Creates a species table (`<REGION_TAG>_min${MIN_OBS}_all_sp`) of species meeting the minimum observation threshold.
-   - Builds an ancestor table (`<REGION_TAG>_min${MIN_OBS}_all_sp_and_ancestors_<cladeID>_<mode>`) by unrolling taxon ancestry for the selected species.
-   - Generates a second table (`<REGION_TAG>_min${MIN_OBS}_sp_and_ancestors_obs_<cladeID>_<mode>`) that contains all observations for the selected species along with an `in_region` boolean flag.
+   - Creates or reuses the species table (`<REGION_TAG>_min${MIN_OBS}_all_sp`) based on `SKIP_ALL_SP_TABLE`.
+   - Builds or reuses an ancestor table (`<REGION_TAG>_min${MIN_OBS}_all_sp_and_ancestors_<cladeID>_<mode>`) based on `SKIP_ANCESTORS_TABLE`.
+   - Generates or reuses a second table (`<REGION_TAG>_min${MIN_OBS}_sp_and_ancestors_obs_<cladeID>_<mode>`) based on `SKIP_ANCESTORS_TABLE`.
    - The `INCLUDE_OUT_OF_REGION_OBS` flag governs whether the observation table is filtered by the bounding box or not.
 
 4. **Cladistic Filtering & CSV Export (`common/cladistic.sh`):**  

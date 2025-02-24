@@ -38,11 +38,15 @@ export MAX_RN=2500
 export PRIMARY_ONLY=true
 
 export CLADE="amphibia"
-export EXPORT_GROUP="amphibia_all_exc_nonrg_sp_oor_elev"
+export EXPORT_GROUP="amphibia_all_exc_nonrg_sp_inc_oor_fas_elev"
 
 # Additional flags
 export PROCESS_OTHER=false
-export SKIP_REGIONAL_BASE=false  # typically used for successive cladistic exports
+export SKIP_REGIONAL_BASE=false  # Master switch, we'll set the granular flags below
+
+# New granular control flags
+export SKIP_ALL_SP_TABLE=true    # REUSE the base species table
+export SKIP_ANCESTORS_TABLE=false # CREATE new clade-specific ancestor tables
 
 # ---[ NEW ENV VARS ]---
 # Whether to include out-of-region observations in the final dataset
@@ -55,7 +59,7 @@ export INCLUDE_ELEVATION_EXPORT=true
 export RG_FILTER_MODE="ALL_EXCLUDE_SPECIES_NON_RESEARCH"
 
 export MIN_OCCURRENCES_PER_RANK=50
-export INCLUDE_MINOR_RANKS_IN_ANCESTORS=false
+export INCLUDE_MINOR_RANKS_IN_ANCESTORS=false # NOTE this differs from the other wrappers, export group name isn't accurate
 
 log_message "Region: ${REGION_TAG}"
 log_message "Min Observations: ${MIN_OBS}"

@@ -34,23 +34,25 @@ log_message "Release: ${RELEASE_VALUE}"
 # ---------------------------------------------------------------------------
 export REGION_TAG="NAfull"
 export MIN_OBS=50
-export MAX_RN=1750
+export MAX_RN=2500
 export PRIMARY_ONLY=true
 
-export CLADE="angiospermae"
-export EXPORT_GROUP="angiospermae_all_exc_nonrg_sp_inc_oor_full_ancestor_search_no_elev"
+export CLADE="aves"
+export EXPORT_GROUP="aves_all_exc_nonrg_sp_inc_oor_fas_elev"
 
 # Additional flags
 export PROCESS_OTHER=false
-export SKIP_REGIONAL_BASE=false  # typically used for successive cladistic exports
+export SKIP_REGIONAL_BASE=false  # Master switch, we'll set the granular flags below
+
+# New granular control flags
+export SKIP_ALL_SP_TABLE=true    # REUSE the base species table
+export SKIP_ANCESTORS_TABLE=false # CREATE new clade-specific ancestor tables
 
 # ---[ NEW ENV VARS ]---
 # Whether to include out-of-region observations in the final dataset
 export INCLUDE_OUT_OF_REGION_OBS=true
 
-# NOTE elevation not ready yet, exclude for now
-export INCLUDE_ELEVATION_EXPORT=false
-# TODO when ready, set to true, adjust EXPORT_GROUP to include elevation
+export INCLUDE_ELEVATION_EXPORT=true
 
 # Whether to keep research-grade only, non-research, etc.
 # For now, we default to ALL; future steps will integrate it
