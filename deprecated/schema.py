@@ -1,5 +1,15 @@
 # ibridaDB/schema.py
-from sqlalchemy import Column, Integer, String, Date, Boolean, ForeignKey, Numeric, SmallInteger, Float
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Date,
+    Float,
+    ForeignKey,
+    Integer,
+    Numeric,
+    SmallInteger,
+    String,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -8,8 +18,12 @@ Base = declarative_base()
 # NOTE: Some tables do not include origin.
 # NOTE: Some tables also include a column for version.
 
+### TODO: Migrate to new `models/` folder. However, not `taxa/models/` as this is specific to generated taxa tables (dervided from below taxa table, or ColDP   )
+## NOTE: Below are the base iNaturalist tables, corresponding to the structure.sql directly from the iNaturalist Open Data dump.
+
+
 class Observations(Base):
-    __tablename__ = 'observations'
+    __tablename__ = "observations"
     observation_uuid = Column(UUID(as_uuid=True), primary_key=True)
     observer_id = Column(Integer)
     latitude = Column(Numeric(precision=15, scale=10))
@@ -21,11 +35,14 @@ class Observations(Base):
     origin = Column(String)
     # NOTE: Does not include geom column
 
+
 class Photos(Base):
-    __tablename__ = 'photos'
+    __tablename__ = "photos"
     photo_uuid = Column(UUID(as_uuid=True), primary_key=True)
     photo_id = Column(Integer, primary_key=True)
-    observation_uuid = Column(UUID(as_uuid=True), ForeignKey('observations.observation_uuid'))
+    observation_uuid = Column(
+        UUID(as_uuid=True), ForeignKey("observations.observation_uuid")
+    )
     observer_id = Column(Integer)
     extension = Column(String(5))
     license = Column(String)
@@ -34,18 +51,22 @@ class Photos(Base):
     position = Column(SmallInteger)
     origin = Column(String)
 
+
 class Taxa(Base):
-    __tablename__ = 'taxa'
+    __tablename__ = "taxa"
     taxon_id = Column(Integer, primary_key=True)
     ancestry = Column(String)
-    rank_level = Column(Float)  # Assuming double precision is adequately represented by Float
+    rank_level = Column(
+        Float
+    )  # Assuming double precision is adequately represented by Float
     rank = Column(String)
     name = Column(String)
     active = Column(Boolean)
     origin = Column(String)
-    
+
+
 class TaxaTemp(Base):
-    __tablename__ = 'taxa_temp'
+    __tablename__ = "taxa_temp"
     taxon_id = Column(Integer, primary_key=True)
     ancestry = Column(String)
     rank_level = Column(Float)  # Same assumption as Taxa
@@ -53,13 +74,16 @@ class TaxaTemp(Base):
     name = Column(String)
     active = Column(Boolean)
 
+
 class Observers(Base):
-    __tablename__ = 'observers'
+    __tablename__ = "observers"
     observer_id = Column(Integer, primary_key=True)
     login = Column(String)
     name = Column(String)
     origin = Column(String)
-'''
+
+
+"""
 Above needs to match with following structure of existing tables in 'postgres' db:
 
 CREATE TABLE observations (
@@ -128,4 +152,4 @@ CREATE INDEX index_taxa_origins ON taxa USING GIN (to_tsvector('simple', origin)
 CREATE INDEX index_observers_origins ON observers USING GIN (to_tsvector('simple', origin));
 CREATE INDEX index_observations_origins ON observations USING GIN (to_tsvector('simple', origin));
 CREATE INDEX index_photos_origins ON photos USING GIN (to_tsvector('simple', origin));
-'''
+"""

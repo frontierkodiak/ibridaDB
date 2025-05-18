@@ -71,6 +71,7 @@ CREATE TABLE \"expanded_taxa\" (
     \"rankLevel\"     DOUBLE PRECISION,
     \"rank\"          VARCHAR(255),
     \"name\"          VARCHAR(255),
+    \"commonName\"    VARCHAR(255),
     \"taxonActive\"   BOOLEAN
     -- We'll add \"LXX_taxonID\", \"LXX_name\", \"LXX_commonName\" columns next
 );

@@ -144,6 +144,7 @@ The **expanded_taxa** table is generated from the iNaturalist `taxa` table by th
 | rankLevel   | double precision  | Numeric indicator of the taxonomic rank. |
 | rank        | varchar(255)      | Taxonomic rank label. |
 | name        | varchar(255)      | Scientific name of the taxon. |
+| commonName        | varchar(255)      | Common name of the taxon. | # NEW, TODO determine how to deal with multiple common names for a single taxa
 | taxonActive | boolean           | Indicates whether the taxon is active. |
 
 **Expanded Columns:**

@@ -1,0 +1,204 @@
+<Distribution.tsv>
+<head -n 10>
+col:taxonID	col:sourceID	col:areaID	col:area	col:gazetteer	col:status	col:referenceID	col:remarks
+BLL2J		CN		iso	native		
+BLL2J		TW		iso	native		
+3LWT2		CR		iso	native		
+444RB			Uruguay (Rivera)	text	native		
+69PYD			North America	text	native		
+8VVZD		MXC		tdwg	native		
+8VVZD		MXG		tdwg	native		
+8VVZD		MXE		tdwg	native		
+8VVZD		MXT		tdwg	native		
+</Distribution.tsv>
+</head -n 10>
+
+<Media.tsv>
+<head -n 10>
+col:taxonID	col:sourceID	col:url	col:type	col:format	col:title	col:created	col:creator	col:license	col:link	col:remarks
+</Media.tsv>
+</head -n 10>
+
+<metadata.yaml>
+<head -n 10>
+---
+key: 299029
+doi: 10.48580/dg9ld
+title: Catalogue of Life
+alias: COL24
+description: |-
+  The Catalogue of Life is an assembly of expert-based global species checklists with the aim to build a comprehensive catalogue of all known species of organisms on Earth. Continuous progress is made towards completion, but for now, it probably includes just over 80% of the world's known species. The Catalogue of Life estimates 2.3M extant species on the planet recognised by taxonomists at present time. This means that for many groups it continues to be deficient, and users may notice that many species are still missing from the Catalogue.
+
+  ### What's new in 2024 Annual Checklist?
+
+</metadata.yaml>
+</head -n 10>
+
+<NameRelation.tsv>
+<head -n 10>
+col:nameID	col:relatedNameID	col:sourceID	col:type	col:referenceID	col:page	col:remarks
+CX5Y	6ZBQ2		basionym			
+4DQ2L	6ZDLT		basionym			
+4DQ2M	6ZDLY		basionym			
+85QXH	BKZY		basionym			
+4J2RF	6XKWB		basionym			
+67CMV	CDYT5		basionym			
+67CN7	4KGYM		basionym			
+5VCMV	3L8K9		basionym			
+67CMQ	6DV6D		basionym			
+</NameRelation.tsv>
+</head -n 10>
+
+<NameUsage.tsv>
+<head -n 10>
+col:ID	col:alternativeID	col:nameAlternativeID	col:sourceID	col:parentID	col:basionymID	col:status	col:scientificName	col:authorship	col:rank	col:notho	col:originalSpelling	col:uninomial	col:genericName	col:infragenericEpithet	col:specificEpithet	col:infraspecificEpithet	col:cultivarEpithet	col:combinationAuthorship	col:combinationAuthorshipID	col:combinationExAuthorship	col:combinationExAuthorshipID	col:combinationAuthorshipYear	col:basionymAuthorship	col:basionymAuthorshipID	col:basionymExAuthorship	col:basionymExAuthorshipID	col:basionymAuthorshipYear	col:namePhrase	col:nameReferenceID	col:publishedInYear	col:publishedInPage	col:publishedInPageLink	col:gender	col:genderAgreement	col:etymology	col:code	col:nameStatus	col:accordingToID	col:accordingToPage	col:accordingToPageLink	col:referenceID	col:scrutinizer	col:scrutinizerID	col:scrutinizerDate	col:extinct	col:temporalRangeStart	col:temporalRangeEnd	col:environment	col:species	col:section	col:subgenus	col:genus	col:subtribe	col:tribe	col:subfamily	col:family	col:superfamily	col:suborder	col:order	col:subclass	col:class	col:subphylum	col:phylum	col:kingdom	col:ordinal	col:branchLength	col:link	col:nameRemarks	col:remarks
+673FW			2232	3CP83	3CP83	synonym	Anisophyllum hyssopifolium	(L.) Haw.	species				Anisophyllum		hyssopifolium			Haw.					L.						0a8270ab-617f-402d-b3bf-c3f0fe6b0a0a							botanical																															https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:1042669-2		
+9L2J9			2232	3F5B8	3F5B8	synonym	Asperula aparine var. aparine		variety				Asperula		aparine	aparine													308d3079-d3d3-4523-af56-80e4507eade8							botanical																															https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:77168438-1		
+8RX53			1130	9WRMR		synonym	Saccoia escoffierae var. triangulata	Sacco, 1895	variety				Saccoia		escoffierae	triangulata		Sacco				1895							75d294da-5cc2-4241-b178-c5686ae93d97		42, pl. 1, fig. 116					zoological					28419c41-a4be-4567-9131-512c920576bd																										https://www.molluscabase.org/aphia.php?p=taxdetails&id=1545847		
+555CQ			1141	C9FM		synonym	Telanthera flavescens	(Kunth) Moq.	species				Telanthera		flavescens			Moq.					Kunth						c59b73dc-e818-4ec0-8131-4f317c9139c6							botanical																																	
+7TDYP			1130	3PP2B	9BD4Q	synonym	Triphora sarissa	Dall, 1889	species				Triphora		sarissa			Dall				1889														zoological																															https://www.molluscabase.org/aphia.php?p=taxdetails&id=1481479		
+C33N7			1175	858KS		accepted	Amalocythere fulgida	Guan, 1978	species				Amalocythere		fulgida			Guan				1978							8db3f7fe-e3df-49ec-978c-717af25cea87							zoological	established				8db3f7fe-e3df-49ec-978c-717af25cea87	Brandão, Simone Nunes		2016-06-30	true			marine																			https://www.marinespecies.org/ostracoda/aphia.php?p=taxdetails&id=773107		
+85BKX			2144	84JVC		accepted	Coronalpheus	Wicksten, 1999	genus			Coronalpheus						Wicksten				1999														zoological	acceptable				bc596268-7fff-4a3c-868b-3c392a7be32b			2021-04-26	false																						https://www.itis.gov/servlet/SingleRpt/SingleRpt?search_topic=TSN&search_value=1147818		
+B3XCS			1141	5ZXM8		ambiguous synonym	Convolvulus rupestris	Buch	species				Convolvulus		rupestris			Buch											5f264aa0-ccf7-4da8-ad97-0ef3f4913f7e		193					botanical																																	
+3HNHY			2232	8VXZW		accepted	Guzmania variegata	L.B.Sm.	species				Guzmania		variegata			L.B.Sm.											6683ea9d-d407-472a-8daa-943b551b3eaf							botanical																															https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:115257-2		Ecuador to Peru
+</NameUsage.tsv>
+</head -n 10>
+
+<reference.json>
+<head -n 10>
+[
+{"id":"1382","author":[{"family":"Weiss, Norbert, ed."}],"issued":{"date-parts":[[2001]]},"title":"Validation List no. 79: Validation of publication of new names and new combinations previously effectively published outside of the IJSEM","container-title":"International Journal of Systematic and Evolutionary Microbiology, vol. 51, no. 2"},
+{"id":"1383","author":[{"family":"Chisholm, S. W., S. L. Frankel, R. Goericke, R. J. Olsen, B. Palenik, J. B. Waterbury, et al."}],"issued":{"date-parts":[[1992]]},"title":"Prochlorococcus marinus nov. gen. nov. sp.: an oxyphototrophic marine prokaryote containing divinyl chlorophyll a and b","container-title":"Archives in Microbiology, vol. 157"},
+{"id":"1384","author":[{"family":"Partensky, F., W. R. Hess, and D. Vaulot"}],"issued":{"date-parts":[[1999]]},"title":"Prochlorococcus, a Marine Photosynthetic Prokaryote of Global Significance","container-title":"Microbiology and Molecular Biology Reviews, vol. 63, no. 1"},
+{"id":"171","author":[{"family":"Sneath, Peter H.A., Nicholas S. Mair, M. Elisabeth Sharpe, and John G. Holt (eds.)"}],"issued":{"date-parts":[[1986]]},"container-title":"Bergey's Manual of Systematic Bacteriology. vol. 2"},
+{"id":"1331","author":[{"family":"Skerman, V. B. D., Vicki McGowan, and P. H. A. Sneath, eds."}],"issued":{"date-parts":[[1980]]},"title":"Approved Lists of Bacterial Names","container-title":"International Journal of Systematic Bacteriology, vol. 30, no.1"},
+{"id":"4731","author":[{"family":"Skerman, V. B. D., Vicki McGowan, and P. H. A. Sneath, eds."}],"issued":{"date-parts":[[1989]]},"container-title":"Approved Lists of Bacterial Names"},
+{"author":[{"family":"S"}],"issued":{"date-parts":[[2000,1,1]]},"title":"SN2000/Levine, 1982"},
+{"author":[{"family":"S"}],"issued":{"date-parts":[[2000,1,1]]},"title":"SN2000/Perkins, 2000"},
+{"title":"As per Gigaductus"},
+</reference.json>
+</head -n 10>
+
+<Reference.tsv>
+<head -n 10>
+col:ID	col:alternativeID	col:sourceID	col:citation	col:type	col:author	col:editor	col:title	col:titleShort	col:containerAuthor	col:containerTitle	col:containerTitleShort	col:issued	col:accessed	col:collectionTitle	col:collectionEditor	col:volume	col:issue	col:edition	col:page	col:publisher	col:publisherPlace	col:version	col:isbn	col:issn	col:doi	col:link	col:remarks
+12ddc4b3-d551-4c38-8d20-4a2246b9e8d6		2144	Weiss, Norbert, ed. (2001). Validation List no. 79: Validation of publication of new names and new combinations previously effectively published outside of the IJSEM. International Journal of Systematic and Evolutionary Microbiology, Vol. 51, No. 2.		Weiss, Norbert, ed.		Validation List no. 79: Validation of publication of new names and new combinations previously effectively published outside of the IJSEM			International Journal of Systematic and Evolutionary Microbiology, vol. 51, no. 2		2001															
+5eb14d90-e68f-4fda-be6c-453c6965707b		2144	Chisholm, S. W., S. L. Frankel, R. Goericke, R. J. Olsen, B. Palenik, J. B. Waterbury, et al. (1992). Prochlorococcus marinus nov. gen. nov. sp.: an oxyphototrophic marine prokaryote containing divinyl chlorophyll a and b. Archives in Microbiology, Vol. 157.		Chisholm, S. W., S. L. Frankel, R. Goericke, R. J. Olsen, B. Palenik, J. B. Waterbury, et al.		Prochlorococcus marinus nov. gen. nov. sp.: an oxyphototrophic marine prokaryote containing divinyl chlorophyll a and b			Archives in Microbiology, vol. 157		1992															
+6b833931-90b9-4dca-b98c-d3e300075c7e		2144	Partensky, F., W. R. Hess, and D. Vaulot. (1999). Prochlorococcus, a Marine Photosynthetic Prokaryote of Global Significance. Microbiology and Molecular Biology Reviews, Vol. 63, No. 1.		Partensky, F., W. R. Hess, and D. Vaulot		Prochlorococcus, a Marine Photosynthetic Prokaryote of Global Significance			Microbiology and Molecular Biology Reviews, vol. 63, no. 1		1999															
+c28f7f52-c223-4410-90ec-9142da3e34ab		2144	Sneath, Peter H.A., Nicholas S. Mair, M. Elisabeth Sharpe, and John G. Holt (eds.). (1986). Bergey’s Manual of Systematic Bacteriology. Vol. 2.		Sneath, Peter H.A., Nicholas S. Mair, M. Elisabeth Sharpe, and John G. Holt (eds.)					Bergey's Manual of Systematic Bacteriology. vol. 2		1986															
+fa90c9ed-a347-4ae8-9feb-d2dec6bd8f97		2144	Skerman, V. B. D., Vicki McGowan, and P. H. A. Sneath, eds. (1980). Approved Lists of Bacterial Names. International Journal of Systematic Bacteriology, Vol. 30, no.1.		Skerman, V. B. D., Vicki McGowan, and P. H. A. Sneath, eds.		Approved Lists of Bacterial Names			International Journal of Systematic Bacteriology, vol. 30, no.1		1980															
+be12e305-5fb7-4184-b33d-b6601e9c4140		2144	Skerman, V. B. D., Vicki McGowan, and P. H. A. Sneath, eds. (1989). Approved Lists of Bacterial Names.		Skerman, V. B. D., Vicki McGowan, and P. H. A. Sneath, eds.					Approved Lists of Bacterial Names		1989															
+c75a73a2-0c85-4d63-a46a-c7f46d5f7913		2007	Seenivasan, R.; Sausen, N.; Medlin, L. K.; Melkonian, M. (2013). Picomonas judraskeda gen. et sp. nov.: the first identified member of the Picozoa phylum nov., a widespread group of picoeukaryotes, formerly known as 'picobiliphytes'. PLoS ONE. 8(3): e59565.																								
+2ea6bf13-11f2-474f-b9ab-4e30333d3ade		2007	Article title: Phylogeny of novel naked filose and reticulose Cercozoa: Granofilosea cl. n. and Proteomyxidea revised.																								
+535b1b3f-d59c-4da8-bc3b-abf664243b17		2007	Yabuki, A.; Chao, E. E.; Ishida, K.-I.; Cavalier-Smith, T. (2012). Microheliella maris (Microhelida ord. n.), an ultrastructurally highly distinctive new axopodial protist species and genus, and the unity of phylum Heliozoa. Protist. 163(3): 356-388.																								
+</Reference.tsv>
+</head -n 10>
+
+<SpeciesEstimate.tsv>
+<head -n 10>
+col:taxonID	col:sourceID	col:estimate	col:type	col:referenceID	col:remarks
+BRKNQ		5385	species living	74	
+622DH		317	species living	30	
+4XK		85	species living	74	
+FJ5		37	species living	30	
+625XT		2	species living	55	
+HJR		93	species living	30	
+9LT		46	species living	30	
+CZK		79	species living	55	
+8NKJ8		71	species living	29	
+</SpeciesEstimate.tsv>
+</head -n 10>
+
+<SpeciesInteraction.tsv>
+<head -n 10>
+col:taxonID	col:relatedTaxonID	col:sourceID	col:relatedTaxonScientificName	col:type	col:referenceID	col:remarks
+</SpeciesInteraction.tsv>
+</head -n 10>
+
+<TaxonConceptRelation.tsv>
+<head -n 10>
+col:taxonID	col:relatedTaxonID	col:sourceID	col:type	col:referenceID	col:remarks
+</TaxonConceptRelation.tsv>
+</head -n 10>
+
+<TaxonProperty.tsv>
+<head -n 10>
+col:taxonID	col:sourceID	col:property	col:value	col:ordinal	col:referenceID	col:page	col:remarks
+</TaxonProperty.tsv>
+</head -n 10>
+
+<TypeMaterial.tsv>
+<head -n 10>
+col:ID	col:nameID	col:sourceID	col:citation	col:status	col:referenceID	col:page	col:country	col:locality	col:latitude	col:longitude	col:altitude	col:sex	col:host	col:associatedSequences	col:date	col:collector	col:institutionCode	col:catalogNumber	col:link	col:remarks
+</TypeMaterial.tsv>
+</head -n 10>
+
+<VernacularName.tsv>
+<head -n 10>
+col:taxonID	col:sourceID	col:name	col:transliteration	col:language	col:preferred	col:country	col:area	col:sex	col:referenceID	col:remarks
+B6LM6		bacteria	bacteria	eng						
+B6LM6		bacterias	bacterias	spa						
+R5LB		Sandcarpet	Sandcarpet	eng						
+76SYT		Alcajes	Alcajes							
+76SYT		Rajamatraca	Rajamatraca							
+333V8		Patana	Patana	cbq						
+6C59B		Clavellina	Clavellina							
+3XSNW		Pitayita	Pitayita							
+3XSJY		Cochilinque	Cochilinque							
+</VernacularName.tsv>
+</head -n 10>
+
+<source/1005.yaml>
+<head -n 50>
+---
+key: 1005
+doi: 10.48580/dfrdl-37p
+title: Catalogue of Craneflies of the World
+alias: CCW
+description: "The Catalogue of the Craneflies of the World (CCW) covers all genera,\
+  \ subgenera, species, subspecies, and synonyms of the World Tipuloidea (Insecta\
+  \ – Diptera – Nematocera – families Pediciidae, Limoniidae, Cylindrotomidae, Tipulidae).\
+  \ It also includes up to date information on the distribution of the species and\
+  \ subspecies, specified by countries and, for the larger countries, states, provinces\
+  \ and islands. The website’s list of references has over 7.400 titles, about 4.300\
+  \ of which available as easy downloadable pdf."
+issued: 2021-05-07
+version: May 2021
+contact:
+  given: P
+  family: Oosterbroek
+creator:
+ -
+  given: P.
+  family: Oosterbroek
+contributor:
+ -
+  city: Leiden
+  country: NL
+  address: "Leiden, Netherlands"
+  organisation: Naturalis Biodiversity Center
+keyword: []
+containerKey: 299029
+containerTitle: Catalogue of Life
+containerCreator:
+ -
+  orcid: 0000-0001-6197-9951
+  given: Olaf
+  family: Bánki
+  city: Amsterdam
+  country: NL
+  note: COL Managing Director
+  address: "Amsterdam, Netherlands"
+  organisation: Catalogue of Life
+ -
+  orcid: 0000-0003-2137-2690
+  given: Yury
+  family: Roskov
+  city: Champaign
+  state: IL
+  country: US
+  note: COL Executive Editor
+  address: "Champaign, IL, United States of America"
+  organisation: Illinois Natural History Survey				
+</source/1005.yaml>
+</head -n 50>
