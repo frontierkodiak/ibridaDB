@@ -1,0 +1,4 @@
+```bash
+chmod +x /home/caleb/repo/ibridaDB/scripts/ingest_coldp/wrapper_ingest_coldp_parallel.sh
+NUM_PROCESSES=12 ./scripts/ingest_coldp/wrapper_ingest_coldp_parallel.sh
+```

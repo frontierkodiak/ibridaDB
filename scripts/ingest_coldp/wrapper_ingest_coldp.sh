@@ -13,15 +13,14 @@ LOG_FILE="${SCRIPT_DIR}/wrapper_ingest_coldp_$(date +%Y%m%d_%H%M%S).log"
 # --- Configuration ---
 # These can be overridden by environment variables if needed
 DB_USER="${DB_USER:-postgres}"
-DB_PASSWORD="${DB_PASSWORD:-password}" # Be cautious with passwords in scripts; use env vars or secrets manager in prod
+DB_PASSWORD="${DB_PASSWORD:-ooglyboogly69}" # Hardcoded password for private repo
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
 DB_NAME="${DB_NAME:-ibrida-v0-r1}" # Target ibridaDB database
 
 COLDP_DATA_DIR="${COLDP_DATA_DIR:-/datasets/taxa/catalogue_of_life/2024/ColDP}" # Path to unzipped ColDP files
 
-PYTHON_EXE="${PYTHON_EXE:-python3}" # Path to python executable if not in PATH or using venv
-## NOTE: Use venv interpreter at /home/caleb/repo/ibridaDB/.venv/bin/python
+PYTHON_EXE="${PYTHON_EXE:-/home/caleb/repo/ibridaDB/.venv/bin/python}" # Use venv interpreter
 
 # Enable/disable fuzzy matching (default: enabled)
 ENABLE_FUZZY_MATCH="${ENABLE_FUZZY_MATCH:-true}"

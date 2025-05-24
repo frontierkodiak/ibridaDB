@@ -9,6 +9,29 @@ ibridaDB is a modular, reproducible database system designed to ingest, process,
 - **Data Ingestion:** Importing CSV dumps, calculating geospatial geometries, updating metadata
 - **Elevation Integration:** Enriching observations with elevation data from MERIT DEM tiles
 - **Data Export:** Filtering observations by region and taxonomic clade, performing advanced ancestor searches, and exporting curated CSV files
+- **Taxonomy Enrichment:** Integrating taxonomic data from Catalog of Life Data Package (ColDP) to add common names and additional taxonomic information
+
+## Database Connection Information
+
+The database runs in a Docker container. Here's how to connect to it:
+
+```bash
+# Database connection details
+DB_USER=postgres
+DB_PASSWORD=ooglyboogly69
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=ibrida-v0-r1
+
+# Connect using psql through Docker
+docker exec -it ibridaDB psql -U postgres -d ibrida-v0-r1
+
+# Run SQL commands from outside
+docker exec ibridaDB psql -U postgres -d ibrida-v0-r1 -c "SELECT COUNT(*) FROM observations"
+
+# Backup a table
+docker exec ibridaDB pg_dump -U postgres -d ibrida-v0-r1 -t observations > observations_backup.sql
+```
 
 ## Key Concepts
 
@@ -20,6 +43,72 @@ ibridaDB is a modular, reproducible database system designed to ingest, process,
   - Geographic regions (defined by bounding boxes)
   - Taxonomic clades or metaclades
   - Minimum observation thresholds
+
+## ColDP Integration
+
+The Catalog of Life Data Package (ColDP) integration is a newer component that enriches the existing iNaturalist taxonomy with standardized taxonomy and common names from the Catalog of Life.
+
+### ColDP Pipeline Structure
+
+- **Scripts directory:** `/home/caleb/repo/ibridaDB/scripts/ingest_coldp/`
+  - `load_tables.py` - Imports raw TSV files from ColDP into staging tables
+  - `map_taxa.py` - Maps iNaturalist taxa to Catalog of Life taxa using exact and fuzzy matching
+  - `map_taxa_parallel.py` - Parallelized version of map_taxa.py for faster processing
+  - `populate_common_names.py` - Updates the expanded_taxa table with common names from ColDP
+  - `wrapper_ingest_coldp.sh` - Orchestrates the entire ColDP integration process
+  - `wrapper_ingest_coldp_parallel.sh` - Parallelized version of the wrapper
+
+- **Model definitions:** `/home/caleb/repo/ibridaDB/models/coldp_models.py`
+  - Contains SQLAlchemy ORM models for the ColDP tables
+  - Includes the following tables:
+    - `coldp_name_usage_staging` - Scientific names and taxonomic hierarchy
+    - `coldp_vernacular_name` - Common names in different languages
+    - `coldp_distribution` - Geographic distribution information
+    - `coldp_media` - Media resources like images and sounds
+    - `coldp_reference` - Bibliographic references
+    - `coldp_type_material` - Type specimen information
+
+- **Mapping table:** `inat_to_coldp_taxon_map`
+  - Links iNaturalist taxa (via taxonID) to Catalog of Life taxa (via ID)
+  - Stores match confidence and matching method
+
+### Mapping Workflow
+
+1. **Data Loading:** Import all ColDP TSV files into staging tables
+2. **Exact Matching:** First attempt to match taxa based on scientific name and rank
+3. **Name-Only Matching:** Try matching just on scientific name for remaining taxa
+4. **Fuzzy Matching:** For remaining unmatched taxa, use fuzzy string matching
+5. **Homonym Resolution:** When multiple fuzzy matches exist, use taxonomic hierarchy to resolve
+6. **Common Name Population:** Update expanded_taxa.commonName and LXX_commonName fields
+
+### Known Issues and Solutions
+
+- **Schema Issues:** Several fields in the ColDP tables were originally defined with varchar lengths that are too small for actual data:
+  1. **Taxon ID Fields:** The `taxonID` fields in various tables (like `coldp_vernacular_name.taxonID`) were defined as varchar(10) but some IDs are up to 64 characters (e.g., 'H-EzEkwxHee94KsK0nR3H0').
+  2. **Reference Fields:** Fields in the `coldp_reference` table contain very long values that won't fit in varchar fields of any reasonable length.
+  
+  **Solution:** The wrapper script now:
+  1. Drops all ColDP tables (but not expanded_taxa) before each run so they're recreated with the correct schema
+  2. Uses SQLAlchemy models with:
+     - `varchar(64)` for most ID fields in non-reference tables
+     - `Text` type for all fields in the reference table (except the primary key) to avoid any length constraints
+     - `varchar(255)` for the reference table's primary key
+  3. Validates the schema to catch any field length issues before loading data
+
+- **Performance Issue:** Fuzzy matching is computationally intensive. Use the parallelized version to speed up processing by 10-12x.
+
+### Running ColDP Integration
+
+```bash
+# Standard sequential process
+./scripts/ingest_coldp/wrapper_ingest_coldp.sh
+
+# Parallelized process (much faster)
+NUM_PROCESSES=12 ./scripts/ingest_coldp/wrapper_ingest_coldp_parallel.sh
+
+# Skip certain steps if needed
+DO_LOAD_TABLES=false DO_MAP_TAXA=true DO_POPULATE_COMMON_NAMES=false ./scripts/ingest_coldp/wrapper_ingest_coldp_parallel.sh
+```
 
 ## Common Commands
 
@@ -113,6 +202,7 @@ dbTools/export/v0/r1/wrapper_amphibia_all_exc_nonrg_sp_oor_elev.sh
 - `export.md` - Export pipeline documentation
 - `ingest.md` - Ingestion pipeline documentation
 - `schemas.md` - Database schema reference
+- `coldp_integration.md` - ColDP integration documentation
 
 ## Critical Environment Variables
 
@@ -138,6 +228,17 @@ dbTools/export/v0/r1/wrapper_amphibia_all_exc_nonrg_sp_oor_elev.sh
 - `INCLUDE_OUT_OF_REGION_OBS` - Toggle inclusion of observations outside region
 - `INCLUDE_ELEVATION_EXPORT` - Toggle inclusion of elevation data in exports
 - `EXPORT_GROUP` - Name identifier for the export job
+
+### For ColDP Integration:
+
+- Database configuration variables (DB_USER, DB_PASSWORD, etc.)
+- `ENABLE_FUZZY_MATCH` - Enable fuzzy matching (default: true)
+- `FUZZY_THRESHOLD` - Minimum score for fuzzy matches (default: 90)
+- `NUM_PROCESSES` - Number of parallel processes for fuzzy matching
+- `COLDP_DIR` - Path to the ColDP data directory
+- `DO_LOAD_TABLES` - Whether to load ColDP tables
+- `DO_MAP_TAXA` - Whether to map taxa
+- `DO_POPULATE_COMMON_NAMES` - Whether to populate common names
 
 ## Testing
 
@@ -171,6 +272,11 @@ As this is primarily a data processing system, there are no formal unit tests. I
    - Copy and update wrapper scripts with new release info
    - Run the updated wrappers
 
+5. **ColDP integration workflow:**
+   - Ensure model schema is correct (especially field lengths)
+   - Run parallelized wrapper script
+   - Verify mappings and common name population
+
 ## Notes and Considerations
 
 - This system is designed to be reproducible - the same inputs should always produce the same database
@@ -178,3 +284,4 @@ As this is primarily a data processing system, there are no formal unit tests. I
 - When using elevation data, ensure you're using the custom Docker image with `raster2pgsql` support
 - Export generates detailed summaries alongside CSV files
 - Config follows the single responsibility principle - wrappers should focus on one specific task
+- The ColDP fuzzy matching process is highly CPU-intensive but can be parallelized effectively

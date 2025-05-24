@@ -40,6 +40,16 @@
 - [ ] Verify mapping quality with a sample of 100 species
 - [ ] Check for missing common names in popular taxa
 
+## SDK Development Support
+- [ ] Create script to dump all database table schemas to text file
+  - Use PostgreSQL information_schema or psql \d+ commands
+  - Include all table structures, constraints, indexes, and relationships
+  - Output format suitable for SDK code generation
+  - Consider creating SQL DDL export and JSON schema formats
+  - Include documentation about each table's purpose
+- [ ] Document database access patterns and common queries
+- [ ] Create sample queries for SDK development
+
 ## Future Work
 - [ ] Further optimize fuzzy matching algorithm performance for large datasets
 - [ ] Develop an iterative/multi-pass fuzzy matching process for improved quality

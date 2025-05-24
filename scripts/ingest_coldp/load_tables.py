@@ -5,7 +5,7 @@ import os
 import pandas as pd
 import csv
 import logging
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 # Import models from the top-level models directory
@@ -119,6 +119,44 @@ def load_table_from_tsv(session, model_class, tsv_path, col_prefix="col:"):
         logger.error(f"Error loading data for {model_class.__tablename__} from {tsv_path}: {e}")
         raise
 
+def verify_schema_field_lengths(engine):
+    """
+    Verifies that columns in the database have sufficient field length.
+    """
+    # Define the expected length for fields and tables to check
+    column_specs = [
+        # TaxonID and related fields
+        ('coldp_vernacular_name', 'taxonID', 64),
+        ('coldp_distribution', 'taxonID', 64),
+        ('coldp_media', 'taxonID', 64),
+        ('coldp_type_material', 'nameID', 64)
+    ]
+    
+    # Note: We don't check reference fields anymore since they're all TEXT type now
+    
+    # The tables might not exist yet, so we'll handle exceptions
+    tables_checked = False
+    for table_name, column_name, expected_length in column_specs:
+        try:
+            query = text(f"""
+                SELECT character_maximum_length 
+                FROM information_schema.columns 
+                WHERE table_name='{table_name}' AND column_name='{column_name}'
+            """)
+            
+            with engine.connect() as conn:
+                result = conn.execute(query).scalar()
+                tables_checked = True
+            
+            if result is not None and result < expected_length:
+                logger.warning(f"WARNING: {table_name}.{column_name} has length {result}, expected {expected_length}")
+                return False
+        except Exception as e:
+            # Table might not exist yet, which is fine since we'll create it
+            logger.info(f"Table {table_name} not found or other error checking schema: {e}")
+    
+    return tables_checked
+
 def main():
     parser = argparse.ArgumentParser(description="Load ColDP TSV data into PostgreSQL database.")
     parser.add_argument("--coldp-dir", required=True, help="Path to the unzipped ColDP directory.")
@@ -130,6 +168,11 @@ def main():
     args = parser.parse_args()
 
     engine = get_db_engine(args.db_user, args.db_password, args.db_host, args.db_port, args.db_name)
+    
+    # Verify schema field lengths (for existing tables)
+    tables_exist = verify_schema_field_lengths(engine)
+    if tables_exist:
+        logger.info("Schema validation completed. Field lengths are sufficient or tables don't exist yet.")
     
     # 1. Create table schemas
     create_schemas(engine)

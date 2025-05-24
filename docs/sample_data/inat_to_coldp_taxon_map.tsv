@@ -1,0 +1,11 @@
+inat_taxon_id	col_taxon_id	match_type	match_score	inat_scientific_name	col_scientific_name
+93547	AC74P	exact_name_rank_accepted	1.0	Agriocnemis femina	Agriocnemis femina
+91989	LFMQ3	exact_name_rank_accepted	1.0	Selaroides	Selaroides
+98830	78CGM	exact_name_rank_accepted	1.0	Cycleptus elongatus	Cycleptus elongatus
+99568	POQZ7	exact_name_only_accepted	0.95	Draco supriatnai	Draco supriatnai
+91026	XBN8T	exact_name_rank_accepted	1.0	Phoxinus	Phoxinus
+92787	85BKX	exact_name_rank_accepted	1.0	Vestalis	Vestalis
+97577	67DEF	exact_name_rank_accepted	1.0	Chlorocypha consueta	Chlorocypha consueta
+96939	C33N7	fuzzy_name_with_ancestors	0.92	Centropyge bicolor	Centropyge bicolour
+94212	FG4H2	exact_name_rank_accepted	1.0	Anthocharis euphenoides	Anthocharis euphenoides
+98317	3HNHY	fuzzy_name_with_ancestors	0.94	Colpophyllia natans	Colpophyllia natan

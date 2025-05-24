@@ -53,7 +53,7 @@ def populate_common_names_in_expanded_taxa(session):
     JOIN coldp_vernacular_name AS cvn ON xmap.col_taxon_id = cvn."taxonID"
     WHERE et."taxonID" = xmap.inat_taxon_id
       AND cvn.language = 'eng' 
-      AND cvn.preferred = TRUE;
+      AND (cvn.preferred = TRUE OR cvn.preferred IS NULL);
     """)
     
     result = session.execute(update_main_common_name_sql)
@@ -76,7 +76,7 @@ def populate_common_names_in_expanded_taxa(session):
         JOIN coldp_vernacular_name AS cvn ON xmap.col_taxon_id = cvn."taxonID"
         WHERE et."{lxx_taxon_id_col}" = xmap.inat_taxon_id
           AND cvn.language = 'eng'
-          AND cvn.preferred = TRUE
+          AND (cvn.preferred = TRUE OR cvn.preferred IS NULL)
           AND et."{lxx_taxon_id_col}" IS NOT NULL; 
         """)
         # The 'et."{lxx_taxon_id_col}" IS NOT NULL' is important as that column can be NULL.

@@ -4,11 +4,14 @@ import argparse
 import os
 import pandas as pd
 import logging
-from sqlalchemy import create_engine, Column, Integer, String, Float, Index, Text, ForeignKey
-from sqlalchemy.orm import sessionmaker, relationship
-from sqlalchemy.ext.declarative import declarative_base
-from rapidfuzz import process, fuzz
 import time
+import multiprocessing
+from functools import partial
+from sqlalchemy import create_engine, Column, Integer, String, Float, Text, ForeignKey
+from sqlalchemy.orm import sessionmaker
+from rapidfuzz import process, fuzz
+import tempfile
+import json
 
 # Import models from the top-level models directory
 import sys
@@ -30,10 +33,6 @@ class InatToColdpMap(Base):
     match_score = Column(Float, nullable=True)
     inat_scientific_name = Column(Text)
     col_scientific_name = Column(Text)
-
-    # Relationships (optional but good practice)
-    # inat_taxon = relationship("ExpandedTaxa") # If ExpandedTaxa is the ORM for your main taxa table
-    # col_name_usage = relationship("ColdpNameUsage")
 
 
 def get_db_engine(db_user, db_password, db_host, db_port, db_name):
@@ -72,8 +71,144 @@ def get_taxon_ancestor_info(session, inat_taxa_df):
         session.bind
     )
     
-    ancestor_data.set_index('taxonID', inplace=True)
-    return ancestor_data
+    # Convert to dict for faster lookups in the worker processes
+    ancestor_dict = {}
+    for _, row in ancestor_data.iterrows():
+        taxon_id = row['taxonID']
+        ancestor_dict[taxon_id] = {
+            'L20_name': row.get('L20_name'),
+            'L30_name': row.get('L30_name'),
+            'L40_name': row.get('L40_name'),
+            'L50_name': row.get('L50_name'),
+            'L60_name': row.get('L60_name')
+        }
+    
+    return ancestor_dict
+
+def build_col_ancestors_map(coldp_names_df):
+    """
+    Create a map of ColDP taxon IDs to their ancestor information from the NameUsage data
+    """
+    ancestor_map = {}
+    
+    # Extract and organize ancestor data
+    for _, row in coldp_names_df.iterrows():
+        col_taxon_id = row['col_taxon_id']
+        ancestor_info = {
+            'genus': row.get('genericName'),
+            'family': row.get('family'),
+            'order': row.get('order'),
+            'class': row.get('class'),
+            'phylum': row.get('phylum')
+        }
+        ancestor_map[col_taxon_id] = ancestor_info
+    
+    return ancestor_map
+
+def resolve_homonyms_lightweight(row, matches_with_taxon_info, ancestor_data, ancestor_map):
+    """
+    Lightweight version of resolve_homonyms that works with taxon info dictionaries instead of DataFrames.
+    """
+    # Filter matches to only include those above threshold
+    good_matches = [(name, score, taxon_info) for name, score, taxon_info in matches_with_taxon_info if score > 89.0]
+    
+    if not good_matches:
+        return None
+    
+    # If only one match, return it
+    if len(good_matches) == 1:
+        match_name, score, taxon_info = good_matches[0]
+        return {
+            'inat_taxon_id': row['inat_taxon_id'],
+            'col_taxon_id': taxon_info['col_taxon_id'],
+            'match_type': 'fuzzy_name_single_match',
+            'match_score': score / 100.0,
+            'inat_scientific_name': row['inat_scientific_name'],
+            'col_scientific_name': taxon_info['col_scientific_name']
+        }
+    
+    # Multiple matches - try to use ancestor data to disambiguate
+    inat_taxon_id = row['inat_taxon_id']
+    if inat_taxon_id not in ancestor_data:
+        # No ancestry data available for this taxon - take highest score match
+        good_matches.sort(key=lambda x: x[1], reverse=True)
+        match_name, score, taxon_info = good_matches[0]
+        return {
+            'inat_taxon_id': row['inat_taxon_id'],
+            'col_taxon_id': taxon_info['col_taxon_id'],
+            'match_type': 'fuzzy_name_highest_score',
+            'match_score': score / 100.0,
+            'inat_scientific_name': row['inat_scientific_name'],
+            'col_scientific_name': taxon_info['col_scientific_name']
+        }
+    
+    # Get iNat ancestor info
+    inat_ancestors = ancestor_data[inat_taxon_id]
+    
+    # Score each candidate match by comparing ancestors
+    ancestor_scores = []
+    for match_name, score, taxon_info in good_matches:
+        col_taxon_id = taxon_info['col_taxon_id']
+        
+        if col_taxon_id not in ancestor_map:
+            # No ancestor data for this COL taxon - just use the fuzzy match score
+            ancestor_scores.append((taxon_info, 0, score))
+            continue
+        
+        col_ancestors = ancestor_map[col_taxon_id]
+        
+        # Check for matching ancestors at different ranks (genus, family, order, class, phylum)
+        ancestor_matches = 0
+        
+        # Check genus
+        inat_genus = normalize_name(inat_ancestors.get('L20_name'))
+        col_genus = normalize_name(col_ancestors.get('genus'))
+        if inat_genus and col_genus and inat_genus == col_genus:
+            ancestor_matches += 2
+        
+        # Check family
+        inat_family = normalize_name(inat_ancestors.get('L30_name'))
+        col_family = normalize_name(col_ancestors.get('family'))
+        if inat_family and col_family and inat_family == col_family:
+            ancestor_matches += 1
+        
+        # Check order
+        inat_order = normalize_name(inat_ancestors.get('L40_name'))
+        col_order = normalize_name(col_ancestors.get('order'))
+        if inat_order and col_order and inat_order == col_order:
+            ancestor_matches += 1
+        
+        # Check class
+        inat_class = normalize_name(inat_ancestors.get('L50_name'))
+        col_class = normalize_name(col_ancestors.get('class'))
+        if inat_class and col_class and inat_class == col_class:
+            ancestor_matches += 1
+        
+        # Check phylum
+        inat_phylum = normalize_name(inat_ancestors.get('L60_name'))
+        col_phylum = normalize_name(col_ancestors.get('phylum'))
+        if inat_phylum and col_phylum and inat_phylum == col_phylum:
+            ancestor_matches += 1
+        
+        # Store the total score (combines fuzzy match score and ancestor matches)
+        ancestor_scores.append((taxon_info, ancestor_matches, score))
+    
+    if not ancestor_scores:
+        return None
+        
+    # Find the best match by prioritizing ancestor matches, then fuzzy score
+    ancestor_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
+    best_taxon_info, ancestor_match_count, fuzzy_score = ancestor_scores[0]
+    
+    match_type = 'fuzzy_name_with_ancestors' if ancestor_match_count > 0 else 'fuzzy_name_no_ancestors'
+    return {
+        'inat_taxon_id': row['inat_taxon_id'],
+        'col_taxon_id': best_taxon_info['col_taxon_id'],
+        'match_type': match_type,
+        'match_score': fuzzy_score / 100.0,
+        'inat_scientific_name': row['inat_scientific_name'],
+        'col_scientific_name': best_taxon_info['col_scientific_name']
+    }
 
 def resolve_homonyms(row, matches, coldp_names_df, ancestor_data, ancestor_map):
     """
@@ -102,7 +237,7 @@ def resolve_homonyms(row, matches, coldp_names_df, ancestor_data, ancestor_map):
     
     # Multiple matches - try to use ancestor data to disambiguate
     inat_taxon_id = row['inat_taxon_id']
-    if inat_taxon_id not in ancestor_data.index:
+    if inat_taxon_id not in ancestor_data:
         # No ancestry data available for this taxon
         # Take highest score match
         matches_df = matches_df.sort_values('score', ascending=False)
@@ -117,7 +252,7 @@ def resolve_homonyms(row, matches, coldp_names_df, ancestor_data, ancestor_map):
         }
     
     # Get iNat ancestor info
-    inat_ancestors = ancestor_data.loc[inat_taxon_id]
+    inat_ancestors = ancestor_data[inat_taxon_id]
     
     # Score each candidate match by comparing ancestors
     ancestor_scores = []
@@ -185,27 +320,96 @@ def resolve_homonyms(row, matches, coldp_names_df, ancestor_data, ancestor_map):
         'col_scientific_name': coldp_names_df.iloc[best_match_idx]['col_scientific_name']
     }
 
-def build_col_ancestors_map(coldp_names_df):
+def process_fuzzy_batch(batch_data, fuzzy_threshold=90):
     """
-    Create a map of ColDP taxon IDs to their ancestor information from the NameUsage data
+    Process a batch of taxa for fuzzy matching in a separate process.
+    
+    Args:
+        batch_data: Dictionary containing all data needed for processing:
+            - batch: DataFrame of iNat taxa to process
+            - accepted_coldp_names: List of accepted ColDP normalized names
+            - all_coldp_names: List of all ColDP normalized names
+            - coldp_lookup: Dictionary for name -> taxon info lookup
+            - ancestor_data: Dictionary of iNat ancestor data
+            - ancestor_map: Dictionary of ColDP ancestor data
+    
+    Returns:
+        List of match results
     """
-    ancestor_map = {}
+    batch = batch_data['batch']
+    accepted_coldp_names = batch_data['accepted_coldp_names']
+    all_coldp_names = batch_data['all_coldp_names']
+    coldp_lookup = batch_data['coldp_lookup']
+    ancestor_data = batch_data['ancestor_data']
+    ancestor_map = batch_data['ancestor_map']
     
-    # Extract and organize ancestor data
-    for _, row in coldp_names_df.iterrows():
-        col_taxon_id = row['col_taxon_id']
-        ancestor_info = {
-            'genus': row.get('genericName'),
-            'family': row.get('family'),
-            'order': row.get('order'),
-            'class': row.get('class'),
-            'phylum': row.get('phylum')
-        }
-        ancestor_map[col_taxon_id] = ancestor_info
+    fuzzy_matches = []
+    start_time = time.time()
     
-    return ancestor_map
+    batch_size = len(batch)
+    batch_id = batch_data.get('batch_id', 0)
+    
+    # Process each taxon in the batch
+    for i, (_, row) in enumerate(batch.iterrows()):
+        if i % 100 == 0 and i > 0:
+            elapsed = time.time() - start_time
+            progress = i / batch_size * 100
+            logger.info(f"Batch {batch_id}: Processed {i}/{batch_size} ({progress:.1f}%) in {elapsed:.2f}s")
+        
+        # First try to match against accepted names only
+        if accepted_coldp_names:  # Skip if empty
+            matches = process.extract(
+                query=row['norm_inat_name'],
+                choices=accepted_coldp_names, 
+                scorer=fuzz.WRatio,  # WRatio is good for scientific names with different word orders
+                score_cutoff=fuzzy_threshold,
+                limit=5
+            )
+            
+            # If no good matches in accepted names, try all names
+            if not matches and all_coldp_names:
+                matches = process.extract(
+                    query=row['norm_inat_name'],
+                    choices=all_coldp_names,
+                    scorer=fuzz.WRatio,
+                    score_cutoff=fuzzy_threshold,
+                    limit=5
+                )
+            
+            # Convert matches to format expected by resolve_homonyms
+            if matches:
+                matches_with_taxon_info = []
+                for match_tuple in matches:
+                    # Handle both (string, score) and (string, score, index) formats from rapidfuzz
+                    if len(match_tuple) == 2:
+                        match_name, score = match_tuple
+                    else:
+                        match_name, score, _ = match_tuple
+                    
+                    # Look up taxon info using our lookup dictionary
+                    if match_name in coldp_lookup:
+                        for taxon_info in coldp_lookup[match_name]:
+                            matches_with_taxon_info.append((match_name, score, taxon_info))
+                
+                # Resolve homonyms and get the best match
+                match_result = resolve_homonyms_lightweight(row, matches_with_taxon_info, ancestor_data, ancestor_map)
+                if match_result:
+                    fuzzy_matches.append(match_result)
+    
+    elapsed = time.time() - start_time
+    logger.info(f"Batch {batch_id} completed: Processed {batch_size} taxa in {elapsed:.2f}s")
+    
+    return fuzzy_matches
 
-def perform_mapping(session, fuzzy_match=True, fuzzy_threshold=90):
+def perform_mapping_parallel(session, num_processes=None, fuzzy_match=True, fuzzy_threshold=90):
+    """
+    Perform the mapping process with parallel processing for the fuzzy matching.
+    """
+    if num_processes is None:
+        num_processes = multiprocessing.cpu_count() - 1  # Leave one core free
+        
+    logger.info(f"Will use {num_processes} parallel processes for fuzzy matching")
+    
     logger.info("Starting iNaturalist to ColDP taxon mapping process...")
 
     # 0. Clear existing mapping data
@@ -255,7 +459,7 @@ def perform_mapping(session, fuzzy_match=True, fuzzy_threshold=90):
         )
     
     coldp_names_df.rename(columns={'ID': 'col_taxon_id', 'scientificName': 'col_scientific_name', 
-                              'rank': 'col_rank', 'status': 'col_status'}, inplace=True)
+                          'rank': 'col_rank', 'status': 'col_status'}, inplace=True)
     coldp_names_df['norm_col_name'] = coldp_names_df['col_scientific_name'].apply(normalize_name)
     coldp_names_df['norm_col_rank'] = coldp_names_df['col_rank'].apply(normalize_name)
     logger.info(f"Loaded {len(coldp_names_df)} ColDP NameUsage entries.")
@@ -327,79 +531,66 @@ def perform_mapping(session, fuzzy_match=True, fuzzy_threshold=90):
         ancestor_map = build_col_ancestors_map(coldp_names_df)
         logger.info(f"Built ancestor map for {len(ancestor_map)} ColDP taxa")
         
-        # Get list of normalized ColDP names for fuzzy matching
-        coldp_names_list = coldp_names_df['norm_col_name'].dropna().tolist()
-        
-        # Separate the accepted names for preferential matching
-        accepted_coldp_df = coldp_names_df[coldp_names_df['col_status'] == 'accepted']
-        accepted_coldp_names = accepted_coldp_df['norm_col_name'].dropna().tolist()
-        
         # Filter out null/None values before fuzzy matching
         inat_taxa_filtered = inat_taxa_df[inat_taxa_df['norm_inat_name'].notna()]
         
-        # Use batch size to process large dataframes in chunks
+        # Use a conservative batch size to manage memory usage
         batch_size = 1000
-        fuzzy_matches = []
+        parallel_batch_size = batch_size  # Keep batch size at 1000 to prevent OOM
         
-        for start_idx in range(0, len(inat_taxa_filtered), batch_size):
-            end_idx = min(start_idx + batch_size, len(inat_taxa_filtered))
-            batch = inat_taxa_filtered.iloc[start_idx:end_idx]
-            
-            logger.info(f"Processing fuzzy match batch {start_idx}-{end_idx} of {len(inat_taxa_filtered)}")
-            batch_start_time = time.time()
-            
-            for _, row in batch.iterrows():
-                # First try to match against accepted names only
-                if accepted_coldp_names:  # Skip if empty
-                    matches = process.extract(
-                        query=row['norm_inat_name'],
-                        choices=accepted_coldp_names, 
-                        scorer=fuzz.WRatio,  # WRatio is good for scientific names with different word orders
-                        score_cutoff=fuzzy_threshold,
-                        limit=5
-                    )
-                    
-                    # If no good matches in accepted names, try all names
-                    if not matches and coldp_names_list:
-                        matches = process.extract(
-                            query=row['norm_inat_name'],
-                            choices=coldp_names_list,
-                            scorer=fuzz.WRatio,
-                            score_cutoff=fuzzy_threshold,
-                            limit=5
-                        )
-                    
-                    # Find the index of each match in the original DataFrame
-                    if matches:
-                        matches_with_indices = []
-                        for match_tuple in matches:
-                            # Handle both (string, score) and (string, score, index) formats from rapidfuzz
-                            if len(match_tuple) == 2:
-                                match_name, score = match_tuple
-                            else:
-                                match_name, score, _ = match_tuple
-                            # For accepted_coldp_names matches
-                            indices = accepted_coldp_df[accepted_coldp_df['norm_col_name'] == match_name].index.tolist()
-                            if indices:
-                                for idx in indices:
-                                    matches_with_indices.append((match_name, score, idx))
-                            else:
-                                # For coldp_names_list matches
-                                indices = coldp_names_df[coldp_names_df['norm_col_name'] == match_name].index.tolist()
-                                for idx in indices:
-                                    matches_with_indices.append((match_name, score, idx))
-                        
-                        # Resolve homonyms and get the best match
-                        match_result = resolve_homonyms(row, matches_with_indices, coldp_names_df, ancestor_data, ancestor_map)
-                        if match_result:
-                            fuzzy_matches.append(match_result)
-            
-            batch_end_time = time.time()
-            logger.info(f"Batch processed in {batch_end_time - batch_start_time:.2f} seconds")
+        # Create lightweight batch data - only pass essential data to reduce memory copying
+        # Extract just the normalized names and IDs to minimize data transfer
+        accepted_coldp_names = coldp_names_df[coldp_names_df['col_status'] == 'accepted']['norm_col_name'].dropna().tolist()
+        all_coldp_names = coldp_names_df['norm_col_name'].dropna().tolist()
         
-        fuzzy_match_count = len(fuzzy_matches)
-        all_mappings.extend(fuzzy_matches)
-        logger.info(f"Found {fuzzy_match_count} fuzzy matches.")
+        # Create lookup dictionaries for faster access (instead of copying full DataFrames)
+        coldp_lookup = {}
+        for _, row in coldp_names_df.iterrows():
+            norm_name = row['norm_col_name']
+            if pd.notna(norm_name):
+                if norm_name not in coldp_lookup:
+                    coldp_lookup[norm_name] = []
+                coldp_lookup[norm_name].append({
+                    'col_taxon_id': row['col_taxon_id'],
+                    'col_scientific_name': row['col_scientific_name'],
+                    'col_status': row['col_status']
+                })
+        
+        # Split the data into batches for parallel processing
+        all_batches = []
+        for start_idx in range(0, len(inat_taxa_filtered), parallel_batch_size):
+            end_idx = min(start_idx + parallel_batch_size, len(inat_taxa_filtered))
+            batch = inat_taxa_filtered.iloc[start_idx:end_idx].copy()
+            
+            batch_data = {
+                'batch': batch,
+                'accepted_coldp_names': accepted_coldp_names,
+                'all_coldp_names': all_coldp_names,
+                'coldp_lookup': coldp_lookup,
+                'ancestor_data': ancestor_data,
+                'ancestor_map': ancestor_map,
+                'batch_id': len(all_batches) + 1
+            }
+            all_batches.append(batch_data)
+            
+        logger.info(f"Split data into {len(all_batches)} large batches for parallel processing")
+        
+        # Create a multiprocessing pool
+        with multiprocessing.Pool(processes=num_processes) as pool:
+            process_func = partial(process_fuzzy_batch, fuzzy_threshold=fuzzy_threshold)
+            
+            # Process batches in parallel
+            logger.info(f"Processing {len(all_batches)} batches with {num_processes} workers...")
+            results = pool.map(process_func, all_batches)
+            
+            # Combine results
+            fuzzy_matches = []
+            for batch_results in results:
+                fuzzy_matches.extend(batch_results)
+            
+            fuzzy_match_count = len(fuzzy_matches)
+            all_mappings.extend(fuzzy_matches)
+            logger.info(f"Found {fuzzy_match_count} fuzzy matches across all batches.")
     
     # Calculate how many unmatched taxa remain
     total_exact_matches = len(all_mappings) - fuzzy_match_count
@@ -421,15 +612,21 @@ def perform_mapping(session, fuzzy_match=True, fuzzy_threshold=90):
     # --- Step 6: Persist mappings ---
     if all_mappings:
         logger.info(f"Bulk inserting {len(all_mappings)} mappings into 'inat_to_coldp_taxon_map'...")
-        session.bulk_insert_mappings(InatToColdpMap, all_mappings)
-        session.commit()
+        # Insert in chunks to avoid memory issues
+        chunk_size = 10000
+        for i in range(0, len(all_mappings), chunk_size):
+            chunk = all_mappings[i:i+chunk_size]
+            session.bulk_insert_mappings(InatToColdpMap, chunk)
+            session.commit()
+            logger.info(f"Inserted chunk {i//chunk_size + 1}/{(len(all_mappings) + chunk_size - 1)//chunk_size}")
+        
         logger.info("Successfully populated 'inat_to_coldp_taxon_map'.")
     else:
         logger.info("No mappings found to insert.")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Map iNaturalist taxa to ColDP taxa.")
+    parser = argparse.ArgumentParser(description="Map iNaturalist taxa to ColDP taxa using parallel processing.")
     parser.add_argument("--db-user", default=os.getenv("DB_USER", "postgres"))
     parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD", "password"))
     parser.add_argument("--db-host", default=os.getenv("DB_HOST", "localhost"))
@@ -437,6 +634,7 @@ def main():
     parser.add_argument("--db-name", default=os.getenv("DB_NAME", "ibrida-v0-r1"))
     parser.add_argument("--fuzzy-match", action="store_true", help="Enable fuzzy matching for unmatched taxa")
     parser.add_argument("--fuzzy-threshold", type=int, default=90, help="Threshold score (0-100) for fuzzy matching")
+    parser.add_argument("--processes", type=int, default=None, help="Number of parallel processes to use (default: CPU count - 1)")
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
     args = parser.parse_args()
 
@@ -450,7 +648,12 @@ def main():
     session = Session()
 
     try:
-        perform_mapping(session, fuzzy_match=args.fuzzy_match, fuzzy_threshold=args.fuzzy_threshold)
+        perform_mapping_parallel(
+            session, 
+            num_processes=args.processes, 
+            fuzzy_match=args.fuzzy_match, 
+            fuzzy_threshold=args.fuzzy_threshold
+        )
     except Exception as e:
         logger.error(f"An error occurred during the mapping process: {e}")
         session.rollback()

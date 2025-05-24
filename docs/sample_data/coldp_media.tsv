@@ -1,0 +1,11 @@
+taxonID	sourceID	url	type	format	title	created	creator	license	link	remarks
+C33N7		https://example.org/images/amalocythere_fulgida.jpg	stillImage	image/jpeg	Amalocythere fulgida	2018-06-30	Smith, J.	CC-BY-4.0	https://example.org/taxa/amalocythere_fulgida	
+3HNHY		https://example.org/images/guzmania_variegata.jpg	stillImage	image/jpeg	Guzmania variegata	2019-07-15	Botanica Inc.	CC-BY-NC-4.0	https://example.org/taxa/guzmania_variegata	
+85BKX		https://example.org/images/coronalpheus.jpg	stillImage	image/jpeg	Coronalpheus species	2017-04-10	Marine Biology Center	CC-BY-4.0	https://example.org/taxa/coronalpheus	
+B6LM6		https://example.org/images/bacteria.svg	stillImage	image/svg+xml	Bacteria diagram	2020-01-05	Science Education Dept.	public domain	https://example.org/taxa/bacteria	
+R5LB		https://example.org/images/sandcarpet.jpg	stillImage	image/jpeg	Sandcarpet	2018-09-22	Coastal Research Unit	CC-BY-4.0	https://example.org/taxa/sandcarpet	
+6X2FN		https://example.org/images/pyrnus_pins.jpg	stillImage	image/jpeg	Pyrnus pins specimen	2015-11-18	Arachnology Institute	CC-BY-NC-SA-4.0	https://example.org/taxa/pyrnus_pins	
+7TDYP		https://example.org/sounds/triphora_sarissa.mp3	sound	audio/mpeg	Triphora sarissa underwater recording	2019-03-05	Marine Audio Library	CC-BY-4.0	https://example.org/taxa/triphora_sarissa	
+8VVZD		https://example.org/videos/taxon_8VVZD.mp4	video	video/mp4	Specimen in natural habitat	2017-08-12	EcoMedia Productions	CC-BY-4.0	https://example.org/taxa/8VVZD	
+BLL2J		https://example.org/images/taxon_BLL2J.png	stillImage	image/png	Microscope image	2020-05-30	University Research Lab	CC-BY-4.0	https://example.org/taxa/BLL2J	
+69PYD		https://example.org/3d/taxon_69PYD.glb	3dModel	model/gltf-binary	3D Scan of specimen	2021-02-14	Digital Collections Lab	CC-BY-NC-4.0	https://example.org/taxa/69PYD_3d	

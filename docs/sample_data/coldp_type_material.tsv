@@ -1,0 +1,6 @@
+ID	nameID	sourceID	citation	status	referenceID	page	country	locality	latitude	longitude	altitude	sex	host	associatedSequences	date	collector	institutionCode	catalogNumber	link	remarks
+TM001	3HNHY		Type specimen of Guzmania variegata L.B.Sm.	holotype			EC	Morona-Santiago Province	-2.78561	-78.12345	1200		Epiphytic on canopy trees		1952-07-15	Smith, L.B.	US	1234567		
+TM002	85BKX		Wicksten, M.N. 1999. New species and records of snapping shrimps of the genus Alpheus.	holotype	6b833931-90b9-4dca-b98c-d3e300075c7e	45	MX	Gulf of California	24.56789	-110.12345		female			1998-03-20	Wicksten, M.N.	USNM	ABC12345		
+TM003	C33N7		Original specimen described by Guan in 1978	holotype			CN	Bohai Sea	38.12345	120.56789			Marine sediment	GenBank:MK123456	1977-10-05	Guan, S.Z.	NIGP	NIGP35790		
+TM004	6X2FN		Platnick's original specimen from 2002 publication	holotype	fa90c9ed-a347-4ae8-9feb-d2dec6bd8f97	78	AU	Queensland, Eungella National Park	-21.12345	148.56789	800	male	Bark of Eucalyptus	GenBank:KF123456	2001-09-12	Platnick, N.I.	AM	KS12345		
+TM005	7TDYP		Dall, W.H. 1889. Reports on the results of dredging in the Gulf of Mexico	holotype			US	Gulf of Mexico	27.56789	-84.12345	150			GenBank:KX123456	1889-06-18	Dall, W.H.	USNM	123456		
