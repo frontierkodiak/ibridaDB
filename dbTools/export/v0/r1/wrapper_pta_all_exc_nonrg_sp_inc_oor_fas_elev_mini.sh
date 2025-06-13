@@ -34,26 +34,21 @@ log_message "Release: ${RELEASE_VALUE}"
 # ---------------------------------------------------------------------------
 export REGION_TAG="NAfull"
 export MIN_OBS=50
-export MAX_RN=2500
+export MAX_RN=100
 export PRIMARY_ONLY=true
 
-export CLADE="amphibia"
-export EXPORT_GROUP="amphibia_all_exc_nonrg_sp_inc_oor_fas_elev"
+export METACLADE="pta" # primary_terrestrial_arthropoda
+export EXPORT_GROUP="pta_all_exc_nonrg_sp_inc_oor_fas_elev_mini"
 
 # Additional flags
 export PROCESS_OTHER=false
-export SKIP_REGIONAL_BASE=false  # Master switch, we'll set the granular flags below
-
-# New granular control flags
-export SKIP_ALL_SP_TABLE=true    # REUSE the base species table
-export SKIP_ANCESTORS_TABLE=false # CREATE new clade-specific ancestor tables
+export SKIP_REGIONAL_BASE=false  # typically used for successive cladistic exports
 
 # ---[ NEW ENV VARS ]---
 # Whether to include out-of-region observations in the final dataset
 export INCLUDE_OUT_OF_REGION_OBS=true
-# Include elevation_meters in the final dataset?
-export INCLUDE_ELEVATION_EXPORT=true
 
+export INCLUDE_ELEVATION_EXPORT=true
 # Whether to keep research-grade only, non-research, etc.
 # For now, we default to ALL; future steps will integrate it
 export RG_FILTER_MODE="ALL_EXCLUDE_SPECIES_NON_RESEARCH"
