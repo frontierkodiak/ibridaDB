@@ -153,8 +153,17 @@ The **expanded_taxa** table is generated from the iNaturalist `taxa` table by th
 | rankLevel   | double precision  | Numeric indicator of the taxonomic rank. |
 | rank        | varchar(255)      | Taxonomic rank label. |
 | name        | varchar(255)      | Scientific name of the taxon. |
-| commonName        | varchar(255)      | Common name of the taxon. |
+| commonName  | varchar(255)      | Common name of the taxon (from ColDP integration). |
 | taxonActive | boolean           | Indicates whether the taxon is active. |
+
+**Immediate Ancestor Columns:**
+
+| Column                           | Type              | Description |
+|----------------------------------|-------------------|-------------|
+| immediateMajorAncestor_taxonID   | integer           | Taxon ID of the immediate major ancestor (next rank level up in major taxonomy). |
+| immediateMajorAncestor_rankLevel | double precision  | Rank level of the immediate major ancestor. |
+| immediateAncestor_taxonID        | integer           | Taxon ID of the immediate ancestor (direct parent in taxonomy). |
+| immediateAncestor_rankLevel      | double precision  | Rank level of the immediate ancestor. |
 
 **Expanded Columns:**
 
@@ -559,22 +568,28 @@ Below are example outputs from PostgreSQL's `\d` command for key tables. These s
 
 ```sql
 -- \d "expanded_taxa"
-      Column      |          Type          
-------------------+------------------------
- taxonID          | integer    (PK)
- rankLevel        | double precision       
- rank             | varchar(255)           
- name             | varchar(255)           
- taxonActive      | boolean                
- commonName       | varchar(255)           
- L5_taxonID       | integer                
- L5_name          | varchar(255)           
- L5_commonName    | varchar(255)           
- L10_taxonID      | integer                
- L10_name         | varchar(255)           
- L10_commonName   | varchar(255)           
- ...              | ...                    
- L70_taxonID      | integer                
+              Column              |          Type          
+----------------------------------+------------------------
+ taxonID                          | integer    (PK)
+ rankLevel                        | double precision       
+ rank                             | varchar(255)           
+ name                             | varchar(255)           
+ taxonActive                      | boolean                
+ commonName                       | varchar(255)           
+ L5_taxonID                       | integer                
+ L5_name                          | varchar(255)           
+ L5_commonName                    | varchar(255)           
+ L10_taxonID                      | integer                
+ L10_name                         | varchar(255)           
+ L10_commonName                   | varchar(255)           
+ ...                              | ...                    
+ L70_taxonID                      | integer                
+ L70_name                         | varchar(255)           
+ L70_commonName                   | varchar(255)           
+ immediateMajorAncestor_taxonID   | integer                
+ immediateMajorAncestor_rankLevel | double precision       
+ immediateAncestor_taxonID        | integer                
+ immediateAncestor_rankLevel      | double precision       
 ```
 
 ### Final Export Table (Example)

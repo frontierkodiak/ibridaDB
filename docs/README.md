@@ -264,8 +264,9 @@ To add a new data release:
 Current versions:
 - v0r0: June 2024 iNat data release
 - v0r1: December 2024 iNat data release (adds anomaly_score column to observations table)
-  - (in-place update) added elevation_meters column to observations tables
-- v0r2: February 2025 iNat data release (built with elevation data)
+  - (in-place update) added elevation_meters column to observations tables  
+  - (in-place update) Rebuilt expanded_taxa with ColDP integration (now includes common names at all taxonomic levels)
+  - (in-place update) Added 4 new immediate ancestor columns to expanded_taxa: `immediateMajorAncestor_taxonID`, `immediateMajorAncestor_rankLevel`, `immediateAncestor_taxonID`, `immediateAncestor_rankLevel`
 
 ---
 
