@@ -1,0 +1,12 @@
+Anthophila Duplicate Analysis Results
+=====================================
+
+Total unique anthophila observation IDs: 55560
+Found in database (duplicates): 
+Duplicate percentage: %
+New observations: 55560
+New percentage: 100.0%
+
+Duplicate observation IDs:
+
+New observation IDs:

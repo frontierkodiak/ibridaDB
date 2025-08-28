@@ -277,6 +277,57 @@ As this is primarily a data processing system, there are no formal unit tests. I
    - Run parallelized wrapper script
    - Verify mappings and common name population
 
+## Issue Tracking Workflow
+
+### Overview
+The repository uses a streamlined issue tracking system in `dev/issues/` to maintain context and state across agent sessions. All issues use frontmatter metadata defined in `.claude/schemas/frontmatter.json`.
+
+### Workflow
+1. **Issue Creation**: Create issues in appropriate priority directories (P0-P3)
+2. **Active Work**: Update issue status and notes as work progresses
+3. **Completion**: Mark as "closed" and move to `closed/` directory
+4. **Long-term Storage**: Archive completed plan phases to `archive/`
+
+### Issue Lifecycle & Status
+- `open` → Issue identified, not yet started
+- `in_progress` → Actively working on this issue  
+- `blocked` → Cannot proceed (document reason in notes)
+- `completed` → Work finished, verification passed
+- `closed` → Issue resolved and archived
+
+### Priority Levels
+- **P0**: Critical - Blocks core functionality
+- **P1**: High - Important features or significant bugs
+- **P2**: Normal - Standard features and improvements  
+- **P3**: Low - Nice-to-have features, minor improvements
+
+### Creating Issues
+1. Use template at `dev/issues/ISSUE_TEMPLATE.md`
+2. Add proper frontmatter using `.claude/schemas/frontmatter.json`
+3. Place in appropriate priority directory (P0-P3)
+4. Update `dev/issues/ISSUE_TRACKER.md` when status changes
+
+### Issue Management Rules
+1. **Always check** `dev/issues/ISSUE_TRACKER.md` for current status before starting work
+2. Update issue frontmatter with progress notes for context preservation
+3. Move completed issues to `closed/` directory immediately
+4. Archive long-term completed work to `archive/` organized by plan/theme
+5. Reference related commits, file paths, and documentation entries
+6. **All development work should be issue-driven** - create issues for features, bugs, and improvements
+
+### Directory Structure
+```
+dev/issues/
+├── ISSUE_TRACKER.md          # Master tracking document
+├── ISSUE_TEMPLATE.md          # Template for new issues
+├── P0/                        # Critical priority issues
+├── P1/                        # High priority issues
+├── P2/                        # Normal priority issues  
+├── P3/                        # Low priority issues
+├── closed/                    # Recently closed issues
+└── archive/                   # Long-term archived issues
+```
+
 ## Notes and Considerations
 
 - This system is designed to be reproducible - the same inputs should always produce the same database
@@ -285,3 +336,4 @@ As this is primarily a data processing system, there are no formal unit tests. I
 - Export generates detailed summaries alongside CSV files
 - Config follows the single responsibility principle - wrappers should focus on one specific task
 - The ColDP fuzzy matching process is highly CPU-intensive but can be parallelized effectively
+- **Use issue-driven development**: All code changes should be associated with tracked issues in `dev/issues/`

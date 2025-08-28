@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Issue Frontmatter Schema",
+  "type": "object",
+  "properties": {
+    "issue_id": {
+      "type": "string",
+      "description": "Unique identifier for the issue (e.g., POLLI-001)"
+    },
+    "title": {
+      "type": "string",
+      "description": "Brief descriptive title of the issue"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["open", "in_progress", "blocked", "completed", "closed"],
+      "default": "open",
+      "description": "Current status of the issue"
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["critical", "high", "normal", "low"],
+      "default": "normal",
+      "description": "Priority level of the issue"
+    },
+    "plan": {
+      "type": "string",
+      "description": "Associated plan (e.g., plan0, plan1)"
+    },
+    "phase": {
+      "type": "string",
+      "description": "Phase within the plan (e.g., Phase 0, Phase 1)"
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when issue was created"
+    },
+    "updated": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when issue was last updated"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags for categorization"
+    },
+    "blocked_by": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Issue IDs that block this issue"
+    },
+    "blocks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Issue IDs that this issue blocks"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes for context preservation"
+    }
+  },
+  "required": ["issue_id", "title", "status", "plan", "created"]
+}
