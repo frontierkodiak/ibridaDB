@@ -16,7 +16,7 @@ DB_USER="${DB_USER:-postgres}"
 DB_PASSWORD="${DB_PASSWORD:-ooglyboogly69}" # Hardcoded password for private repo
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
-DB_NAME="${DB_NAME:-ibrida-v0-r1}" # Target ibridaDB database
+DB_NAME="${DB_NAME:-ibrida-v0}" # Target ibridaDB database
 
 COLDP_DATA_DIR="${COLDP_DATA_DIR:-/datasets/taxa/catalogue_of_life/2024/ColDP}" # Path to unzipped ColDP files
 

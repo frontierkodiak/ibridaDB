@@ -23,7 +23,7 @@ echo "Total unique anthophila observation IDs: $TOTAL_IDS"
 # Create temporary table in database with our IDs
 echo "Creating temporary table with anthophila IDs..."
 
-docker exec ibridaDB psql -U postgres -d ibrida-v0-r1 -c "
+docker exec ibridaDB psql -U postgres -d ibrida-v0 -c "
     DROP TABLE IF EXISTS temp_anthophila_ids;
     CREATE TEMPORARY TABLE temp_anthophila_ids (observation_id INTEGER);
 "
@@ -35,7 +35,7 @@ split -l 1000 "$TEMP_IDS" /tmp/anthophila_batch_
 for batch_file in /tmp/anthophila_batch_*; do
     if [ -s "$batch_file" ]; then
         IDS=$(tr '\n' ',' < "$batch_file" | sed 's/,$//')
-        docker exec ibridaDB psql -U postgres -d ibrida-v0-r1 -c "
+        docker exec ibridaDB psql -U postgres -d ibrida-v0 -c "
             INSERT INTO temp_anthophila_ids (observation_id) 
             VALUES ($(echo "$IDS" | sed 's/,/),(/g'));
         " 2>/dev/null
@@ -48,7 +48,7 @@ rm -f /tmp/anthophila_batch_*
 echo "Checking for duplicates in photos table..."
 
 # Check duplicates against photos.photo_id
-DUPLICATE_COUNT=$(docker exec ibridaDB psql -U postgres -d ibrida-v0-r1 -t -c "
+DUPLICATE_COUNT=$(docker exec ibridaDB psql -U postgres -d ibrida-v0 -t -c "
     SELECT COUNT(DISTINCT t.observation_id)
     FROM temp_anthophila_ids t
     JOIN photos p ON t.observation_id = p.photo_id;
@@ -71,7 +71,7 @@ echo "New percentage: $NEW_PERCENT%"
 # Get sample duplicates
 echo ""
 echo "Sample duplicate observation IDs:"
-docker exec ibridaDB psql -U postgres -d ibrida-v0-r1 -t -c "
+docker exec ibridaDB psql -U postgres -d ibrida-v0 -t -c "
     SELECT t.observation_id
     FROM temp_anthophila_ids t
     JOIN photos p ON t.observation_id = p.photo_id
@@ -86,7 +86,7 @@ done
 # Get sample new IDs
 echo ""
 echo "Sample NEW observation IDs (not in database):"
-docker exec ibridaDB psql -U postgres -d ibrida-v0-r1 -t -c "
+docker exec ibridaDB psql -U postgres -d ibrida-v0 -t -c "
     SELECT t.observation_id
     FROM temp_anthophila_ids t
     LEFT JOIN photos p ON t.observation_id = p.photo_id
@@ -118,7 +118,7 @@ New percentage: $NEW_PERCENT%
 Duplicate observation IDs:
 EOF
 
-docker exec ibridaDB psql -U postgres -d ibrida-v0-r1 -t -c "
+docker exec ibridaDB psql -U postgres -d ibrida-v0 -t -c "
     SELECT t.observation_id
     FROM temp_anthophila_ids t
     JOIN photos p ON t.observation_id = p.photo_id
@@ -128,7 +128,7 @@ docker exec ibridaDB psql -U postgres -d ibrida-v0-r1 -t -c "
 echo "" >> "$RESULTS_FILE"
 echo "New observation IDs:" >> "$RESULTS_FILE"
 
-docker exec ibridaDB psql -U postgres -d ibrida-v0-r1 -t -c "
+docker exec ibridaDB psql -U postgres -d ibrida-v0 -t -c "
     SELECT t.observation_id
     FROM temp_anthophila_ids t
     LEFT JOIN photos p ON t.observation_id = p.photo_id

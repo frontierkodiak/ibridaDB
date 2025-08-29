@@ -53,7 +53,7 @@ The ingestion pipeline is controlled by several environment variables. The key o
   Data release identifier (e.g., `"r1"`).
 
 - **`DB_NAME`**  
-  Name of the new database (e.g., `"ibrida-v0-r1"`).
+  Name of the new database (e.g., `"ibrida-v0"`).
 
 - **`DB_CONTAINER`**  
   Name of the Docker container running PostgreSQL (e.g., `"ibridaDB"`).
@@ -161,7 +161,7 @@ For an existing database update, simply run the elevation wrapper:
 #!/bin/bash
 # Example: dbTools/ingest/v0/utils/elevation/wrapper.sh
 
-export DB_NAME="ibrida-v0-r1"
+export DB_NAME="ibrida-v0"
 export DB_USER="postgres"
 export DB_CONTAINER="ibridaDB"
 export DEM_DIR="/datasets/dem/merit"

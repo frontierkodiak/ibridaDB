@@ -117,7 +117,7 @@ To run this query and generate the sample data:
 docker cp docs/sample_data/generate_lca_sample.sql ibridaDB:/tmp/
 
 # Execute the SQL query
-docker exec ibridaDB psql -U postgres -d ibrida-v0-r1 -f /tmp/generate_lca_sample.sql
+docker exec ibridaDB psql -U postgres -d ibrida-v0 -f /tmp/generate_lca_sample.sql
 
 # Copy the results back from the container
 docker cp ibridaDB:/tmp/expanded_taxa_lca_sample.tsv docs/sample_data/expanded_taxa_lca_sample.tsv

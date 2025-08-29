@@ -1,12 +1,12 @@
 ---
 issue_id: "IBRIDA-007"
 title: "Load Aug-2025 iNat CSVs into staging schema stg_inat_20250827"
-status: "open"
+status: "in_progress"
 priority: "high"
 plan: "anthophila_r2_integration"
 phase: "Phase 1"
 created: "2025-08-28T00:00:00Z"
-updated: "2025-08-28T00:00:00Z"
+updated: "2025-08-29T00:00:00Z"
 tags: ["staging","inat","csv","psql","copy"]
 blocked_by: ["IBRIDA-017"]
 blocks: ["IBRIDA-008","IBRIDA-009"]

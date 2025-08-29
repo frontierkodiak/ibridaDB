@@ -262,7 +262,7 @@ def main():
     parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD", "password"))
     parser.add_argument("--db-host", default=os.getenv("DB_HOST", "localhost"))
     parser.add_argument("--db-port", default=os.getenv("DB_PORT", "5432"))
-    parser.add_argument("--db-name", default=os.getenv("DB_NAME", "ibrida-v0-r1"))
+    parser.add_argument("--db-name", default=os.getenv("DB_NAME", "ibrida-v0"))
     parser.add_argument("--batch-size", type=int, default=50000, help="Batch size for updates")
     parser.add_argument("--skip-add-columns", action="store_true", help="Skip adding columns if they already exist")
     parser.add_argument("--skip-populate", action="store_true", help="Skip populating the columns")

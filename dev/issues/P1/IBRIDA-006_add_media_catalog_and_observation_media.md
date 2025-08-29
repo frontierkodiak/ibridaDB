@@ -1,12 +1,12 @@
 ---
 issue_id: "IBRIDA-006"
 title: "Add generic media catalog (URIs) + observation_media junction; do not alter iNat photos"
-status: "open"
+status: "in_progress"
 priority: "high"
 plan: "anthophila_r2_integration"
 phase: "Phase 2"
 created: "2025-08-28T00:00:00Z"
-updated: "2025-08-28T00:00:00Z"
+updated: "2025-08-29T00:00:00Z"
 tags: ["schema","ddl","media","uri","sidecar","migration"]
 blocked_by: ["IBRIDA-017"]
 blocks: ["IBRIDA-013","IBRIDA-021","IBRIDA-022","IBRIDA-023","IBRIDA-024"]

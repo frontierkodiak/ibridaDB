@@ -21,16 +21,16 @@ DB_USER=postgres
 DB_PASSWORD=ooglyboogly69
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=ibrida-v0-r1
+DB_NAME=ibrida-v0
 
 # Connect using psql through Docker
-docker exec -it ibridaDB psql -U postgres -d ibrida-v0-r1
+docker exec -it ibridaDB psql -U postgres -d ibrida-v0
 
 # Run SQL commands from outside
-docker exec ibridaDB psql -U postgres -d ibrida-v0-r1 -c "SELECT COUNT(*) FROM observations"
+docker exec ibridaDB psql -U postgres -d ibrida-v0 -c "SELECT COUNT(*) FROM observations"
 
 # Backup a table
-docker exec ibridaDB pg_dump -U postgres -d ibrida-v0-r1 -t observations > observations_backup.sql
+docker exec ibridaDB pg_dump -U postgres -d ibrida-v0 -t observations > observations_backup.sql
 ```
 
 ## Key Concepts

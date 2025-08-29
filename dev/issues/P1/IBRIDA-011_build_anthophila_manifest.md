@@ -1,12 +1,12 @@
 ---
 issue_id: "IBRIDA-011"
 title: "Build anthophila_manifest.csv with sha256, pHash, size, ID-type guess"
-status: "open"
+status: "in_progress"
 priority: "high"
 plan: "anthophila_r2_integration"
 phase: "Phase 3"
 created: "2025-08-28T00:00:00Z"
-updated: "2025-08-28T00:00:00Z"
+updated: "2025-08-29T00:00:00Z"
 tags: ["anthophila","manifest","hashing","pHash","scanner"]
 blocked_by: ["IBRIDA-017"]
 blocks: ["IBRIDA-012","IBRIDA-013"]

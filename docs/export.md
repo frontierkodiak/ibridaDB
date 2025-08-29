@@ -108,7 +108,7 @@ The export pipeline is configured via several environment variables, which are t
   *Description:* Data provenance (e.g., `"iNat-Dec2024"`).
 
 - **`DB_NAME`**  
-  *Description:* Name of the database (e.g., `"ibrida-v0-r1"`).
+  *Description:* Name of the database (e.g., `"ibrida-v0"`).
 
 - **`DB_CONTAINER`**  
   *Description:* Name of the Docker container running PostgreSQL (e.g., `"ibridaDB"`).

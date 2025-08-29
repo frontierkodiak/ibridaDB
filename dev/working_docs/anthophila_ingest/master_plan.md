@@ -23,7 +23,7 @@ notes: "Single source of truth for Phase R2: add Aug-2025 iNat delta + ingest an
 ## Milestones (dependency-ordered)
 
 **M0. Safety & Naming**
-- P0: Backup `ibrida-v0-r1`; test restore; rename DB to `ibrida-v0`; update in-repo references (excl. archival wrappers). ’ _IBRIDA-017_
+- P0: Backup `ibrida-v0`; test restore; rename DB to `ibrida-v0`; update in-repo references (excl. archival wrappers). ’ _IBRIDA-017_
 
 **M1. Staging & Preflight**
 - P1: Load Aug-2025 iNat CSVs to staging `stg_inat_20250827`. ’ _IBRIDA-007_

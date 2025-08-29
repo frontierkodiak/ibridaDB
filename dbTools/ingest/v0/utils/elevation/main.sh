@@ -11,7 +11,7 @@
 #   main.sh <DB_NAME> <DB_USER> <DB_CONTAINER> <DEM_DIR> <NUM_PROCESSES> [EPSG=4326] [TILE_SIZE=100x100]
 #
 # Example:
-#   main.sh ibrida-v0-r1 postgres ibridaDB /datasets/dem/merit 16 4326 100x100
+#   main.sh ibrida-v0 postgres ibridaDB /datasets/dem/merit 16 4326 100x100
 #
 # Notes:
 #   - Called by wrapper.sh typically, but can be run standalone.

@@ -47,7 +47,7 @@ source "/home/caleb/repo/ibridaDB/dbTools/export/v0/common/functions.sh"
 
 # Environment / defaults
 DB_CONTAINER="${DB_CONTAINER:-ibridaDB}"
-DB_NAME="${DB_NAME:-ibrida-v0-r1}"
+DB_NAME="${DB_NAME:-ibrida-v0}"
 DB_USER="${DB_USER:-postgres}"
 
 # If DEBUG_EXPAND_TAXA=true, we pass a GUC variable into Postgres to enable debug
