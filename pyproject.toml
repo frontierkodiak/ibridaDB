@@ -35,6 +35,7 @@ dependencies = [
     "pandas>=2.2.2",
     "numpy>=1.26.4",
     "tqdm>=4.66.4",
+    "polars>=0.20.0",
     
     # Image processing for anthophila manifest
     "Pillow>=10.0.0",

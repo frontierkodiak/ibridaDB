@@ -1,7 +1,7 @@
 ---
 issue_id: "IBRIDA-017"
 title: "Safe backup of ibrida-v0, test restore, then rename DB to ibrida-v0 and update references"
-status: "in_progress"
+status: "completed"
 priority: "critical"
 plan: "anthophila_r2_integration"
 phase: "Phase 0"

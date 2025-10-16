@@ -27,24 +27,24 @@ CREATE TABLE IF NOT EXISTS ${SCHEMA_NAME}.taxa (LIKE public.taxa INCLUDING ALL);
 "
 
 echo "==> Loading observations.csv"
-docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -c "
-\\copy ${SCHEMA_NAME}.observations FROM '/metadata/Aug2025/observations.csv' WITH CSV HEADER;
-"
+docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" <<EOF
+\\copy ${SCHEMA_NAME}.observations (observation_uuid, observer_id, latitude, longitude, positional_accuracy, taxon_id, quality_grade, observed_on, anomaly_score) FROM '/metadata/Aug2025/observations.csv' DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;
+EOF
 
 echo "==> Loading photos.csv" 
-docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -c "
-\\copy ${SCHEMA_NAME}.photos FROM '/metadata/Aug2025/photos.csv' WITH CSV HEADER;
-"
+docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" <<EOF
+\\copy ${SCHEMA_NAME}.photos (photo_uuid, photo_id, observation_uuid, observer_id, extension, license, width, height, position) FROM '/metadata/Aug2025/photos.csv' DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;
+EOF
 
 echo "==> Loading observers.csv"
-docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -c "
-\\copy ${SCHEMA_NAME}.observers FROM '/metadata/Aug2025/observers.csv' WITH CSV HEADER;
-"
+docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" <<EOF
+\\copy ${SCHEMA_NAME}.observers (observer_id, login, name) FROM '/metadata/Aug2025/observers.csv' DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;
+EOF
 
 echo "==> Loading taxa.csv"
-docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -c "
-\\copy ${SCHEMA_NAME}.taxa FROM '/metadata/Aug2025/taxa.csv' WITH CSV HEADER;
-"
+docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" <<EOF
+\\copy ${SCHEMA_NAME}.taxa (taxon_id, ancestry, rank_level, rank, name, active) FROM '/metadata/Aug2025/taxa.csv' DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;
+EOF
 
 echo "==> Running ANALYZE on all staging tables"
 execute_sql "
