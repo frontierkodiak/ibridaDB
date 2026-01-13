@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Load Aug-2025 iNat CSVs into staging schema
+# Load iNat CSVs into staging schema
 DB_CONTAINER="${DB_CONTAINER:-ibridaDB}"
 DB_USER="${DB_USER:-postgres}"
 DB_NAME="${DB_NAME:-ibrida-v0}"
@@ -28,24 +28,60 @@ CREATE TABLE IF NOT EXISTS ${SCHEMA_NAME}.taxa (LIKE public.taxa INCLUDING ALL);
 "
 
 echo "==> Loading observations.csv"
-docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" <<EOF
+if docker exec "${DB_CONTAINER}" sh -c "test -f '${CONTAINER_INTAKE_PATH}/observations.csv'"; then
+  docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" <<EOF
 \\copy ${SCHEMA_NAME}.observations (observation_uuid, observer_id, latitude, longitude, positional_accuracy, taxon_id, quality_grade, observed_on, anomaly_score) FROM '${CONTAINER_INTAKE_PATH}/observations.csv' DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;
 EOF
+else
+  HOST_OBS="${INTAKE_PATH}/observations.csv"
+  if [[ ! -f "${HOST_OBS}" ]]; then
+    echo "ERROR: observations.csv not found at ${HOST_OBS} and container path missing"
+    exit 1
+  fi
+  cat "${HOST_OBS}" | docker exec -i "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -v ON_ERROR_STOP=1 -c "\\copy ${SCHEMA_NAME}.observations (observation_uuid, observer_id, latitude, longitude, positional_accuracy, taxon_id, quality_grade, observed_on, anomaly_score) FROM STDIN DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;"
+fi
 
 echo "==> Loading photos.csv" 
-docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" <<EOF
+if docker exec "${DB_CONTAINER}" sh -c "test -f '${CONTAINER_INTAKE_PATH}/photos.csv'"; then
+  docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" <<EOF
 \\copy ${SCHEMA_NAME}.photos (photo_uuid, photo_id, observation_uuid, observer_id, extension, license, width, height, position) FROM '${CONTAINER_INTAKE_PATH}/photos.csv' DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;
 EOF
+else
+  HOST_PHOTOS="${INTAKE_PATH}/photos.csv"
+  if [[ ! -f "${HOST_PHOTOS}" ]]; then
+    echo "ERROR: photos.csv not found at ${HOST_PHOTOS} and container path missing"
+    exit 1
+  fi
+  cat "${HOST_PHOTOS}" | docker exec -i "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -v ON_ERROR_STOP=1 -c "\\copy ${SCHEMA_NAME}.photos (photo_uuid, photo_id, observation_uuid, observer_id, extension, license, width, height, position) FROM STDIN DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;"
+fi
 
 echo "==> Loading observers.csv"
-docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" <<EOF
+if docker exec "${DB_CONTAINER}" sh -c "test -f '${CONTAINER_INTAKE_PATH}/observers.csv'"; then
+  docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" <<EOF
 \\copy ${SCHEMA_NAME}.observers (observer_id, login, name) FROM '${CONTAINER_INTAKE_PATH}/observers.csv' DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;
 EOF
+else
+  HOST_OBSERVERS="${INTAKE_PATH}/observers.csv"
+  if [[ ! -f "${HOST_OBSERVERS}" ]]; then
+    echo "ERROR: observers.csv not found at ${HOST_OBSERVERS} and container path missing"
+    exit 1
+  fi
+  cat "${HOST_OBSERVERS}" | docker exec -i "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -v ON_ERROR_STOP=1 -c "\\copy ${SCHEMA_NAME}.observers (observer_id, login, name) FROM STDIN DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;"
+fi
 
 echo "==> Loading taxa.csv"
-docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" <<EOF
+if docker exec "${DB_CONTAINER}" sh -c "test -f '${CONTAINER_INTAKE_PATH}/taxa.csv'"; then
+  docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" <<EOF
 \\copy ${SCHEMA_NAME}.taxa (taxon_id, ancestry, rank_level, rank, name, active) FROM '${CONTAINER_INTAKE_PATH}/taxa.csv' DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;
 EOF
+else
+  HOST_TAXA="${INTAKE_PATH}/taxa.csv"
+  if [[ ! -f "${HOST_TAXA}" ]]; then
+    echo "ERROR: taxa.csv not found at ${HOST_TAXA} and container path missing"
+    exit 1
+  fi
+  cat "${HOST_TAXA}" | docker exec -i "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -v ON_ERROR_STOP=1 -c "\\copy ${SCHEMA_NAME}.taxa (taxon_id, ancestry, rank_level, rank, name, active) FROM STDIN DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;"
+fi
 
 echo "==> Running ANALYZE on all staging tables"
 execute_sql "
