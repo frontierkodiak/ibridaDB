@@ -1,6 +1,8 @@
 uv.lock
 
 .exports/
+*_export.txt
+*repo-report_export.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
