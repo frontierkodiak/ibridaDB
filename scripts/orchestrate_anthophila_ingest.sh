@@ -14,7 +14,12 @@ ANTHOPHILA_DIR="${ANTHOPHILA_DIR:-/datasets/dataZoo/anthophila}"
 FLAT_DIR="${FLAT_DIR:-/datasets/ibrida-data/anthophila_flat}"
 MANIFEST_CSV="${MANIFEST_CSV:-${REPO_ROOT}/anthophila_manifest.csv}"
 DEDUP_CSV="${DEDUP_CSV:-${REPO_ROOT}/anthophila_duplicates.csv}"
+RESOLVED_CSV="${RESOLVED_CSV:-${REPO_ROOT}/anthophila_duplicates_resolved.csv}"
 DB_CONNECTION="${DB_CONNECTION:-postgresql://postgres:ooglyboogly69@localhost/ibrida-v0}"
+DATASET="${DATASET:-anthophila}"
+ORIGIN="${ORIGIN:-anthophila}"
+VERSION="${VERSION:-v0}"
+RELEASE="${RELEASE:-r2}"
 
 DRY_RUN=false
 if [[ "${1:-}" == "--dry-run" ]]; then
@@ -37,7 +42,9 @@ echo "    Anthophila dir: $ANTHOPHILA_DIR"
 echo "    Flat dir: $FLAT_DIR" 
 echo "    Manifest CSV: $MANIFEST_CSV"
 echo "    Dedup CSV: $DEDUP_CSV"
+echo "    Resolved CSV: $RESOLVED_CSV"
 echo "    DB connection: $DB_CONNECTION"
+echo "    Dataset: $DATASET  Origin: $ORIGIN  Version: $VERSION  Release: $RELEASE"
 echo
 
 # Step 1: Build manifest
@@ -65,12 +72,27 @@ else
     echo "    Deduplication results already exist and are up to date: $DEDUP_CSV"
 fi
 
-# Step 4: Materialize flat directory and insert into media table
-echo "==> Step 4: Materializing anthophila_flat/ and inserting media records"
+# Step 3.5: Resolve taxa
+echo "==> Step 3.5: Resolving scientific names to taxon_id"
+if [[ ! -f "$RESOLVED_CSV" ]] || [[ "$RESOLVED_CSV" -ot "$DEDUP_CSV" ]]; then
+    run_cmd uv run python3 "${SCRIPT_DIR}/resolve_anthophila_taxa.py" \
+        --manifest "$DEDUP_CSV" \
+        --output "$RESOLVED_CSV" \
+        --db-connection "$DB_CONNECTION"
+else
+    echo "    Resolved manifest already exists and is up to date: $RESOLVED_CSV"
+fi
+
+# Step 4: Materialize flat directory and insert into media/observations tables
+echo "==> Step 4: Materializing anthophila_flat/ and inserting records"
 run_cmd uv run python3 "${SCRIPT_DIR}/materialize_anthophila_flat.py" \
-    --manifest "$DEDUP_CSV" \
+    --manifest "$RESOLVED_CSV" \
     --flat-dir "$FLAT_DIR" \
-    --db-connection "$DB_CONNECTION"
+    --db-connection "$DB_CONNECTION" \
+    --dataset "$DATASET" \
+    --origin "$ORIGIN" \
+    --version "$VERSION" \
+    --release "$RELEASE"
 
 # Step 5: Summary and verification
 echo "==> Step 5: Final verification and summary"
@@ -83,13 +105,17 @@ if [[ "$DRY_RUN" == "false" ]]; then
     
     # Count media records
     MEDIA_COUNT=$(docker exec ibridaDB psql -U postgres -d ibrida-v0 -t -c \
-        "SELECT COUNT(*) FROM media WHERE dataset = 'anthophila' AND release = 'r2';" | tr -d ' ')
-    echo "Media table records (anthophila r2): $MEDIA_COUNT"
+        "SELECT COUNT(*) FROM media WHERE dataset = '${DATASET}' AND release = '${RELEASE}';" | tr -d ' ')
+    echo "Media table records (${DATASET} ${RELEASE}): $MEDIA_COUNT"
     
     # Count kept vs total from dedup CSV
-    if [[ -f "$DEDUP_CSV" ]]; then
-        TOTAL_COUNT=$(tail -n +2 "$DEDUP_CSV" | wc -l)
-        KEPT_COUNT=$(tail -n +2 "$DEDUP_CSV" | awk -F',' '$NF == "True"' | wc -l)
+    if [[ -f "$RESOLVED_CSV" ]]; then
+        TOTAL_COUNT=$(tail -n +2 "$RESOLVED_CSV" | wc -l)
+        KEPT_COUNT=$(awk -F',' '
+          NR==1 {for (i=1;i<=NF;i++) if ($i=="keep_flag") k=i}
+          NR>1 && k>0 && $k=="True" {c++}
+          END {print c+0}
+        ' "$RESOLVED_CSV")
         DUPLICATE_COUNT=$((TOTAL_COUNT - KEPT_COUNT))
         
         echo "Total anthophila files processed: $TOTAL_COUNT"
@@ -116,7 +142,12 @@ ANTHOPHILA_DIR=$ANTHOPHILA_DIR
 FLAT_DIR=$FLAT_DIR
 MANIFEST_CSV=$MANIFEST_CSV
 DEDUP_CSV=$DEDUP_CSV
+RESOLVED_CSV=$RESOLVED_CSV
 DB_CONNECTION=$DB_CONNECTION
+DATASET=$DATASET
+ORIGIN=$ORIGIN
+VERSION=$VERSION
+RELEASE=$RELEASE
 EOF
     echo "Configuration saved to: ${REPO_ROOT}/anthophila_ingest_config.txt"
 fi

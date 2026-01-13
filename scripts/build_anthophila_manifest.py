@@ -6,11 +6,10 @@ Scans /datasets/dataZoo/anthophila/ tree and computes:
 - SHA-256 hash for exact duplicate detection
 - Image dimensions (width, height)  
 - File size and basic metadata
-- Extract iNaturalist observation ID from filename
+- Extract numeric IDs from filename (if present)
 - Generate UUID for each asset
 """
 
-import os
 import re
 import csv
 import hashlib
@@ -21,30 +20,31 @@ from typing import Dict, List, Optional, Tuple
 from PIL import Image
 import imagehash
 
-def extract_observation_id_from_filename(filename: str) -> Tuple[Optional[int], str]:
+def extract_id_from_filename(filename: str) -> Tuple[Optional[int], Optional[int], str]:
     """
-    Extract observation ID from anthophila filename.
-    
-    Expected pattern: Genus_species_NNNNNNNN_N.jpg
-    Returns: (observation_id, id_type_guess)
+    Extract numeric ID(s) from anthophila filename.
+
+    Expected pattern: Genus_species_<id>_<idx>.jpg
+    Returns: (id_core, id_suffix, id_type_guess)
     """
-    # Pattern from previous analysis: Genus_species_OBSERVATIONID_PHOTONUM.jpg
-    pattern = re.compile(r'^([A-Z][a-z]+)_([a-z_]+)_(\d+)_(\d+)\.jpg$')
+    pattern = re.compile(
+        r'^(?P<genus>[A-Z][a-z]+)_(?P<species>[A-Za-z_]+)_(?P<id_core>\d+)(?:_(?P<id_suffix>\d+))?\.jpg$'
+    )
     match = pattern.match(filename)
-    
+
     if match:
-        genus, species, obs_id, photo_num = match.groups()
-        return int(obs_id), "inat_observation_id"
-    
+        id_core = int(match.group("id_core"))
+        id_suffix = match.group("id_suffix")
+        return id_core, int(id_suffix) if id_suffix else None, "pattern_id"
+
     # Fallback: try to extract any numeric sequence
-    numbers = re.findall(r'\d+', filename)
+    numbers = re.findall(r"\d+", filename)
     if numbers:
-        # Take the longest numeric sequence as likely ID
         longest_num = max(numbers, key=len)
-        if len(longest_num) >= 6:  # Reasonable iNat observation ID length
-            return int(longest_num), "extracted_number"
-    
-    return None, "no_id_found"
+        if len(longest_num) >= 6:
+            return int(longest_num), None, "extracted_number"
+
+    return None, None, "no_id_found"
 
 def compute_sha256(file_path: Path) -> str:
     """Compute SHA-256 hash of file."""
@@ -80,15 +80,23 @@ def normalize_scientific_name(directory_name: str) -> str:
     """
     return directory_name.replace('_', ' ')
 
-def generate_flat_name(original_path: Path) -> str:
+def guess_rank(scientific_name: str) -> str:
+    """Guess rank from token count in scientific name."""
+    tokens = [t for t in scientific_name.split(" ") if t]
+    if len(tokens) == 1:
+        return "genus"
+    if len(tokens) == 2:
+        return "species"
+    if len(tokens) >= 3:
+        return "subspecies"
+    return "unknown"
+
+def generate_flat_name(asset_uuid: str, extension: str) -> str:
     """
     Generate flattened filename for anthophila_flat/ directory.
-    Format: genus_species_uuid.jpg
+    Format: <asset_uuid>.jpg
     """
-    asset_uuid = str(uuid.uuid4())
-    parent_dir = original_path.parent.name
-    extension = original_path.suffix
-    return f"{parent_dir}_{asset_uuid}{extension}"
+    return f"{asset_uuid}{extension}"
 
 def scan_anthophila_directory(anthophila_dir: Path) -> List[Dict]:
     """Scan anthophila directory and build manifest data."""
@@ -118,11 +126,13 @@ def scan_anthophila_directory(anthophila_dir: Path) -> List[Dict]:
                 # Generate asset UUID
                 asset_uuid = str(uuid.uuid4())
                 
-                # Extract observation ID from filename
-                obs_id, id_type = extract_observation_id_from_filename(jpg_file.name)
-                
+                # Extract ID(s) from filename
+                id_core, id_suffix, id_type = extract_id_from_filename(jpg_file.name)
+
                 # Get scientific name from directory
+                scientific_name_raw = species_dir.name
                 scientific_name = normalize_scientific_name(species_dir.name)
+                rank_guess = guess_rank(scientific_name)
                 
                 # Compute file hash
                 sha256 = compute_sha256(jpg_file)
@@ -132,7 +142,7 @@ def scan_anthophila_directory(anthophila_dir: Path) -> List[Dict]:
                 phash = compute_phash(jpg_file)
                 
                 # Generate flat filename
-                flat_name = generate_flat_name(jpg_file)
+                flat_name = generate_flat_name(asset_uuid, jpg_file.suffix)
                 
                 # File stats
                 file_stats = jpg_file.stat()
@@ -141,9 +151,13 @@ def scan_anthophila_directory(anthophila_dir: Path) -> List[Dict]:
                 manifest_entry = {
                     'asset_uuid': asset_uuid,
                     'original_path': str(jpg_file),
+                    'original_filename': jpg_file.name,
                     'flat_name': flat_name,
+                    'scientific_name_raw': scientific_name_raw,
                     'scientific_name_norm': scientific_name,
-                    'id_core': obs_id if obs_id else '',
+                    'rank_guess': rank_guess,
+                    'id_core': id_core if id_core is not None else '',
+                    'id_suffix': id_suffix if id_suffix is not None else '',
                     'id_type_guess': id_type,
                     'width': width if width else '',
                     'height': height if height else '',
@@ -172,8 +186,10 @@ def write_manifest_csv(manifest_data: List[Dict], output_path: Path):
     """Write manifest data to CSV file."""
     
     fieldnames = [
-        'asset_uuid', 'original_path', 'flat_name', 'scientific_name_norm',
-        'id_core', 'id_type_guess', 'width', 'height', 'sha256', 'phash',
+        'asset_uuid', 'original_path', 'original_filename', 'flat_name',
+        'scientific_name_raw', 'scientific_name_norm', 'rank_guess',
+        'id_core', 'id_suffix', 'id_type_guess',
+        'width', 'height', 'sha256', 'phash',
         'source_tag', 'license_guess', 'file_bytes', 'keep_flag'
     ]
     

@@ -2,8 +2,8 @@
 """
 Two-pass deduplication for anthophila dataset.
 
-Pass A: ID-based matching (observation_id vs photos.observation_id)
-Pass B: Hash-based matching (sha256/phash vs photos table)
+Pass A: ID-based matching (candidate IDs vs photos.photo_id)
+Pass B: Hash-based matching against existing media + within-anthophila duplicates
 
 Usage: 
   uv run python3 scripts/deduplicate_anthophila.py \
@@ -13,10 +13,8 @@ Usage:
 """
 
 import argparse
-import csv
-import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Set
+from typing import Dict, List, Tuple, Set
 import pandas as pd
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -40,116 +38,118 @@ def load_manifest(manifest_path: Path) -> pd.DataFrame:
 
 def pass_a_id_matching(manifest_df: pd.DataFrame, db_conn) -> Dict[str, Tuple[str, str]]:
     """
-    Pass A: Match anthophila observation IDs against database.
-    
+    Pass A: Match candidate IDs from filenames against photos.photo_id.
+
     Returns: dict mapping asset_uuid to (dup_reason, matched_key)
     """
-    duplicates = {}
-    
-    # Get unique observation IDs from manifest
-    obs_ids = manifest_df[
-        (manifest_df['id_type_guess'] == 'inat_observation_id') & 
-        (manifest_df['id_core'].notna())
-    ]['id_core'].unique()
-    
-    if len(obs_ids) == 0:
-        print("No observation IDs found for Pass A matching")
+    duplicates: Dict[str, Tuple[str, str]] = {}
+
+    id_series = manifest_df['id_core'].dropna()
+    if id_series.empty:
+        print("No numeric IDs found for Pass A matching")
         return duplicates
-        
-    print(f"Pass A: Checking {len(obs_ids)} unique observation IDs against database...")
-    
-    # Build query to check if these observation IDs exist
-    obs_ids_str = ','.join(str(int(obs_id)) for obs_id in obs_ids)
-    
-    query = f"""
-    SELECT DISTINCT observation_id 
-    FROM observations 
-    WHERE observation_id IN ({obs_ids_str})
-    """
-    
+
+    candidate_ids = sorted({int(x) for x in id_series if str(x).strip() != ""})
+    if not candidate_ids:
+        print("No numeric IDs found for Pass A matching")
+        return duplicates
+
+    print(f"Pass A: Checking {len(candidate_ids)} candidate IDs against photos.photo_id...")
+
     with db_conn.cursor(cursor_factory=RealDictCursor) as cursor:
-        cursor.execute(query)
-        existing_obs_ids = set(row['observation_id'] for row in cursor.fetchall())
-    
-    print(f"Found {len(existing_obs_ids)} existing observation IDs in database")
-    
-    # Mark anthophila entries that match existing observation IDs
+        cursor.execute(
+            "SELECT photo_id FROM photos WHERE photo_id = ANY(%s)",
+            (candidate_ids,),
+        )
+        existing_photo_ids = {row['photo_id'] for row in cursor.fetchall()}
+
+    print(f"Found {len(existing_photo_ids)} matching photo_ids in database")
+
     for _, row in manifest_df.iterrows():
-        if (row['id_type_guess'] == 'inat_observation_id' and 
-            pd.notna(row['id_core']) and 
-            int(row['id_core']) in existing_obs_ids):
-            
-            duplicates[row['asset_uuid']] = ('obs_id', str(int(row['id_core'])))
-    
+        if pd.notna(row['id_core']):
+            try:
+                id_core = int(row['id_core'])
+            except Exception:
+                continue
+            if id_core in existing_photo_ids:
+                duplicates[row['asset_uuid']] = ('photo_id', str(id_core))
+
     print(f"Pass A complete: Found {len(duplicates)} ID-based duplicates")
     return duplicates
 
-def pass_b_hash_matching(manifest_df: pd.DataFrame, db_conn, 
-                        existing_duplicates: Set[str]) -> Dict[str, Tuple[str, str]]:
+def pass_b_hash_matching(
+    manifest_df: pd.DataFrame,
+    db_conn,
+    existing_duplicates: Set[str]
+) -> Dict[str, Tuple[str, str]]:
     """
-    Pass B: Match anthophila hashes against photos table.
-    
+    Pass B: Match anthophila hashes against existing media table.
+
     Only processes entries not already marked as duplicates from Pass A.
     Returns: dict mapping asset_uuid to (dup_reason, matched_key)
     """
-    duplicates = {}
-    
-    # Filter to non-duplicate entries from Pass A
+    duplicates: Dict[str, Tuple[str, str]] = {}
+
     remaining_df = manifest_df[~manifest_df['asset_uuid'].isin(existing_duplicates)]
-    
-    if len(remaining_df) == 0:
+    if remaining_df.empty:
         print("Pass B: No remaining entries to check after Pass A")
         return duplicates
-    
-    print(f"Pass B: Checking {len(remaining_df)} remaining entries for hash collisions...")
-    
-    # Get SHA256 hashes to check
-    sha256_hashes = remaining_df[remaining_df['sha256'].notna()]['sha256'].unique()
-    
-    if len(sha256_hashes) == 0:
-        print("No SHA256 hashes found for Pass B matching")
+
+    sha256_hashes = remaining_df[remaining_df['sha256'].notna()]['sha256'].unique().tolist()
+    if not sha256_hashes:
+        print("Pass B: No SHA256 hashes found")
         return duplicates
-    
-    # Check for SHA256 matches in photos table
-    # Note: We need to be careful about the photos table schema
-    # Let's first check what hash fields exist
+
     with db_conn.cursor(cursor_factory=RealDictCursor) as cursor:
-        cursor.execute("""
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'photos' 
-        AND column_name LIKE '%hash%'
-        """)
-        hash_columns = [row['column_name'] for row in cursor.fetchall()]
-    
-    print(f"Available hash columns in photos table: {hash_columns}")
-    
-    # If we have a sha256 column, check against it
-    if 'sha256' in hash_columns or 'hash' in hash_columns:
-        hash_col = 'sha256' if 'sha256' in hash_columns else 'hash'
-        
-        # Check hashes in batches to avoid query size limits
-        batch_size = 1000
-        for i in tqdm(range(0, len(sha256_hashes), batch_size), desc="Checking SHA256 batches"):
-            batch_hashes = sha256_hashes[i:i+batch_size]
-            hash_list = "','".join(batch_hashes)
-            
-            query = f"""
-            SELECT {hash_col}, photo_id, observation_id
-            FROM photos 
-            WHERE {hash_col} IN ('{hash_list}')
-            """
-            
-            cursor.execute(query)
-            matching_photos = cursor.fetchall()
-            
-            for photo in matching_photos:
-                # Find anthophila entries with this hash
-                matching_entries = remaining_df[remaining_df['sha256'] == photo[hash_col]]
-                for _, entry in matching_entries.iterrows():
-                    duplicates[entry['asset_uuid']] = ('sha256', str(photo['photo_id']))
-    
-    print(f"Pass B complete: Found {len(duplicates)} additional hash-based duplicates")
+        cursor.execute("SELECT to_regclass('public.media') AS media_tbl;")
+        media_tbl = cursor.fetchone().get("media_tbl")
+
+    if not media_tbl:
+        print("Pass B: media table not found; skipping media hash matching")
+        return duplicates
+
+    print(f"Pass B: Checking {len(sha256_hashes)} hashes against media.sha256_hex...")
+    batch_size = 1000
+    with db_conn.cursor(cursor_factory=RealDictCursor) as cursor:
+        for i in tqdm(range(0, len(sha256_hashes), batch_size), desc="Checking media hashes"):
+            batch_hashes = sha256_hashes[i:i + batch_size]
+            cursor.execute(
+                "SELECT sha256_hex FROM media WHERE sha256_hex = ANY(%s)",
+                (batch_hashes,),
+            )
+            existing_hashes = {row["sha256_hex"] for row in cursor.fetchall()}
+
+            if not existing_hashes:
+                continue
+
+            for _, entry in remaining_df[remaining_df['sha256'].isin(existing_hashes)].iterrows():
+                duplicates[entry['asset_uuid']] = ('media_sha256', entry['sha256'])
+
+    print(f"Pass B complete: Found {len(duplicates)} media hash duplicates")
+    return duplicates
+
+def dedup_within_dataset(manifest_df: pd.DataFrame, existing_duplicates: Set[str]) -> Dict[str, Tuple[str, str]]:
+    """Mark duplicates within anthophila by sha256 (keep largest file)."""
+    duplicates: Dict[str, Tuple[str, str]] = {}
+
+    working_df = manifest_df[~manifest_df['asset_uuid'].isin(existing_duplicates)].copy()
+    if working_df.empty:
+        return duplicates
+
+    working_df = working_df[working_df['sha256'].notna() & (working_df['sha256'] != "")]
+    if working_df.empty:
+        return duplicates
+
+    # Prefer larger files when keeping a representative
+    working_df['file_bytes'] = pd.to_numeric(working_df['file_bytes'], errors='coerce').fillna(0)
+    working_df = working_df.sort_values(by=['sha256', 'file_bytes'], ascending=[True, False])
+
+    dup_mask = working_df.duplicated(subset=['sha256'], keep='first')
+    dup_rows = working_df[dup_mask]
+
+    for _, row in dup_rows.iterrows():
+        duplicates[row['asset_uuid']] = ('sha256_within', row['sha256'])
+
     return duplicates
 
 def write_dedup_results(manifest_df: pd.DataFrame, 
@@ -227,16 +227,20 @@ def main():
         # Load manifest
         manifest_df = load_manifest(manifest_path)
         
-        # Pass A: ID-based matching
-        pass_a_duplicates = pass_a_id_matching(manifest_df, db_conn)
-        
-        # Pass B: Hash-based matching
-        pass_b_duplicates = pass_b_hash_matching(
-            manifest_df, db_conn, set(pass_a_duplicates.keys())
-        )
-        
-        # Combine results
-        all_duplicates = {**pass_a_duplicates, **pass_b_duplicates}
+    # Pass A: ID-based matching (photo_id)
+    pass_a_duplicates = pass_a_id_matching(manifest_df, db_conn)
+
+    # Pass B: Hash-based matching against existing media
+    pass_b_duplicates = pass_b_hash_matching(
+        manifest_df, db_conn, set(pass_a_duplicates.keys())
+    )
+
+    # Pass C: Within-anthophila sha256 duplicates
+    pass_c_duplicates = dedup_within_dataset(
+        manifest_df, set(pass_a_duplicates.keys()) | set(pass_b_duplicates.keys())
+    )
+
+    all_duplicates = {**pass_a_duplicates, **pass_b_duplicates, **pass_c_duplicates}
         
         # Write results
         write_dedup_results(manifest_df, all_duplicates, output_path)
