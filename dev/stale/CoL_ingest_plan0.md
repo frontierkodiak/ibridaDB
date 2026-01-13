@@ -153,7 +153,7 @@ def main():
     parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD", "password"), help="Database password.")
     parser.add_argument("--db-host", default=os.getenv("DB_HOST", "localhost"), help="Database host.")
     parser.add_argument("--db-port", default=os.getenv("DB_PORT", "5432"), help="Database port.")
-    parser.add_argument("--db-name", default=os.getenv("DB_NAME", "ibrida-v0-r1"), help="Database name.")
+    parser.add_argument("--db-name", default=os.getenv("DB_NAME", "ibrida-v0"), help="Database name.")
     args = parser.parse_args()
 
     engine = get_db_engine(args.db_user, args.db_password, args.db_host, args.db_port, args.db_name)
@@ -653,7 +653,7 @@ def main():
     parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD", "password"))
     parser.add_argument("--db-host", default=os.getenv("DB_HOST", "localhost"))
     parser.add_argument("--db-port", default=os.getenv("DB_PORT", "5432"))
-    parser.add_argument("--db-name", default=os.getenv("DB_NAME", "ibrida-v0-r1"))
+    parser.add_argument("--db-name", default=os.getenv("DB_NAME", "ibrida-v0"))
     args = parser.parse_args()
 
     engine = get_db_engine(args.db_user, args.db_password, args.db_host, args.db_port, args.db_name)
@@ -807,7 +807,7 @@ def main():
     parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD", "password"))
     parser.add_argument("--db-host", default=os.getenv("DB_HOST", "localhost"))
     parser.add_argument("--db-port", default=os.getenv("DB_PORT", "5432"))
-    parser.add_argument("--db-name", default=os.getenv("DB_NAME", "ibrida-v0-r1"))
+    parser.add_argument("--db-name", default=os.getenv("DB_NAME", "ibrida-v0"))
     parser.add_argument("--clear-first", action="store_true", help="Clear existing common names before populating.")
 
     args = parser.parse_args()
@@ -875,7 +875,7 @@ DB_USER="${DB_USER:-postgres}"
 DB_PASSWORD="${DB_PASSWORD:-password}" # Be cautious with passwords in scripts; use env vars or secrets manager in prod
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
-DB_NAME="${DB_NAME:-ibrida-v0-r1}" # Target ibridaDB database
+DB_NAME="${DB_NAME:-ibrida-v0}" # Target ibridaDB database
 
 COLDP_DATA_DIR="${COLDP_DATA_DIR:-/datasets/taxa/catalogue_of_life/2024/ColDP}" # Path to unzipped ColDP files
 

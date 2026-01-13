@@ -276,7 +276,7 @@ function check_root_independence() {
 
 You may wish to analyze the exact structure of the expanded_taxa table to assist in the completion:
 ```
-ibrida-v0-r1=# \d expanded_taxa
+ibrida-v0=# \d expanded_taxa
                         Table "public.expanded_taxa"
       Column      |          Type          | Collation | Nullable | Default
 ------------------+------------------------+-----------+----------+---------

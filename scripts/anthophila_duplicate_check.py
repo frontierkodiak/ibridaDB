@@ -13,7 +13,7 @@ def connect_to_db():
     return psycopg2.connect(
         host="localhost",
         port="5432", 
-        database="ibrida-v0-r1",
+        database="ibrida-v0",
         user="postgres",
         password="ooglyboogly69"
     )

@@ -2,7 +2,7 @@
 title: "ibridaDB Issue Tracker"
 status: active
 created: "2025-08-27T00:00:00Z"
-updated: "2025-08-27T00:00:00Z"
+updated: "2025-08-28T00:00:00Z"
 tags: ["project-management", "tracking", "workflow"]
 ---
 
@@ -11,16 +11,31 @@ tags: ["project-management", "tracking", "workflow"]
 ## Current Open Issues
 
 ### P0 - Critical Priority
-- None currently open
+- **IBRIDA-017** — Safe backup, test restore, rename DB to ibrida-v0, update references
+- **IBRIDA-008** — Taxonomy preflight (r1 vs r2) gated on BREAKING diffs
 
 ### P1 - High Priority
-- None currently open
+- **IBRIDA-006** — Add `media` + `observation_media`
+- **IBRIDA-007** — Load staging iNat 2025-08-27 CSVs
+- **IBRIDA-009** — Import r2 delta (obs/photos/observers + new taxa)
+- **IBRIDA-011** — Build anthophila manifest
+- **IBRIDA-012** — Deduplicate anthophila (ID+hash)
+- **IBRIDA-013** — Materialize anthophila_flat/ + insert into media
+- **IBRIDA-022** — [ibrida] LocalFileProvider + tests
 
-### P2 - Normal Priority  
-- None currently open
+### P2 - Normal Priority
+- **IBRIDA-010** — Elevation for r2 delta (incremental)
+- **IBRIDA-014** — Anthophila ingest: verify & QA
+- **IBRIDA-015** — Public views for license filtering
+- **IBRIDA-016** — Record r2 release row
+- **IBRIDA-020** — Leakage guard: unified media hash view
+- **IBRIDA-021** — Postgres view for generator input (anthophila)
+- **IBRIDA-023** — [ibrida] Example config + docs
+- **IBRIDA-025** — [typus] Resolver utility
 
 ### P3 - Low Priority
-- None currently open
+- **IBRIDA-024** — [ibrida] Leakage guard hook
+- **IBRIDA-019** — r2 release notes & docs
 
 ## Recently Closed Issues (2025-08-27)
 
@@ -108,6 +123,9 @@ dev/issues/
 **Final Outcome**: **PROCEED WITH INTEGRATION** (Decision score: 8.25/10)
 
 ## Next Steps
+
+- Begin with P0 gates (IBRIDA-017, IBRIDA-008), then execute P1 M1/M2 tasks.
+- Update 'updated:' timestamp and check off items as they complete.
 
 1. **Implementation**: Develop anthophila integration scripts based on recommendation
 2. **Testing**: Validate approach on subset before full processing  

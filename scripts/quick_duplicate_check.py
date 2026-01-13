@@ -24,7 +24,7 @@ def check_batch_duplicates(ids_batch):
     ids_str = ",".join(map(str, ids_batch))
     
     cmd = [
-        "docker", "exec", "ibridaDB", "psql", "-U", "postgres", "-d", "ibrida-v0-r1", 
+        "docker", "exec", "ibridaDB", "psql", "-U", "postgres", "-d", "ibrida-v0", 
         "-t", "-c", f"SELECT COUNT(*) FROM photos WHERE photo_id IN ({ids_str});"
     ]
     

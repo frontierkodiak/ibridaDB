@@ -24,7 +24,7 @@ set -euo pipefail
 # ------------------------------------------------------------------------------
 # 1. Configuration
 # ------------------------------------------------------------------------------
-export DB_NAME="ibrida-v0-r1"
+export DB_NAME="ibrida-v0"
 export DB_USER="postgres"
 export DB_CONTAINER="ibridaDB"
 export DEM_DIR="/datasets/dem/merit"
