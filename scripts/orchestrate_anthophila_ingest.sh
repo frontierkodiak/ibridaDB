@@ -20,6 +20,39 @@ DATASET="${DATASET:-anthophila}"
 ORIGIN="${ORIGIN:-anthophila}"
 VERSION="${VERSION:-v0}"
 RELEASE="${RELEASE:-r2}"
+DB_CONTAINER="${DB_CONTAINER:-ibridaDB}"
+DB_NAME="${DB_NAME:-}"
+DB_USER="${DB_USER:-}"
+
+if [[ -n "${DB_CONNECTION:-}" ]]; then
+    read -r DB_NAME_FROM_CONN DB_USER_FROM_CONN < <(python3 - <<'PY'
+import os
+import urllib.parse
+
+conn = os.environ.get("DB_CONNECTION", "")
+db = ""
+user = ""
+if conn:
+    try:
+        parsed = urllib.parse.urlparse(conn)
+        if parsed.path:
+            db = parsed.path.lstrip("/").split("/")[0]
+        user = parsed.username or ""
+    except Exception:
+        pass
+print(db, user)
+PY
+    )
+    if [[ -z "${DB_NAME}" && -n "${DB_NAME_FROM_CONN}" ]]; then
+        DB_NAME="${DB_NAME_FROM_CONN}"
+    fi
+    if [[ -z "${DB_USER}" && -n "${DB_USER_FROM_CONN}" ]]; then
+        DB_USER="${DB_USER_FROM_CONN}"
+    fi
+fi
+
+DB_NAME="${DB_NAME:-ibrida-v0}"
+DB_USER="${DB_USER:-postgres}"
 
 DRY_RUN=false
 if [[ "${1:-}" == "--dry-run" ]]; then
@@ -104,7 +137,7 @@ if [[ "$DRY_RUN" == "false" ]]; then
     echo "Files in anthophila_flat/: $FLAT_COUNT"
     
     # Count media records
-    MEDIA_COUNT=$(docker exec ibridaDB psql -U postgres -d ibrida-v0 -t -c \
+    MEDIA_COUNT=$(docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -t -c \
         "SELECT COUNT(*) FROM media WHERE dataset = '${DATASET}' AND release = '${RELEASE}';" | tr -d ' ')
     echo "Media table records (${DATASET} ${RELEASE}): $MEDIA_COUNT"
     

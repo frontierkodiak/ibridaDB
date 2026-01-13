@@ -4,9 +4,10 @@ set -euo pipefail
 # Load Aug-2025 iNat CSVs into staging schema
 DB_CONTAINER="${DB_CONTAINER:-ibridaDB}"
 DB_USER="${DB_USER:-postgres}"
-DB_NAME="${DB_NAME:-ibrida-v0}"  # Still using old name until IBRIDA-017 completes
+DB_NAME="${DB_NAME:-ibrida-v0}"
 INTAKE_PATH="${INTAKE_PATH:-/datasets/ibrida-data/intake/Aug2025}"
-SCHEMA_NAME="stg_inat_20250827"
+CONTAINER_INTAKE_PATH="${CONTAINER_INTAKE_PATH:-/metadata/Aug2025}"
+SCHEMA_NAME="${SCHEMA_NAME:-stg_inat_20250827}"
 
 execute_sql() {
   local sql="$1"
@@ -28,22 +29,22 @@ CREATE TABLE IF NOT EXISTS ${SCHEMA_NAME}.taxa (LIKE public.taxa INCLUDING ALL);
 
 echo "==> Loading observations.csv"
 docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" <<EOF
-\\copy ${SCHEMA_NAME}.observations (observation_uuid, observer_id, latitude, longitude, positional_accuracy, taxon_id, quality_grade, observed_on, anomaly_score) FROM '/metadata/Aug2025/observations.csv' DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;
+\\copy ${SCHEMA_NAME}.observations (observation_uuid, observer_id, latitude, longitude, positional_accuracy, taxon_id, quality_grade, observed_on, anomaly_score) FROM '${CONTAINER_INTAKE_PATH}/observations.csv' DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;
 EOF
 
 echo "==> Loading photos.csv" 
 docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" <<EOF
-\\copy ${SCHEMA_NAME}.photos (photo_uuid, photo_id, observation_uuid, observer_id, extension, license, width, height, position) FROM '/metadata/Aug2025/photos.csv' DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;
+\\copy ${SCHEMA_NAME}.photos (photo_uuid, photo_id, observation_uuid, observer_id, extension, license, width, height, position) FROM '${CONTAINER_INTAKE_PATH}/photos.csv' DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;
 EOF
 
 echo "==> Loading observers.csv"
 docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" <<EOF
-\\copy ${SCHEMA_NAME}.observers (observer_id, login, name) FROM '/metadata/Aug2025/observers.csv' DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;
+\\copy ${SCHEMA_NAME}.observers (observer_id, login, name) FROM '${CONTAINER_INTAKE_PATH}/observers.csv' DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;
 EOF
 
 echo "==> Loading taxa.csv"
 docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" <<EOF
-\\copy ${SCHEMA_NAME}.taxa (taxon_id, ancestry, rank_level, rank, name, active) FROM '/metadata/Aug2025/taxa.csv' DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;
+\\copy ${SCHEMA_NAME}.taxa (taxon_id, ancestry, rank_level, rank, name, active) FROM '${CONTAINER_INTAKE_PATH}/taxa.csv' DELIMITER E'\\t' QUOTE E'\\b' CSV HEADER;
 EOF
 
 echo "==> Running ANALYZE on all staging tables"
