@@ -11,15 +11,18 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Configuration
 ANTHOPHILA_DIR="${ANTHOPHILA_DIR:-/datasets/dataZoo/anthophila}"
-FLAT_DIR="${FLAT_DIR:-/datasets/ibrida-data/anthophila_flat}"
-MANIFEST_CSV="${MANIFEST_CSV:-${REPO_ROOT}/anthophila_manifest.csv}"
-DEDUP_CSV="${DEDUP_CSV:-${REPO_ROOT}/anthophila_duplicates.csv}"
-RESOLVED_CSV="${RESOLVED_CSV:-${REPO_ROOT}/anthophila_duplicates_resolved.csv}"
+FLAT_DIR="${FLAT_DIR:-/datasets/ibrida-data/media/anthophila/r2/flat}"
+MANIFEST_DIR="${MANIFEST_DIR:-/datasets/ibrida-data/media/anthophila/r2/manifests}"
+MANIFEST_CSV="${MANIFEST_CSV:-${MANIFEST_DIR}/anthophila_manifest.csv}"
+DEDUP_CSV="${DEDUP_CSV:-${MANIFEST_DIR}/anthophila_duplicates.csv}"
+RESOLVED_CSV="${RESOLVED_CSV:-${MANIFEST_DIR}/anthophila_duplicates_resolved.csv}"
 DB_CONNECTION="${DB_CONNECTION:-postgresql://postgres:ooglyboogly69@localhost/ibrida-v0}"
 DATASET="${DATASET:-anthophila}"
 ORIGIN="${ORIGIN:-anthophila}"
 VERSION="${VERSION:-v0}"
 RELEASE="${RELEASE:-r2}"
+REMOTE_KEY_PREFIX="${REMOTE_KEY_PREFIX:-datasets/v0/r2/media/anthophila/flat}"
+REMOTE_URI_PREFIX="${REMOTE_URI_PREFIX:-b2://ibrida-1}"
 DB_CONTAINER="${DB_CONTAINER:-ibridaDB}"
 DB_NAME="${DB_NAME:-}"
 DB_USER="${DB_USER:-}"
@@ -73,12 +76,20 @@ run_cmd() {
 echo "==> Starting Anthophila Ingest Orchestration"
 echo "    Anthophila dir: $ANTHOPHILA_DIR"
 echo "    Flat dir: $FLAT_DIR" 
+echo "    Manifest dir: $MANIFEST_DIR"
 echo "    Manifest CSV: $MANIFEST_CSV"
 echo "    Dedup CSV: $DEDUP_CSV"
 echo "    Resolved CSV: $RESOLVED_CSV"
 echo "    DB connection: $DB_CONNECTION"
 echo "    Dataset: $DATASET  Origin: $ORIGIN  Version: $VERSION  Release: $RELEASE"
+echo "    Remote key prefix: $REMOTE_KEY_PREFIX"
+echo "    Remote URI prefix: $REMOTE_URI_PREFIX"
 echo
+
+if [[ "$DRY_RUN" == "false" ]]; then
+    mkdir -p "$MANIFEST_DIR"
+    mkdir -p "$FLAT_DIR"
+fi
 
 # Step 1: Build manifest
 echo "==> Step 1: Building anthophila manifest"
@@ -125,7 +136,9 @@ run_cmd uv run python3 "${SCRIPT_DIR}/materialize_anthophila_flat.py" \
     --dataset "$DATASET" \
     --origin "$ORIGIN" \
     --version "$VERSION" \
-    --release "$RELEASE"
+    --release "$RELEASE" \
+    --remote-key-prefix "$REMOTE_KEY_PREFIX" \
+    --remote-uri-prefix "$REMOTE_URI_PREFIX"
 
 # Step 5: Summary and verification
 echo "==> Step 5: Final verification and summary"
@@ -173,6 +186,7 @@ if [[ "$DRY_RUN" == "false" ]]; then
 # Anthophila Ingest Configuration - $(date)
 ANTHOPHILA_DIR=$ANTHOPHILA_DIR
 FLAT_DIR=$FLAT_DIR
+MANIFEST_DIR=$MANIFEST_DIR
 MANIFEST_CSV=$MANIFEST_CSV
 DEDUP_CSV=$DEDUP_CSV
 RESOLVED_CSV=$RESOLVED_CSV
@@ -181,6 +195,8 @@ DATASET=$DATASET
 ORIGIN=$ORIGIN
 VERSION=$VERSION
 RELEASE=$RELEASE
+REMOTE_KEY_PREFIX=$REMOTE_KEY_PREFIX
+REMOTE_URI_PREFIX=$REMOTE_URI_PREFIX
 EOF
     echo "Configuration saved to: ${REPO_ROOT}/anthophila_ingest_config.txt"
 fi

@@ -36,11 +36,14 @@ def load_manifest(manifest_path: Path) -> pd.DataFrame:
     print(f"Loaded {len(df)} entries from manifest")
     return df
 
+ROW_ID_COL = "asset_row_uuid"
+
+
 def pass_a_id_matching(manifest_df: pd.DataFrame, db_conn) -> Dict[str, Tuple[str, str]]:
     """
     Pass A: Match candidate IDs from filenames against photos.photo_id.
 
-    Returns: dict mapping asset_uuid to (dup_reason, matched_key)
+    Returns: dict mapping row_id to (dup_reason, matched_key)
     """
     duplicates: Dict[str, Tuple[str, str]] = {}
 
@@ -72,7 +75,7 @@ def pass_a_id_matching(manifest_df: pd.DataFrame, db_conn) -> Dict[str, Tuple[st
             except Exception:
                 continue
             if id_core in existing_photo_ids:
-                duplicates[row['asset_uuid']] = ('photo_id', str(id_core))
+                duplicates[row[ROW_ID_COL]] = ('photo_id', str(id_core))
 
     print(f"Pass A complete: Found {len(duplicates)} ID-based duplicates")
     return duplicates
@@ -86,11 +89,11 @@ def pass_b_hash_matching(
     Pass B: Match anthophila hashes against existing media table.
 
     Only processes entries not already marked as duplicates from Pass A.
-    Returns: dict mapping asset_uuid to (dup_reason, matched_key)
+    Returns: dict mapping row_id to (dup_reason, matched_key)
     """
     duplicates: Dict[str, Tuple[str, str]] = {}
 
-    remaining_df = manifest_df[~manifest_df['asset_uuid'].isin(existing_duplicates)]
+    remaining_df = manifest_df[~manifest_df[ROW_ID_COL].isin(existing_duplicates)]
     if remaining_df.empty:
         print("Pass B: No remaining entries to check after Pass A")
         return duplicates
@@ -123,7 +126,7 @@ def pass_b_hash_matching(
                 continue
 
             for _, entry in remaining_df[remaining_df['sha256'].isin(existing_hashes)].iterrows():
-                duplicates[entry['asset_uuid']] = ('media_sha256', entry['sha256'])
+                duplicates[entry[ROW_ID_COL]] = ('media_sha256', entry['sha256'])
 
     print(f"Pass B complete: Found {len(duplicates)} media hash duplicates")
     return duplicates
@@ -132,7 +135,7 @@ def dedup_within_dataset(manifest_df: pd.DataFrame, existing_duplicates: Set[str
     """Mark duplicates within anthophila by sha256 (keep largest file)."""
     duplicates: Dict[str, Tuple[str, str]] = {}
 
-    working_df = manifest_df[~manifest_df['asset_uuid'].isin(existing_duplicates)].copy()
+    working_df = manifest_df[~manifest_df[ROW_ID_COL].isin(existing_duplicates)].copy()
     if working_df.empty:
         return duplicates
 
@@ -148,7 +151,7 @@ def dedup_within_dataset(manifest_df: pd.DataFrame, existing_duplicates: Set[str
     dup_rows = working_df[dup_mask]
 
     for _, row in dup_rows.iterrows():
-        duplicates[row['asset_uuid']] = ('sha256_within', row['sha256'])
+        duplicates[row[ROW_ID_COL]] = ('sha256_within', row['sha256'])
 
     return duplicates
 
@@ -158,14 +161,14 @@ def write_dedup_results(manifest_df: pd.DataFrame,
     """Write deduplication results to CSV."""
     
     # Add duplicate info to manifest
-    manifest_df['dup_reason'] = manifest_df['asset_uuid'].map(
-        lambda uuid: all_duplicates.get(uuid, ('', ''))[0]
+    manifest_df['dup_reason'] = manifest_df[ROW_ID_COL].map(
+        lambda row_id: all_duplicates.get(row_id, ('', ''))[0]
     )
-    manifest_df['matched_key'] = manifest_df['asset_uuid'].map(
-        lambda uuid: all_duplicates.get(uuid, ('', ''))[1]
+    manifest_df['matched_key'] = manifest_df[ROW_ID_COL].map(
+        lambda row_id: all_duplicates.get(row_id, ('', ''))[1]
     )
-    manifest_df['keep_flag'] = manifest_df['asset_uuid'].map(
-        lambda uuid: uuid not in all_duplicates
+    manifest_df['keep_flag'] = manifest_df[ROW_ID_COL].map(
+        lambda row_id: row_id not in all_duplicates
     )
     
     # Write to CSV
@@ -216,6 +219,10 @@ def main():
         print(f"Error: Manifest file not found: {manifest_path}")
         return 1
     
+    if ROW_ID_COL not in df.columns:
+        print(f"Error: manifest missing required column {ROW_ID_COL}")
+        return 1
+
     # Connect to database
     try:
         db_conn = connect_to_database(args.db_connection)

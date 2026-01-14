@@ -76,16 +76,19 @@ def get_table_columns(conn, table_name: str) -> List[str]:
         return [row["column_name"] for row in cursor.fetchall()]
 
 def add_observation_keys(kept_df: pd.DataFrame) -> pd.DataFrame:
-    """Assign deterministic observation_uuid based on id_core or asset_uuid."""
+    """Assign deterministic observation_uuid based on name+id_core or asset_uuid."""
     obs_keys = []
     obs_uuids = []
 
     for _, row in kept_df.iterrows():
         id_core = row.get("id_core", "")
+        scientific_name = str(row.get("scientific_name_norm", "")).strip()
+        if not scientific_name:
+            raise ValueError("scientific_name_norm missing or empty; cannot build observation_key safely")
         obs_key = None
         if pd.notna(id_core) and str(id_core).strip() != "":
             try:
-                obs_key = f"id:{int(id_core)}"
+                obs_key = f"name:{scientific_name}|id:{int(float(id_core))}"
             except Exception:
                 obs_key = f"asset:{row['asset_uuid']}"
         else:
@@ -98,6 +101,25 @@ def add_observation_keys(kept_df: pd.DataFrame) -> pd.DataFrame:
     kept_df = kept_df.copy()
     kept_df["observation_key"] = obs_keys
     kept_df["observation_uuid"] = obs_uuids
+
+    # Sanity check: prevent cross-taxon merges
+    if "scientific_name_norm" in kept_df.columns:
+        collisions = (
+            kept_df.groupby("observation_key")["scientific_name_norm"]
+            .nunique()
+            .reset_index()
+        )
+        bad = collisions[collisions["scientific_name_norm"] > 1]
+        if not bad.empty:
+            sample_keys = bad["observation_key"].head(5).tolist()
+            sample_rows = kept_df[kept_df["observation_key"].isin(sample_keys)][
+                ["observation_key", "scientific_name_norm"]
+            ].drop_duplicates()
+            raise ValueError(
+                "Observation key collision across taxa detected; aborting.\n"
+                f"Sample:\n{sample_rows.to_string(index=False)}"
+            )
+
     return kept_df
 
 def safe_int(value):
@@ -262,7 +284,13 @@ def insert_observation_media(
     print(f"Inserted {len(records)} observation_media rows")
     return len(records)
 
-def create_sidecar_metadata(row: pd.Series, observation_uuid: str, obs_key: str) -> Dict:
+def create_sidecar_metadata(
+    row: pd.Series,
+    observation_uuid: str,
+    obs_key: str,
+    remote_key: str = "",
+    remote_uri: str = "",
+) -> Dict:
     """Create sidecar JSONB metadata for media table."""
     taxon_id = None
     id_core = None
@@ -303,6 +331,10 @@ def create_sidecar_metadata(row: pd.Series, observation_uuid: str, obs_key: str)
         "observation_uuid": observation_uuid,
         "observation_key": obs_key,
     }
+    if remote_key:
+        sidecar["remote_key"] = remote_key
+    if remote_uri:
+        sidecar["remote_uri"] = remote_uri
     return sidecar
 
 def materialize_files(kept_df: pd.DataFrame, flat_dir: Path, use_hardlinks: bool = True):
@@ -360,6 +392,8 @@ def insert_media_records(
     db_conn,
     dataset: str,
     release: str,
+    remote_key_prefix: str = "",
+    remote_uri_prefix: str = "",
 ):
     """Insert media records into database."""
     
@@ -380,8 +414,23 @@ def insert_media_records(
         # Create file:// URI
         file_uri = f"file://{mat_file['flat_path']}"
         
+        remote_key = ""
+        remote_uri = ""
+        if remote_key_prefix:
+            remote_key = f"{remote_key_prefix.rstrip('/')}/{flat_name}"
+        if remote_uri_prefix:
+            base = remote_uri_prefix.rstrip("/")
+            key_part = remote_key if remote_key else flat_name
+            remote_uri = f"{base}/{key_part}"
+
         # Create sidecar metadata
-        sidecar = create_sidecar_metadata(row, row["observation_uuid"], row["observation_key"])
+        sidecar = create_sidecar_metadata(
+            row,
+            row["observation_uuid"],
+            row["observation_key"],
+            remote_key=remote_key,
+            remote_uri=remote_uri,
+        )
 
         phash_hex = str(row.get("phash", "")).strip()
         try:
@@ -505,6 +554,16 @@ def main():
         help="Release tag for observations/media"
     )
     parser.add_argument(
+        "--remote-key-prefix",
+        default="",
+        help="Remote object key prefix (e.g., datasets/v0/r2/media/anthophila/flat)"
+    )
+    parser.add_argument(
+        "--remote-uri-prefix",
+        default="",
+        help="Remote URI prefix (e.g., b2://ibrida-1)"
+    )
+    parser.add_argument(
         "--role",
         default="primary",
         help="observation_media.role value"
@@ -575,6 +634,8 @@ def main():
             db_conn,
             dataset=args.dataset,
             release=args.release,
+            remote_key_prefix=args.remote_key_prefix,
+            remote_uri_prefix=args.remote_uri_prefix,
         )
 
         media_id_map = fetch_media_id_map(db_conn, kept_df["sha256"].dropna().tolist())

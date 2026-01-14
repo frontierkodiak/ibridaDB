@@ -4,10 +4,11 @@ Build anthophila_manifest.csv with file metadata for deduplication.
 
 Scans /datasets/dataZoo/anthophila/ tree and computes:
 - SHA-256 hash for exact duplicate detection
-- Image dimensions (width, height)  
+- Image dimensions (width, height)
 - File size and basic metadata
 - Extract numeric IDs from filename (if present)
-- Generate UUID for each asset
+- Deterministic IDs (asset_uuid from sha256; asset_row_uuid from path)
+- Flat filename keyed by sha256
 """
 
 import re
@@ -91,12 +92,18 @@ def guess_rank(scientific_name: str) -> str:
         return "subspecies"
     return "unknown"
 
-def generate_flat_name(asset_uuid: str, extension: str) -> str:
+def generate_flat_name(sha256_hex: str, extension: str) -> str:
     """
     Generate flattened filename for anthophila_flat/ directory.
-    Format: <asset_uuid>.jpg
+    Format: <sha256_hex>.<ext>
     """
-    return f"{asset_uuid}{extension}"
+    ext = extension.lower()
+    if not ext.startswith("."):
+        ext = f".{ext}"
+    return f"{sha256_hex}{ext}"
+
+ASSET_UUID_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "polli/anthophila/asset")
+ASSET_ROW_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "polli/anthophila/asset-row")
 
 def scan_anthophila_directory(anthophila_dir: Path) -> List[Dict]:
     """Scan anthophila directory and build manifest data."""
@@ -123,9 +130,6 @@ def scan_anthophila_directory(anthophila_dir: Path) -> List[Dict]:
         
         for jpg_file in jpg_files:
             try:
-                # Generate asset UUID
-                asset_uuid = str(uuid.uuid4())
-                
                 # Extract ID(s) from filename
                 id_core, id_suffix, id_type = extract_id_from_filename(jpg_file.name)
 
@@ -133,16 +137,20 @@ def scan_anthophila_directory(anthophila_dir: Path) -> List[Dict]:
                 scientific_name_raw = species_dir.name
                 scientific_name = normalize_scientific_name(species_dir.name)
                 rank_guess = guess_rank(scientific_name)
-                
-                # Compute file hash
+
+                # Compute file hash (used for deterministic IDs + filenames)
                 sha256 = compute_sha256(jpg_file)
-                
+
+                # Deterministic asset identifiers
+                asset_uuid = str(uuid.uuid5(ASSET_UUID_NAMESPACE, sha256))
+                asset_row_uuid = str(uuid.uuid5(ASSET_ROW_NAMESPACE, str(jpg_file)))
+
                 # Get image dimensions and pHash
                 width, height = get_image_dimensions(jpg_file)
                 phash = compute_phash(jpg_file)
-                
-                # Generate flat filename
-                flat_name = generate_flat_name(asset_uuid, jpg_file.suffix)
+
+                # Generate flat filename (sha256-based)
+                flat_name = generate_flat_name(sha256, jpg_file.suffix)
                 
                 # File stats
                 file_stats = jpg_file.stat()
@@ -150,6 +158,7 @@ def scan_anthophila_directory(anthophila_dir: Path) -> List[Dict]:
                 
                 manifest_entry = {
                     'asset_uuid': asset_uuid,
+                    'asset_row_uuid': asset_row_uuid,
                     'original_path': str(jpg_file),
                     'original_filename': jpg_file.name,
                     'flat_name': flat_name,
@@ -186,7 +195,7 @@ def write_manifest_csv(manifest_data: List[Dict], output_path: Path):
     """Write manifest data to CSV file."""
     
     fieldnames = [
-        'asset_uuid', 'original_path', 'original_filename', 'flat_name',
+        'asset_uuid', 'asset_row_uuid', 'original_path', 'original_filename', 'flat_name',
         'scientific_name_raw', 'scientific_name_norm', 'rank_guess',
         'id_core', 'id_suffix', 'id_type_guess',
         'width', 'height', 'sha256', 'phash',
