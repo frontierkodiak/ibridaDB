@@ -15,6 +15,7 @@ services:
       - ~/repo/ibridaDB/dbQueries:/query
       - ./postgresql.runtime-tuning.conf:/etc/postgresql/runtime-tuning.conf:ro
       - /database/ibridaDB:/var/lib/postgresql/data
+      - /peach/ibridaDB/pgtemp:/pgtemp
       - /datasets/ibrida-data/exports:/exports
       - /datasets/ibrida-data/intake:/metadata
       - /datasets/dem:/dem

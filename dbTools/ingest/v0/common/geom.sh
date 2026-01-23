@@ -14,6 +14,7 @@ run_update() {
   WHERE observation_uuid IN (
     SELECT observation_uuid
     FROM ${TABLE_NAME}
+    WHERE geom IS NULL
     ORDER BY observation_uuid
     OFFSET ${OFFSET}
     LIMIT ${LIMIT}
@@ -35,8 +36,8 @@ BASE_DIR=$4
 # Use container name from environment or default
 DB_CONTAINER=${DB_CONTAINER:-"ibridaDB"}
 
-# Calculate total rows and batch size
-TOTAL_ROWS=$(docker exec ${DB_CONTAINER} psql -U postgres -d "${DB_NAME}" -t -c "SELECT COUNT(*) FROM ${TABLE_NAME};")
+# Calculate total rows and batch size (only rows missing geom)
+TOTAL_ROWS=$(docker exec ${DB_CONTAINER} psql -U postgres -d "${DB_NAME}" -t -c "SELECT COUNT(*) FROM ${TABLE_NAME} WHERE geom IS NULL;")
 BATCH_SIZE=$((TOTAL_ROWS / NUM_PROCESSES))
 
 # Run updates in parallel
