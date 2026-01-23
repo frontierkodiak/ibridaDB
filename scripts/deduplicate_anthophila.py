@@ -219,7 +219,14 @@ def main():
         print(f"Error: Manifest file not found: {manifest_path}")
         return 1
     
-    if ROW_ID_COL not in df.columns:
+    try:
+        # Load manifest
+        manifest_df = load_manifest(manifest_path)
+    except Exception as e:
+        print(f"Failed to load manifest: {e}")
+        return 1
+
+    if ROW_ID_COL not in manifest_df.columns:
         print(f"Error: manifest missing required column {ROW_ID_COL}")
         return 1
 
@@ -231,30 +238,26 @@ def main():
         return 1
     
     try:
-        # Load manifest
-        manifest_df = load_manifest(manifest_path)
-        
-    # Pass A: ID-based matching (photo_id)
-    pass_a_duplicates = pass_a_id_matching(manifest_df, db_conn)
+        # Pass A: ID-based matching (photo_id)
+        pass_a_duplicates = pass_a_id_matching(manifest_df, db_conn)
 
-    # Pass B: Hash-based matching against existing media
-    pass_b_duplicates = pass_b_hash_matching(
-        manifest_df, db_conn, set(pass_a_duplicates.keys())
-    )
+        # Pass B: Hash-based matching against existing media
+        pass_b_duplicates = pass_b_hash_matching(
+            manifest_df, db_conn, set(pass_a_duplicates.keys())
+        )
 
-    # Pass C: Within-anthophila sha256 duplicates
-    pass_c_duplicates = dedup_within_dataset(
-        manifest_df, set(pass_a_duplicates.keys()) | set(pass_b_duplicates.keys())
-    )
+        # Pass C: Within-anthophila sha256 duplicates
+        pass_c_duplicates = dedup_within_dataset(
+            manifest_df, set(pass_a_duplicates.keys()) | set(pass_b_duplicates.keys())
+        )
 
-    all_duplicates = {**pass_a_duplicates, **pass_b_duplicates, **pass_c_duplicates}
+        all_duplicates = {**pass_a_duplicates, **pass_b_duplicates, **pass_c_duplicates}
         
         # Write results
         write_dedup_results(manifest_df, all_duplicates, output_path)
         
         print(f"\nDeduplication complete: {output_path}")
         return 0
-        
     finally:
         db_conn.close()
 
