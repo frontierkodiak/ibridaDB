@@ -13,6 +13,7 @@ services:
       - ~/repo/ibridaDB/dbTools:/tool
       - ~/repo/ibridaDB/dbQueries:/query
       - /database/ibridaDB:/var/lib/postgresql/data
+      - /peach/ibridaDB/pgtemp:/pgtemp
       - /datasets/ibrida-data/exports:/exports
       - /datasets/ibrida-data/intake:/metadata
       - /datasets/dem:/dem

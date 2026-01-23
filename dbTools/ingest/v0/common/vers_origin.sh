@@ -94,13 +94,13 @@ update_columns_in_parallel() {
     # Verify table exists
     if ! docker exec ${DB_CONTAINER} psql -U postgres -d "${DB_NAME}" -c "\d ${TABLE_NAME}" &>/dev/null; then
         error_exit "Table ${TABLE_NAME} does not exist in database ${DB_NAME}"
-    }
+    fi
 
     # Get total rows with error handling
     TOTAL_ROWS=$(docker exec ${DB_CONTAINER} psql -U postgres -d "${DB_NAME}" -t -c "SELECT COUNT(*) FROM ${TABLE_NAME};" | tr -d ' ')
     if [ $? -ne 0 ] || ! [[ "$TOTAL_ROWS" =~ ^[0-9]+$ ]]; then
         error_exit "Failed to get row count for ${TABLE_NAME}"
-    }
+    fi
 
     log_message "Starting parallel update of ${TABLE_NAME}.${COLUMN_NAME} (${TOTAL_ROWS} total rows)"
     
