@@ -16,6 +16,7 @@ services:
       - /peach/ibridaDB/pgtemp:/pgtemp
       - /datasets/ibrida-data/exports:/exports
       - /datasets/ibrida-data/intake:/metadata
+      - /datasets/ibrida-data/backups:/backups
       - /datasets/dem:/dem
     ports:
       - "5432:5432"

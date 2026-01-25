@@ -26,7 +26,11 @@ then exports curated training datasets consumed downstream by ibrida.generator.
   - iNat metadata: `/datasets/ibrida-data/intake/<MonYYYY>`
   - Exports: `/datasets/ibrida-data/exports`
   - DEM: `/datasets/dem`
-  - Anthophila media: `/datasets/ibrida-data/media/anthophila/r2/flat`
+- Anthophila media: `/datasets/ibrida-data/media/anthophila/r2/flat`
+
+## Backups
+- Local r1 dump: `/mango/datasets/ibrida-data/backups/ibrida-v0-r1_20250829_003104/ibrida-v0-r1.dump`
+- B2 `backups-0` exists (personal); no documented ibridaDB paths yet.
 
 ## iNat release cadence
 - iNat open-data dumps are published monthly on the 27th.
@@ -83,4 +87,3 @@ Draft skills are under `skills/` (local only, for now):
 - `skills/ibridadb-ingest-inat`
 - `skills/ibridadb-ingest-noninat`
 - `skills/ibridadb-export`
-
