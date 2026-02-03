@@ -18,6 +18,13 @@ then exports curated training datasets consumed downstream by ibrida.generator.
 - Prefer repo scripts; avoid ad-hoc SQL unless documented.
 - Keep notes in Linear and/or `dev/logs/*` when you run long jobs.
 
+## Docs ownership (repo-local)
+- Treat repo-local docs as living memory; update them when you discover new truths.
+- Keep docs organized; refactor/restructure if needed to make workflows clear.
+- Maintain the local repo report copy at `docs/org-kb/repos/reports/`.
+- Do **not** propagate changes to the polli monorepo copy until the new docstore CLI lands
+  (watch agent-mail; related issues POL-381 and POL-417).
+
 ## Infrastructure (blade)
 - DB container: `ibridaDB` (see `docker/stausee/docker-compose.yml`).
 - PGDATA lives on `/mango/database/ibridaDB/pgdata` (symlink `/database/ibridaDB`).

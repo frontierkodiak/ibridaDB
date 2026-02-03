@@ -16,20 +16,34 @@ The ibridaDB system includes global elevation data from MERIT DEM (Multi-Error-R
 
 ### Table: `elevation_raster`
 
+This table is created by `raster2pgsql` (via `load_dem_fixed.sh`) and currently
+contains only the core raster columns:
+
 ```sql
+-- created by raster2pgsql -C
 CREATE TABLE elevation_raster (
-    rid SERIAL PRIMARY KEY,      -- Unique raster tile ID
-    rast raster,                  -- PostGIS raster data
-    filename TEXT                 -- Original source filename
+    rid  SERIAL PRIMARY KEY,  -- Unique raster tile ID
+    rast raster               -- PostGIS raster data
 );
 ```
 
-### Storage Statistics
-- **Number of tiles**: 2,302,331
-- **Total size**: 155 GB
-- **Tile dimensions**: 100x100 pixels (configured via TILE_SIZE parameter)
+If you want filenames stored, re-run with `raster2pgsql -F` (not currently used).
+
+### Storage Statistics (query at runtime)
+The size/row counts depend on tile size and ingestion choices. Use live queries:
+
+```sql
+SELECT reltuples::bigint AS est_rows
+FROM pg_class
+WHERE relname = 'elevation_raster';
+
+\d elevation_raster  -- shows constraints, pixel type, SRID, etc.
+```
+
+Current defaults (MERIT @ 3 arc-seconds):
+- **Tile dimensions**: `TILE_SIZE` (commonly 100x100; current r2 ingest uses 256x256)
 - **Pixel resolution**: 0.00083333° (~90m at equator)
-- **SRID**: 4326 (WGS84 geographic coordinates)
+- **SRID**: 4326 (WGS84)
 
 ### Spatial Index
 
@@ -41,7 +55,8 @@ CREATE INDEX elevation_raster_st_convexhull_idx
     USING gist (ST_ConvexHull(rast));
 ```
 
-**Note**: Due to repeated ingestion runs, there are currently over 1000 duplicate indexes that should be cleaned up.
+**Note**: We now create the index once (first tile only). No duplicate indexes
+should be created by `load_dem_fixed.sh`.
 
 ## Data Ingestion Pipeline
 
@@ -55,23 +70,32 @@ dbTools/dem/download_merit_parallel.sh 4
 ```
 
 ### 2. Load into Database
-The elevation ingestion is handled by scripts in `dbTools/ingest/v0/utils/elevation/`:
+Use the fixed loader in `dbTools/ingest/v0/utils/elevation/`:
 
 ```bash
-# Wrapper script with configuration
-./dbTools/ingest/v0/utils/elevation/wrapper.sh
+dbTools/ingest/v0/utils/elevation/load_dem_fixed.sh \
+  /datasets/dem/merit ibrida-v0-r2 postgres ibridaDB 4326 100x100
 ```
 
-This orchestrates three steps:
-1. **Create table**: Creates `elevation_raster` table with spatial index
-2. **Load DEM data**: Uses `raster2pgsql` to tile and import GeoTIFF files
-3. **Update observations**: Populates `observations.elevation_meters` column
+This performs:
+1. **Create table**: `raster2pgsql -C` creates `elevation_raster`.
+2. **Create index once**: `-I` is used only for the first tile.
+3. **Drop max-extent constraint**: `enforce_max_extent_rast` is removed after the
+   first tile so later tiles outside the initial bounds can append.
+4. **Append remaining tiles**: `raster2pgsql -a` for all subsequent tiles.
+
+Then update observations:
+```bash
+dbTools/ingest/v0/utils/elevation/update_elevation.sh
+```
 
 ### Key Configuration Parameters
 - `DEM_DIR`: Path to MERIT DEM tar files (`/datasets/dem/merit`)
-- `TILE_SIZE`: Raster tile size for PostGIS (`100x100`)
+- `TILE_SIZE`: Raster tile size for PostGIS (e.g., `256x256` for faster ingest)
 - `EPSG`: Coordinate system (`4326` for WGS84)
-- `NUM_PROCESSES`: Parallel processes for updating observations (`16`)
+- `PARALLEL_TARS`: Number of tar files processed in parallel (default 4)
+- `CREATE_INDEX_AFTER_LOAD`: Create GIST index after full load (default true)
+- `NUM_PROCESSES`: Parallel processes for updating observations (`16` typical)
 
 ## Querying Elevation Data
 
@@ -100,12 +124,20 @@ FROM elevation_raster er
 WHERE ST_Intersects(er.rast, observations.geom);
 ```
 
-## Performance Characteristics
+## Performance Characteristics (observed/expected)
 
-- **Single point lookup**: ~500ms (includes query planning)
-- **Batch updates**: Parallelized across 16 processes
-- **Index performance**: GIST index enables efficient bounding box filtering
-- **Memory usage**: Tiles are loaded on-demand, not all at once
+- **DEM load time** is dominated by `raster2pgsql` (GDAL read + tiling + inserts).
+- **Index creation** can be a major bottleneck if done per-tile; we now create
+  the index once.
+- **Tile size** controls row count and ingest speed:
+  - Smaller tiles = more rows, slower inserts, faster point lookup.
+  - Larger tiles = fewer rows, faster ingest, potentially slower point lookup.
+
+If ingest is too slow, consider:
+1. Increasing `TILE_SIZE` (e.g., 256x256).
+2. Deferring index creation until after all tiles load (`CREATE_INDEX_AFTER_LOAD=true`).
+3. Increasing `PARALLEL_TARS` (e.g., 4–8 depending on CPU).
+4. Temporarily setting `synchronous_commit=off` during ingest (already enabled in loader).
 
 ## Integration with Typus ElevationService
 
@@ -171,17 +203,15 @@ WHERE elevation_meters IS NULL
 
 1. **Ocean Areas**: No elevation data for ocean points (returns NULL)
 2. **Polar Regions**: Limited coverage above 60°N and below 60°S
-3. **Query Performance**: Single-point lookups take ~500ms
-4. **Storage Size**: 155GB is substantial for raster data
-5. **Index Duplication**: Current setup has created many duplicate indexes
+3. **Storage Size**: Large; depends on tile size and full global load
+4. **Max-extent constraint**: Must be dropped to allow global tiles to append
 
 ## Future Improvements
 
-1. **Index Cleanup**: Remove duplicate GIST indexes
-2. **Performance Optimization**: 
-   - Consider pyramid/overview tables for different zoom levels
-   - Implement caching layer for frequently accessed regions
-   - Use prepared statements for repeated queries
-3. **Data Validation**: Add checks for elevation outliers
-4. **Compression**: Investigate raster compression options
-5. **Batch API**: Implement efficient batch elevation lookup for multiple points
+1. **Performance Optimization**: 
+   - Consider larger tile sizes if ingest is too slow
+   - Defer index creation until after all tiles load
+   - Consider out-of-db rasters (`raster2pgsql -R`) if disk or ingest time becomes limiting
+2. **Data Validation**: Add checks for elevation outliers
+3. **Compression**: Investigate raster compression options
+4. **Batch API**: Implement efficient batch elevation lookup for multiple points
