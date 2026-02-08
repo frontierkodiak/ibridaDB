@@ -20,12 +20,14 @@ Establish a concrete path to use `worm` for I/O-heavy ibridaDB build jobs (inges
   - `/datasets/ibrida-data`: ~315G
   - PostgreSQL data dir (`/var/lib/postgresql/data` in container): ~2.1T on disk
 - `worm` free space currently ~2.6T on root NVMe.
+- Worm system report source: `polli/docs/org-kb/repos/reports/systems/worm.md` (single-root-NVMe posture; no dedicated `/mango`/ZFS data pool documented).
 
 ## Constraints and implications
 
 - Copying raw PGDATA 1:1 is likely too tight on `worm` once all source datasets are present.
 - `pg_database_size` totals are materially smaller than on-disk PGDATA footprint, so logical copy (dump/restore) is preferred over raw PGDATA rsync.
 - Running large rsync from `stausee-pool` during the current DEM load can increase contention; throttle or defer hottest paths.
+- On worm today, `/datasets`, `/database`, and `/peach` may exist only as plain directories on `/` unless explicitly provisioned/mounted.
 
 ## Recommended target model (phase 1)
 
@@ -44,17 +46,27 @@ Use `worm` as **build host** for new releases (r3+ / heavy elevation work), keep
 
 ## Phase 1: Worm prep (one-time)
 
-1. Provision directories on `worm`:
-   - `/datasets/ibrida-data`
-   - `/datasets/dem`
-   - `/database/ibridaDB`
-   - `/peach/ibridaDB`
-2. Install/start Docker and match base compose/runtime assumptions.
-3. Add storage readiness checks on `worm` if any non-root mounts will be used (same class of guard as `stausee-ready` on blade).
+1. Choose host-path mode for worm:
+   - `compat mode` (minimal script churn): keep blade-like paths and create `/datasets`, `/database`, optional `/peach`.
+   - `worm-native mode` (cleaner host semantics): keep data under `/home/caleb/data/ibridadb/...` and use a compose override for bind mounts.
+2. Provision directories on `worm` for the chosen mode.
+   - Compat mode (recommended for fast adoption):
+     - `/datasets/ibrida-data`
+     - `/datasets/dem`
+     - `/database/ibridaDB`
+     - `/peach/ibridaDB/pgtemp` (optional; can be replaced by `/database/ibridaDB/pgtemp`)
+   - Worm-native mode (example):
+     - `/home/caleb/data/ibridadb/datasets/ibrida-data`
+     - `/home/caleb/data/ibridadb/datasets/dem`
+     - `/home/caleb/data/ibridadb/database/pgdata`
+     - `/home/caleb/data/ibridadb/database/pgtemp`
+3. Install/start Docker and match compose/runtime assumptions.
+4. Add storage readiness checks only if non-root mount dependencies are introduced (for plain rootfs directories, mount gating is not required).
 
 ## Phase 2: Data pre-seed (safe to start with throttling)
 
 Start with lower-impact copies first (non-DEM, non-PGDATA), then DEM.
+Examples below assume compat mode paths.
 
 Example (from `blade`):
 
@@ -103,6 +115,22 @@ done
 Notes:
 - For performance on rebuildable datasets, temporarily relaxing durability settings during restore can be considered, then reverted.
 - Avoid copying transient `pg_wal`/bloat from blade by not rsyncing PGDATA.
+- If worm-native mode is selected, adjust restore/read paths to the chosen `/home/caleb/data/ibridadb/...` roots (or mount those roots to container paths with compose override).
+
+## Compose path alignment on worm
+
+Current compose in this repo (`docker/stausee/docker-compose.yml`) binds:
+- `/database/ibridaDB:/var/lib/postgresql/data`
+- `/peach/ibridaDB/pgtemp:/pgtemp`
+- `/datasets/ibrida-data/*`
+- `/datasets/dem:/dem`
+
+Two valid approaches on worm:
+
+1. Keep these exact paths (compat mode), create directories on rootfs, and run unchanged scripts.
+2. Add a worm-specific compose override that remaps host paths from `/home/caleb/data/ibridadb/...` to the same container targets.
+
+Do not proceed with migration until one mode is selected and documented for operators.
 
 ## Phase 4: Validate worm as build host
 
@@ -135,7 +163,7 @@ Decision criteria:
 ## Immediate next actions (post current DEM run)
 
 1. Pin canonical DB naming in test configs (`ibrida-v0` vs `ibrida-v0-r1`) to avoid repeated DSN confusion.
-2. Start Phase 2 rsync pre-seed (throttled).
-3. Generate per-DB dump set for worm import.
-4. Run first worm-side restore + parity check.
-
+2. Select worm path mode (`compat` or `worm-native`) and finalize container bind strategy.
+3. Start Phase 2 rsync pre-seed (throttled) for the selected path mode.
+4. Generate per-DB dump set for worm import.
+5. Run first worm-side restore + parity check.
