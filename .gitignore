@@ -4,6 +4,7 @@ temp/
 .exports/
 *_export.txt
 *repo-report_export.txt
+.async-runner.lock.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
