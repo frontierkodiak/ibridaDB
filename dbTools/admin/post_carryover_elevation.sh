@@ -286,9 +286,6 @@ CREATE TABLE IF NOT EXISTS admin.elevation_fill_queue (
   PRIMARY KEY (run_id, observation_uuid)
 );
 
-CREATE INDEX IF NOT EXISTS elevation_fill_queue_state_idx
-  ON admin.elevation_fill_queue (run_id, state, observation_uuid);
-
 CREATE TABLE IF NOT EXISTS admin.elevation_fill_exclusions (
   run_id text NOT NULL REFERENCES admin.elevation_fill_runs(run_id) ON DELETE CASCADE,
   observation_uuid uuid NOT NULL,
