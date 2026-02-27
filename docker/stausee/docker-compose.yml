@@ -6,12 +6,14 @@ services:
     environment:
       POSTGRES_PASSWORD: ooglyboogly69
       PGDATA: /var/lib/postgresql/data/pgdata
-      POSTGRES_SHARED_BUFFERS: 8GB
-      POSTGRES_WORK_MEM: 2048MB
-      POSTGRES_MAINTENANCE_WORK_MEM: 4GB
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/runtime-tuning.conf
     volumes:
       - ~/repo/ibridaDB/dbTools:/tool
       - ~/repo/ibridaDB/dbQueries:/query
+      - ./postgresql.runtime-tuning.conf:/etc/postgresql/runtime-tuning.conf:ro
       - /database/ibridaDB:/var/lib/postgresql/data
       - /datasets/ibrida-data/exports:/exports
       - /datasets/ibrida-data/intake:/metadata
