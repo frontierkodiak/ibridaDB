@@ -272,6 +272,23 @@ CREATE TABLE IF NOT EXISTS admin.elevation_fill_batches (
 CREATE INDEX IF NOT EXISTS elevation_fill_batches_run_id_idx
   ON admin.elevation_fill_batches (run_id, batch_id);
 
+CREATE INDEX IF NOT EXISTS elevation_fill_batches_run_started_idx
+  ON admin.elevation_fill_batches (run_id, started_at);
+
+CREATE TABLE IF NOT EXISTS admin.elevation_fill_queue (
+  run_id text NOT NULL REFERENCES admin.elevation_fill_runs(run_id) ON DELETE CASCADE,
+  observation_uuid uuid NOT NULL,
+  state text NOT NULL CHECK (state IN ('pending', 'claimed', 'done', 'excluded')),
+  worker_id integer,
+  claimed_at timestamptz,
+  finished_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (run_id, observation_uuid)
+);
+
+CREATE INDEX IF NOT EXISTS elevation_fill_queue_state_idx
+  ON admin.elevation_fill_queue (run_id, state, observation_uuid);
+
 CREATE TABLE IF NOT EXISTS admin.elevation_fill_exclusions (
   run_id text NOT NULL REFERENCES admin.elevation_fill_runs(run_id) ON DELETE CASCADE,
   observation_uuid uuid NOT NULL,
@@ -316,7 +333,7 @@ print_status() {
            COALESCE(target_updated_rows, -1),
            COALESCE(max_batches, -1),
            initial_remaining, claimed_rows, rows_updated, rows_excluded, batches_completed,
-           EXTRACT(EPOCH FROM (now() - started_at))::bigint
+           EXTRACT(EPOCH FROM (COALESCE(finished_at, now()) - started_at))::bigint
       FROM admin.elevation_fill_runs
      WHERE run_id = '${target_run}';
   " "elevation-fill:control")"
@@ -327,7 +344,7 @@ print_status() {
 
   IFS='|' read -r run_id state workers batch_size target_rows max_batches initial_remaining claimed_rows rows_updated rows_excluded batches_completed elapsed_sec <<<"${row}"
 
-  local processed remaining progress_pct rate active_workers
+  local processed remaining progress_pct rate active_workers recent
   processed=$((rows_updated + rows_excluded))
   remaining=$((initial_remaining - processed))
   if (( remaining < 0 )); then
@@ -342,9 +359,36 @@ print_status() {
       AND application_name LIKE 'elevation-fill:${target_run}:w%';
   " "elevation-fill:control")"
 
+  recent="$(psql_value "
+    WITH b AS (
+      SELECT claimed_rows, updated_rows, excluded_rows, started_at, finished_at
+      FROM admin.elevation_fill_batches
+      WHERE run_id = '${target_run}'
+        AND started_at >= now() - interval '30 minutes'
+    ),
+    s AS (
+      SELECT count(*) AS batch_count,
+             sum(claimed_rows)::bigint AS claimed_rows,
+             sum(updated_rows)::bigint AS updated_rows,
+             sum(excluded_rows)::bigint AS excluded_rows,
+             min(started_at) AS t0,
+             max(finished_at) AS t1
+      FROM b
+    )
+    SELECT COALESCE(batch_count,0),
+           COALESCE(round(updated_rows/NULLIF(EXTRACT(EPOCH FROM (t1 - t0)),0),2),0),
+           COALESCE(round((updated_rows + excluded_rows)/NULLIF(EXTRACT(EPOCH FROM (t1 - t0)),0),2),0)
+    FROM s;
+  " "elevation-fill:control")"
+  IFS='|' read -r recent_batches recent_updated_rps recent_processed_rps <<<"${recent}"
+  recent_batches="${recent_batches:-0}"
+  recent_updated_rps="${recent_updated_rps:-0}"
+  recent_processed_rps="${recent_processed_rps:-0}"
+
   log "run=${run_id} state=${state} active_workers=${active_workers} workers_cfg=${workers} batch_size=${batch_size}"
   log "updated=${rows_updated} excluded=${rows_excluded} claimed=${claimed_rows} batches=${batches_completed} processed=${processed}/${initial_remaining} (${progress_pct}%) est_remaining=${remaining}"
   log "elapsed_sec=${elapsed_sec} updated_rows_per_sec=${rate} target_updated_rows=${target_rows} max_batches=${max_batches}"
+  log "recent_window=30m recent_batches=${recent_batches} recent_updated_rows_per_sec=${recent_updated_rps} recent_processed_rows_per_sec=${recent_processed_rps}"
 }
 
 run_exists() {
@@ -369,7 +413,7 @@ run_should_stop() {
 }
 
 create_or_resume_run() {
-  local host_name initial_remaining
+  local host_name initial_remaining queue_rows reclaimed_rows
   host_name="$(hostname)"
 
   if run_exists; then
@@ -377,6 +421,43 @@ create_or_resume_run() {
       die "Run ${RUN_ID} already exists and --no-resume was set"
     fi
     log "Resuming existing run ${RUN_ID}"
+    queue_rows="$(psql_value "
+      SELECT count(*) FROM admin.elevation_fill_queue WHERE run_id = '${RUN_ID}';
+    " "elevation-fill:${RUN_ID}:control")"
+
+    if [[ "${queue_rows}" == "0" ]]; then
+      log "No queue rows found for run ${RUN_ID}; backfilling queue from remaining NULL+geom observations..."
+      docker_psql "elevation-fill:${RUN_ID}:control" -c "
+        INSERT INTO admin.elevation_fill_queue (run_id, observation_uuid, state)
+        SELECT '${RUN_ID}', o.observation_uuid, 'pending'
+        FROM observations o
+        WHERE o.elevation_meters IS NULL
+          AND o.geom IS NOT NULL
+        ON CONFLICT (run_id, observation_uuid) DO NOTHING;
+      " >/dev/null
+      queue_rows="$(psql_value "
+        SELECT count(*) FROM admin.elevation_fill_queue WHERE run_id = '${RUN_ID}';
+      " "elevation-fill:${RUN_ID}:control")"
+    fi
+
+    reclaimed_rows="$(psql_value "
+      WITH reclaimed AS (
+        UPDATE admin.elevation_fill_queue
+        SET state = 'pending',
+            worker_id = NULL,
+            claimed_at = NULL,
+            updated_at = now()
+        WHERE run_id = '${RUN_ID}'
+          AND state = 'claimed'
+        RETURNING 1
+      )
+      SELECT count(*) FROM reclaimed;
+    " "elevation-fill:${RUN_ID}:control")"
+
+    if [[ "${reclaimed_rows}" != "0" ]]; then
+      log "Re-queued ${reclaimed_rows} stale claimed rows for run ${RUN_ID}"
+    fi
+
     docker_psql "elevation-fill:${RUN_ID}:control" -c "
       UPDATE admin.elevation_fill_runs
       SET state = 'running',
@@ -385,17 +466,13 @@ create_or_resume_run() {
           target_updated_rows = ${TARGET_UPDATED_ROWS:-NULL},
           max_batches = ${MAX_BATCHES:-NULL},
           finished_at = NULL,
+          initial_remaining = GREATEST(initial_remaining, ${queue_rows}),
           last_heartbeat = now(),
           updated_at = now()
       WHERE run_id = '${RUN_ID}';
     " >/dev/null
     return 0
   fi
-
-  log "Computing initial remaining row count (NULL elevation + geom present)..."
-  initial_remaining="$(psql_value "
-    SELECT count(*) FROM observations WHERE elevation_meters IS NULL AND geom IS NOT NULL;
-  " "elevation-fill:${RUN_ID}:control")"
 
   docker_psql "elevation-fill:${RUN_ID}:control" -c "
     INSERT INTO admin.elevation_fill_runs (
@@ -404,8 +481,30 @@ create_or_resume_run() {
     )
     VALUES (
       '${RUN_ID}', '${DB_NAME}', '${host_name}', 'running', ${WORKERS}, ${BATCH_SIZE},
-      ${TARGET_UPDATED_ROWS:-NULL}, ${MAX_BATCHES:-NULL}, ${initial_remaining}, now()
+      ${TARGET_UPDATED_ROWS:-NULL}, ${MAX_BATCHES:-NULL}, 0, now()
     );
+  " >/dev/null
+
+  log "Building run queue from NULL+geom observations (one-time step)..."
+  docker_psql "elevation-fill:${RUN_ID}:control" -c "
+    INSERT INTO admin.elevation_fill_queue (run_id, observation_uuid, state)
+    SELECT '${RUN_ID}', o.observation_uuid, 'pending'
+    FROM observations o
+    WHERE o.elevation_meters IS NULL
+      AND o.geom IS NOT NULL
+    ON CONFLICT (run_id, observation_uuid) DO NOTHING;
+  " >/dev/null
+
+  initial_remaining="$(psql_value "
+    SELECT count(*) FROM admin.elevation_fill_queue WHERE run_id = '${RUN_ID}';
+  " "elevation-fill:${RUN_ID}:control")"
+
+  docker_psql "elevation-fill:${RUN_ID}:control" -c "
+    UPDATE admin.elevation_fill_runs
+    SET initial_remaining = ${initial_remaining},
+        updated_at = now(),
+        last_heartbeat = now()
+    WHERE run_id = '${RUN_ID}';
   " >/dev/null
 
   log "Created run ${RUN_ID} with initial_remaining=${initial_remaining}"
@@ -423,28 +522,24 @@ worker_loop() {
 
     start_ms="$(date +%s%3N)"
     batch_result="$(psql_value "
-      WITH candidate AS (
-        SELECT o.observation_uuid, o.geom
-        FROM observations o
-        WHERE o.elevation_meters IS NULL
-          AND o.geom IS NOT NULL
-          AND NOT EXISTS (
-            SELECT 1
-            FROM admin.elevation_fill_exclusions x
-            WHERE x.run_id = '${RUN_ID}'
-              AND x.observation_uuid = o.observation_uuid
-          )
-        ORDER BY o.observation_uuid
+      WITH picked AS (
+        SELECT q.observation_uuid
+        FROM admin.elevation_fill_queue q
+        WHERE q.run_id = '${RUN_ID}'
+          AND q.state = 'pending'
+        ORDER BY q.observation_uuid
         LIMIT ${BATCH_SIZE}
         FOR UPDATE SKIP LOCKED
       ),
       resolved AS (
-        SELECT c.observation_uuid, v.elev
-        FROM candidate c
+        SELECT p.observation_uuid, v.elev
+        FROM picked p
+        JOIN observations o
+          ON o.observation_uuid = p.observation_uuid
         LEFT JOIN LATERAL (
-          SELECT ST_Value(er.rast, c.geom)::numeric(10,2) AS elev
+          SELECT ST_Value(er.rast, o.geom)::numeric(10,2) AS elev
           FROM elevation_raster er
-          WHERE ST_Intersects(er.rast, c.geom)
+          WHERE ST_Intersects(er.rast, o.geom)
           LIMIT 1
         ) v ON true
       ),
@@ -457,18 +552,42 @@ worker_loop() {
           AND o.elevation_meters IS NULL
         RETURNING o.observation_uuid
       ),
-      excluded AS (
-        INSERT INTO admin.elevation_fill_exclusions (run_id, observation_uuid, reason)
-        SELECT '${RUN_ID}', r.observation_uuid, 'no_raster_value'
+      mark_done AS (
+        UPDATE admin.elevation_fill_queue q
+        SET state = 'done',
+            finished_at = now(),
+            updated_at = now()
+        FROM updated u
+        WHERE q.run_id = '${RUN_ID}'
+          AND q.observation_uuid = u.observation_uuid
+        RETURNING q.observation_uuid
+      ),
+      mark_excluded AS (
+        UPDATE admin.elevation_fill_queue q
+        SET state = 'excluded',
+            finished_at = now(),
+            updated_at = now()
         FROM resolved r
-        LEFT JOIN updated u ON u.observation_uuid = r.observation_uuid
-        WHERE u.observation_uuid IS NULL
+        LEFT JOIN updated u
+          ON u.observation_uuid = r.observation_uuid
+        JOIN observations o_now
+          ON o_now.observation_uuid = r.observation_uuid
+        WHERE q.run_id = '${RUN_ID}'
+          AND q.observation_uuid = r.observation_uuid
+          AND u.observation_uuid IS NULL
+          AND o_now.elevation_meters IS NULL
+        RETURNING q.observation_uuid
+      ),
+      excluded_log AS (
+        INSERT INTO admin.elevation_fill_exclusions (run_id, observation_uuid, reason)
+        SELECT '${RUN_ID}', e.observation_uuid, 'no_raster_value'
+        FROM mark_excluded e
         ON CONFLICT (run_id, observation_uuid) DO NOTHING
         RETURNING observation_uuid
       )
-      SELECT (SELECT count(*) FROM candidate),
+      SELECT (SELECT count(*) FROM picked),
              (SELECT count(*) FROM updated),
-             (SELECT count(*) FROM excluded);
+             (SELECT count(*) FROM mark_excluded);
     " "elevation-fill:${RUN_ID}:w${worker_id}")"
     end_ms="$(date +%s%3N)"
     duration_ms=$((end_ms - start_ms))
