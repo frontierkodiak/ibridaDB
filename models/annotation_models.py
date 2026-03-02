@@ -503,7 +503,7 @@ class AnnotationQuality(Base):
         ),
         CheckConstraint(
             "(review_status = 'conflict' AND conflict_flag = TRUE) "
-            "OR (review_status <> 'conflict')",
+            "OR (review_status <> 'conflict' AND conflict_flag = FALSE)",
             name="chk_quality_conflict_consistency",
         ),
         CheckConstraint(
