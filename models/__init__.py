@@ -1,10 +1,12 @@
 from .annotation_models import (
     Annotation,
+    AnnotationExportPolicy,
     AnnotationGeometry,
     AnnotationProvenance,
     AnnotationQuality,
     AnnotationSet,
     AnnotationSubject,
+    AnnotationSupersession,
 )
 from .base import Base
 from .coldp_models import (
@@ -27,9 +29,11 @@ __all__ = [
     "ColdpReference",
     "ColdpTypeMaterial",
     "Annotation",
+    "AnnotationExportPolicy",
     "AnnotationGeometry",
     "AnnotationProvenance",
     "AnnotationQuality",
     "AnnotationSet",
     "AnnotationSubject",
+    "AnnotationSupersession",
 ]
