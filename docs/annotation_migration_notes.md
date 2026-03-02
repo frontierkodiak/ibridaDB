@@ -1,4 +1,4 @@
-# Annotation Lineage Migration Notes (POL-652 / POL-653)
+# Annotation Lineage Migration Notes (POL-652 / POL-653 / POL-654)
 
 This note explains how existing assumptions map onto the initial annotation-lineage layers:
 
@@ -6,8 +6,10 @@ This note explains how existing assumptions map onto the initial annotation-line
 - `annotation_subject`
 - `annotation`
 - `annotation_geometry`
+- `annotation_provenance`
+- `annotation_quality`
 
-`POL-652` delivers identity scaffolding; `POL-653` adds representational geometry. Provenance/quality policy arrives in `POL-654`/`POL-655`.
+`POL-652` delivers identity scaffolding; `POL-653` adds representational geometry; `POL-654` adds provenance and quality policy surfaces. Export-selection/versioning invariants remain in `POL-655`.
 
 ## Why this split exists
 
@@ -64,15 +66,27 @@ Core guarantees from Schema B:
 - Coordinate assumptions are explicit: normalized `[0,1]` with top-left origin.
 - Geometry-kind-specific completeness checks are enforced in DB constraints.
 
+## 6. Provenance + quality policy (added in POL-654)
+
+`POL-654` adds two policy surfaces:
+
+- `annotation_provenance`: source-kind-specific completeness checks (`human`, `model`, `imported_dataset`).
+- `annotation_quality`: review lifecycle, conflict metadata, adjudication identity/timestamps.
+
+Core guarantees from Schema C:
+
+- Model-generated annotations require provenance completeness (`model_id`, `config_hash`, `run_id`).
+- Human annotations require operator identity.
+- Adjudicated states (`accepted`, `rejected`, `conflict`) require adjudicator identity and timestamp.
+- Trusted-selection semantics are explicit via `annotation_trusted_selection_v1`.
+
 ## What is intentionally deferred
 
-The following remain out of scope after `POL-653` and should not be backfilled here:
+The following remain out of scope after `POL-654` and should not be backfilled here:
 
-- Provenance graph details beyond set-level source metadata
-- Quality scoring policy and adjudication contracts
 - Export selection/version matrix rules
 
-These are covered by `POL-653`, `POL-654`, and `POL-655`.
+These are covered by `POL-655`.
 
 ## Validation checklist for downstream lanes
 
@@ -83,6 +97,7 @@ Before building on this foundation:
 3. Confirm duplicate subject identity for the same asset/frame slot is blocked.
 4. Confirm nullable video fields work for still-image assets.
 5. Confirm representative bbox/polygon/mask inserts pass on Schema B (`002_annotation_geometry_verify.sql`).
+6. Confirm source-kind completeness + adjudication constraints pass on Schema C (`003_annotation_provenance_quality_verify.sql`).
 
 ## File references
 
@@ -93,4 +108,8 @@ Before building on this foundation:
 - Migration: `dbTools/admin/migrations/002_annotation_geometry.sql`
 - Rollback: `dbTools/admin/migrations/002_annotation_geometry_rollback.sql`
 - Verification inserts: `dbTools/admin/migrations/002_annotation_geometry_verify.sql`
-- ORM: `models/annotation_models.py` (Schema A + Schema B)
+- DDL (Schema C): `dbTools/admin/add_annotation_provenance_quality_ddl.sql`
+- Migration: `dbTools/admin/migrations/003_annotation_provenance_quality.sql`
+- Rollback: `dbTools/admin/migrations/003_annotation_provenance_quality_rollback.sql`
+- Verification inserts: `dbTools/admin/migrations/003_annotation_provenance_quality_verify.sql`
+- ORM: `models/annotation_models.py` (Schema A + Schema B + Schema C)

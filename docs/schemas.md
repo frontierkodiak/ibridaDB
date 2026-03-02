@@ -53,6 +53,10 @@ This reference is intended to help developers and maintainers quickly understand
 9. [Annotation Geometry Layer (POL-653)](#9-annotation-geometry-layer-pol-653)
    9.1. [annotation](#91-annotation)
    9.2. [annotation_geometry](#92-annotation_geometry)
+10. [Annotation Provenance + Quality Layer (POL-654)](#10-annotation-provenance--quality-layer-pol-654)
+   10.1. [annotation_provenance](#101-annotation_provenance)
+   10.2. [annotation_quality](#102-annotation_quality)
+   10.3. [Trusted Selection Query Surface](#103-trusted-selection-query-surface)
 
 ---
 
@@ -819,6 +823,87 @@ Canonical DDL files:
 - GIN indexes for JSON-heavy query surfaces (`sidecar`, `polygon_vertices`, `mask_rle`).
 
 **Phase boundary:** `POL-653` defines representational structure only. Provenance/quality policy (`POL-654`) and export-selection/versioning invariants (`POL-655`) remain separate.
+
+---
+
+## 10. Annotation Provenance + Quality Layer (POL-654)
+
+`POL-654` adds Schema C: provenance-completeness and quality/adjudication policy
+surfaces keyed to `annotation`.
+
+Canonical DDL files:
+
+- `dbTools/admin/add_annotation_provenance_quality_ddl.sql`
+- `dbTools/admin/migrations/003_annotation_provenance_quality.sql`
+- rollback: `dbTools/admin/migrations/003_annotation_provenance_quality_rollback.sql`
+- verification examples: `dbTools/admin/migrations/003_annotation_provenance_quality_verify.sql`
+
+### 10.1. annotation_provenance
+
+**Purpose:** Attach durable source lineage metadata to each annotation with source-kind-specific completeness checks.
+
+**Key columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `provenance_id` | `uuid` | Primary key (`gen_random_uuid()`) |
+| `annotation_id` | `uuid` | Unique FK to `annotation` (one provenance row per annotation) |
+| `source_kind` | `varchar(32)` | `human`, `model`, `imported_dataset` |
+| `source_name` | `varchar(128)` | Producer name (`sam3`, `md3`, `inat2017-import`, etc.) |
+| `source_version` | `varchar(64)` | Version/source release marker |
+| `model_id` | `varchar(128)` | Required for `source_kind=model` |
+| `prompt_hash`, `config_hash` | `varchar(64)` | Optional/required deterministic hashes (hex SHA-256) |
+| `run_id` | `varchar(128)` | Run/build identity (required for `source_kind=model`) |
+| `operator_identity` | `varchar(128)` | Required for `source_kind=human` |
+| `recorded_at` | `timestamptz` | Provenance record timestamp |
+| `sidecar` | `jsonb` | Extensible metadata |
+
+**Source-kind completeness policy:**
+
+- `human`: `operator_identity` required.
+- `model`: `model_id`, `config_hash`, and `run_id` required.
+- `imported_dataset`: `source_version` required.
+
+### 10.2. annotation_quality
+
+**Purpose:** Represent review lifecycle and adjudication decisions for each annotation.
+
+**Key columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `quality_id` | `uuid` | Primary key |
+| `annotation_id` | `uuid` | Unique FK to `annotation` (one quality row per annotation) |
+| `review_status` | `varchar(32)` | `unreviewed`, `needs_review`, `accepted`, `rejected`, `conflict` |
+| `confidence_score` | `double precision` | Optional quality confidence in `[0,1]` |
+| `conflict_flag` | `boolean` | True for unresolved disagreement |
+| `conflict_reason` | `text` | Required when `conflict_flag=true` |
+| `adjudicated_by` | `varchar(128)` | Required for adjudicated statuses |
+| `adjudicated_at` | `timestamptz` | Required for adjudicated statuses |
+| `review_notes` | `text` | Optional adjudication notes |
+| `sidecar` | `jsonb` | Extensible metadata |
+
+**Policy constraints:**
+
+- Adjudicated statuses (`accepted`, `rejected`, `conflict`) require both `adjudicated_by` and `adjudicated_at`.
+- `review_status='conflict'` requires `conflict_flag=true`.
+- `confidence_score` bounded to `[0,1]` when present.
+
+### 10.3. Trusted Selection Query Surface
+
+`POL-654` adds `annotation_trusted_selection_v1` to make trust semantics explicit and queryable.
+
+Selection baseline:
+
+- Excludes non-active annotation rows (`annotation.lifecycle_state='active'` only).
+- Rejects rows with `review_status='rejected'` or `conflict_flag=true`.
+- Assigns trust rank by source + quality state:
+  - rank `3`: human + accepted/unreviewed
+  - rank `2`: accepted model rows with confidence gate (`>= 0.50`) or accepted/unreviewed imported rows
+  - rank `1`: all other non-rejected/non-conflict active rows
+  - rank `0`: rejected/conflict rows
+
+This view is intended as a stable, auditable policy surface for downstream export-selection logic in `POL-655`.
 
 ---
 
