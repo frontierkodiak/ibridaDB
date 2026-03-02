@@ -12,6 +12,10 @@ Schema B (POL-653):
 Schema C (POL-654):
     annotation_provenance — source completeness and lineage metadata per annotation.
     annotation_quality    — review/adjudication policy per annotation.
+
+Schema D (POL-655):
+    annotation_supersession — insert-only supersession edges (history preserving updates).
+    annotation_export_policy — versioned deterministic export-selection policy matrix.
 """
 
 from sqlalchemy import (
@@ -28,7 +32,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 
 from .base import Base
 
@@ -528,4 +532,87 @@ class AnnotationQuality(Base):
             postgresql_using="gin",
             postgresql_where=sidecar.isnot(None),
         ),
+    )
+
+
+class AnnotationSupersession(Base):
+    """Insert-only supersession edge between annotation rows."""
+
+    __tablename__ = "annotation_supersession"
+
+    supersession_id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=func.gen_random_uuid(),
+    )
+    superseded_annotation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("annotation.annotation_id"),
+        nullable=False,
+    )
+    replacement_annotation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("annotation.annotation_id"),
+        nullable=False,
+    )
+    reason = Column(Text)
+    created_by = Column(String(128))
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "superseded_annotation_id",
+            name="uq_superseded_annotation",
+        ),
+        CheckConstraint(
+            "superseded_annotation_id <> replacement_annotation_id",
+            name="chk_supersession_distinct_ids",
+        ),
+        Index("idx_supersession_replacement", "replacement_annotation_id"),
+        Index("idx_supersession_created_at", "created_at"),
+    )
+
+
+class AnnotationExportPolicy(Base):
+    """Versioned export-selection policy matrix."""
+
+    __tablename__ = "annotation_export_policy"
+
+    policy_id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=func.gen_random_uuid(),
+    )
+    policy_name = Column(String(64), nullable=False)
+    policy_version = Column(Integer, nullable=False)
+    strategy = Column(String(32), nullable=False)
+    min_trust_rank = Column(Integer, nullable=False, server_default="1")
+    allowed_source_kinds = Column(ARRAY(Text), nullable=False)
+    include_conflict = Column(Boolean, nullable=False, server_default="false")
+    notes = Column(JSONB)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "policy_name",
+            "policy_version",
+            name="uq_export_policy_name_version",
+        ),
+        CheckConstraint(
+            "strategy IN ('human_first', 'model_first', 'hybrid')",
+            name="chk_export_policy_strategy",
+        ),
+        CheckConstraint(
+            "min_trust_rank >= 0 AND min_trust_rank <= 3",
+            name="chk_export_policy_trust_rank",
+        ),
+        CheckConstraint(
+            "cardinality(allowed_source_kinds) > 0",
+            name="chk_export_policy_sources_nonempty",
+        ),
+        Index("idx_export_policy_lookup", "policy_name", "policy_version"),
     )
