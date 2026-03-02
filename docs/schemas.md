@@ -47,6 +47,9 @@ This reference is intended to help developers and maintainers quickly understand
    6.1. [Elevation_Raster Table](#elevation_raster-table)
 
 7. [Appendix: SQL Dumps and \d Outputs](#appendix-sql-dumps-and-d-output)
+8. [Annotation Foundations (POL-652)](#8-annotation-foundations-pol-652)
+   8.1. [annotation_set](#81-annotation_set)
+   8.2. [annotation_subject](#82-annotation_subject)
 
 ---
 
@@ -674,6 +677,69 @@ Assuming the export group is named `amphibia_all_exc_nonrg_sp_oor_elev`, an exam
  inat_scientific_name | text                   
  col_scientific_name  | text                   
 ```
+
+---
+
+## 8. Annotation Foundations (POL-652)
+
+`POL-652` establishes the first two annotation-lineage identity tables:
+
+- `annotation_set`: groups one production of annotations (human batch, model run, or imported dataset batch).
+- `annotation_subject`: stable target identity for "what is being annotated" across still images and video frames.
+
+Canonical DDL files:
+
+- `dbTools/admin/add_annotation_foundations_ddl.sql`
+- `dbTools/admin/migrations/001_annotation_subject_set.sql`
+- rollback: `dbTools/admin/migrations/001_annotation_subject_set_rollback.sql`
+
+### 8.1. annotation_set
+
+**Purpose:** Track producer/run/build identity and release linkage so later geometry/provenance tables can point to a stable set record.
+
+**Key columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `set_id` | `uuid` | Primary key (`gen_random_uuid()`) |
+| `dataset` | `varchar(64)` | Dataset namespace; defaults to `ibrida` |
+| `release` | `varchar(16)` | Source release (e.g. `r2`) |
+| `source_kind` | `varchar(32)` | Constrained to `human`, `model`, `imported_dataset` |
+| `source_name` | `varchar(128)` | Producer name (tool/model/batch label) |
+| `source_version` | `varchar(64)` | Version string for producer |
+| `run_id` | `varchar(128)` | External run/batch identity |
+| `prompt_hash`, `config_hash` | `char(64)` | SHA-256 hashes for deterministic config provenance |
+| `sidecar` | `jsonb` | Extensible metadata |
+
+**Index/constraint highlights:**
+
+- Partial unique index on `(source_name, source_version, run_id)` where `run_id IS NOT NULL` to prevent duplicate ingestion of the same run.
+- Lookup indexes on `(dataset, release)` and `(source_kind, source_name)`.
+- GIN index on `sidecar` for metadata filtering.
+
+### 8.2. annotation_subject
+
+**Purpose:** Represent stable annotation targets independent of specific annotation geometry/provenance rows.
+
+**Key columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `subject_id` | `uuid` | Primary key (`gen_random_uuid()`) |
+| `asset_uuid` | `uuid` | Required stable asset identity (photo/media) |
+| `observation_uuid` | `uuid` | Optional observation linkage |
+| `frame_index` | `integer` | Optional video frame index (`>= 0`) |
+| `time_start_ms`, `time_end_ms` | `integer` | Optional segment window; guarded by range check |
+| `asset_width_px`, `asset_height_px` | `integer` | Optional positive dimensions |
+| `sidecar` | `jsonb` | Extensible metadata |
+
+**Index/constraint highlights:**
+
+- Unique index on `(asset_uuid, COALESCE(frame_index, -1), COALESCE(time_start_ms, -1), COALESCE(time_end_ms, -1))` to enforce one subject identity per asset/frame/window slot.
+- Check constraints for non-negative frame index, positive dimensions, and valid time ranges.
+- Lookup indexes on `asset_uuid`, optional `observation_uuid`, and `created_at`.
+
+**Phase boundary:** `POL-652` intentionally does not define geometry rows, quality policy, or provenance edges; those are implemented in `POL-653`, `POL-654`, and `POL-655`.
 
 ---
 
