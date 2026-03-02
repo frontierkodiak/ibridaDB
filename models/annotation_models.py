@@ -64,9 +64,23 @@ class AnnotationSet(Base):
             "source_kind IN ('human', 'model', 'imported_dataset')",
             name="chk_source_kind",
         ),
+        Index(
+            "uq_annotation_set_run",
+            "source_name",
+            "source_version",
+            "run_id",
+            unique=True,
+            postgresql_where=run_id.isnot(None),
+        ),
         Index("idx_annotation_set_dataset_release", "dataset", "release"),
         Index("idx_annotation_set_source", "source_kind", "source_name"),
         Index("idx_annotation_set_created_at", "created_at"),
+        Index(
+            "idx_annotation_set_sidecar",
+            "sidecar",
+            postgresql_using="gin",
+            postgresql_where=sidecar.isnot(None),
+        ),
     )
 
 
@@ -88,7 +102,7 @@ class AnnotationSubject(Base):
         primary_key=True,
         server_default=func.gen_random_uuid(),
     )
-    asset_uuid = Column(UUID(as_uuid=True), nullable=False, index=True)
+    asset_uuid = Column(UUID(as_uuid=True), nullable=False)
     observation_uuid = Column(UUID(as_uuid=True))
     frame_index = Column(Integer)
     time_start_ms = Column(Integer)
@@ -114,6 +128,26 @@ class AnnotationSubject(Base):
             "(asset_width_px IS NULL OR asset_width_px > 0) "
             "AND (asset_height_px IS NULL OR asset_height_px > 0)",
             name="chk_dimensions",
+        ),
+        Index(
+            "uq_annotation_subject_asset_frame",
+            asset_uuid,
+            func.coalesce(frame_index, -1),
+            func.coalesce(time_start_ms, -1),
+            func.coalesce(time_end_ms, -1),
+            unique=True,
+        ),
+        Index("idx_annotation_subject_asset", "asset_uuid"),
+        Index(
+            "idx_annotation_subject_observation",
+            "observation_uuid",
+            postgresql_where=observation_uuid.isnot(None),
+        ),
+        Index(
+            "idx_annotation_subject_sidecar",
+            "sidecar",
+            postgresql_using="gin",
+            postgresql_where=sidecar.isnot(None),
         ),
         Index("idx_annotation_subject_created_at", "created_at"),
     )

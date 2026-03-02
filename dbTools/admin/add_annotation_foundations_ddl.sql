@@ -132,7 +132,12 @@ COMMENT ON COLUMN annotation_subject.asset_height_px IS 'Asset height in pixels 
 -- Uniqueness: one subject per asset + frame combination
 -- Uses COALESCE to handle NULLs in the unique constraint
 CREATE UNIQUE INDEX IF NOT EXISTS uq_annotation_subject_asset_frame
-    ON annotation_subject (asset_uuid, COALESCE(frame_index, -1), COALESCE(time_start_ms, -1));
+    ON annotation_subject (
+        asset_uuid,
+        COALESCE(frame_index, -1),
+        COALESCE(time_start_ms, -1),
+        COALESCE(time_end_ms, -1)
+    );
 
 -- Fast lookups
 CREATE INDEX IF NOT EXISTS idx_annotation_subject_asset

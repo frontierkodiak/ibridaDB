@@ -735,7 +735,7 @@ Canonical DDL files:
 
 **Index/constraint highlights:**
 
-- Unique index on `(asset_uuid, COALESCE(frame_index, -1), COALESCE(time_start_ms, -1))` to enforce one subject identity per asset/frame slot.
+- Unique index on `(asset_uuid, COALESCE(frame_index, -1), COALESCE(time_start_ms, -1), COALESCE(time_end_ms, -1))` to enforce one subject identity per asset/frame/window slot.
 - Check constraints for non-negative frame index, positive dimensions, and valid time ranges.
 - Lookup indexes on `asset_uuid`, optional `observation_uuid`, and `created_at`.
 

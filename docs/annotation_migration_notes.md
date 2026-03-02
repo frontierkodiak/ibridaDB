@@ -47,7 +47,7 @@ Recommended fields:
 ### 4. "Subject identity can be rewritten"
 
 - **Old pattern:** Different jobs may construct the same asset/frame identity inconsistently.
-- **New pattern:** `annotation_subject` unique identity index on `(asset_uuid, frame_index?, time_start_ms?)` via `COALESCE` strategy.
+- **New pattern:** `annotation_subject` unique identity index on `(asset_uuid, frame_index?, time_start_ms?, time_end_ms?)` via `COALESCE` strategy.
 
 ## What is intentionally deferred
 
