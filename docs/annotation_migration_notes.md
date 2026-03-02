@@ -1,4 +1,4 @@
-# Annotation Lineage Migration Notes (POL-652 / POL-653 / POL-654)
+# Annotation Lineage Migration Notes (POL-652 / POL-653 / POL-654 / POL-655)
 
 This note explains how existing assumptions map onto the initial annotation-lineage layers:
 
@@ -8,8 +8,10 @@ This note explains how existing assumptions map onto the initial annotation-line
 - `annotation_geometry`
 - `annotation_provenance`
 - `annotation_quality`
+- `annotation_supersession`
+- `annotation_export_policy`
 
-`POL-652` delivers identity scaffolding; `POL-653` adds representational geometry; `POL-654` adds provenance and quality policy surfaces. Export-selection/versioning invariants remain in `POL-655`.
+`POL-652` delivers identity scaffolding; `POL-653` adds representational geometry; `POL-654` adds provenance and quality policy surfaces; `POL-655` finalizes insert-only versioning and deterministic export-selection semantics.
 
 ## Why this split exists
 
@@ -80,13 +82,22 @@ Core guarantees from Schema C:
 - Adjudicated states (`accepted`, `rejected`, `conflict`) require adjudicator identity and timestamp.
 - Trusted-selection semantics are explicit via `annotation_trusted_selection_v1`.
 
+## 7. Versioning + export selection invariants (added in POL-655)
+
+`POL-655` adds two final control surfaces:
+
+- `annotation_supersession`: insert-only replacement edges so updates do not require destructive overwrite.
+- `annotation_export_policy`: versioned policy matrix (`human_first`, `model_first`, `hybrid`) for deterministic selection.
+
+Core guarantees from Schema D:
+
+- Active selectors exclude superseded rows via `annotation_active_selection_v1`.
+- Export selection is deterministic and policy-driven via `annotation_export_select_v1(policy_name, policy_version)`.
+- Delete operations are guarded on annotation-lineage tables to reinforce non-destructive history preservation.
+
 ## What is intentionally deferred
 
-The following remain out of scope after `POL-654` and should not be backfilled here:
-
-- Export selection/version matrix rules
-
-These are covered by `POL-655`.
+No remaining annotation-lineage schema rules are deferred after `POL-655`; downstream work should consume these invariants rather than re-derive policy ad hoc.
 
 ## Validation checklist for downstream lanes
 
@@ -98,6 +109,7 @@ Before building on this foundation:
 4. Confirm nullable video fields work for still-image assets.
 5. Confirm representative bbox/polygon/mask inserts pass on Schema B (`002_annotation_geometry_verify.sql`).
 6. Confirm source-kind completeness + adjudication constraints pass on Schema C (`003_annotation_provenance_quality_verify.sql`).
+7. Confirm supersession + policy-driven selection invariants pass on Schema D (`004_annotation_versioning_policy_verify.sql`).
 
 ## File references
 
@@ -112,4 +124,8 @@ Before building on this foundation:
 - Migration: `dbTools/admin/migrations/003_annotation_provenance_quality.sql`
 - Rollback: `dbTools/admin/migrations/003_annotation_provenance_quality_rollback.sql`
 - Verification inserts: `dbTools/admin/migrations/003_annotation_provenance_quality_verify.sql`
-- ORM: `models/annotation_models.py` (Schema A + Schema B + Schema C)
+- DDL (Schema D): `dbTools/admin/add_annotation_versioning_policy_ddl.sql`
+- Migration: `dbTools/admin/migrations/004_annotation_versioning_policy.sql`
+- Rollback: `dbTools/admin/migrations/004_annotation_versioning_policy_rollback.sql`
+- Verification inserts: `dbTools/admin/migrations/004_annotation_versioning_policy_verify.sql`
+- ORM: `models/annotation_models.py` (Schema A + Schema B + Schema C + Schema D)

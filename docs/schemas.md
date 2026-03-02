@@ -57,6 +57,10 @@ This reference is intended to help developers and maintainers quickly understand
    10.1. [annotation_provenance](#101-annotation_provenance)
    10.2. [annotation_quality](#102-annotation_quality)
    10.3. [Trusted Selection Query Surface](#103-trusted-selection-query-surface)
+11. [Annotation Versioning + Export Policy Layer (POL-655)](#11-annotation-versioning--export-policy-layer-pol-655)
+   11.1. [annotation_supersession](#111-annotation_supersession)
+   11.2. [annotation_export_policy](#112-annotation_export_policy)
+   11.3. [Deterministic Selector Surfaces](#113-deterministic-selector-surfaces)
 
 ---
 
@@ -904,6 +908,83 @@ Selection baseline:
   - rank `0`: rejected/conflict rows
 
 This view is intended as a stable, auditable policy surface for downstream export-selection logic in `POL-655`.
+
+---
+
+## 11. Annotation Versioning + Export Policy Layer (POL-655)
+
+`POL-655` adds Schema D: non-destructive update invariants and deterministic export policy surfaces.
+
+Canonical DDL files:
+
+- `dbTools/admin/add_annotation_versioning_policy_ddl.sql`
+- `dbTools/admin/migrations/004_annotation_versioning_policy.sql`
+- rollback: `dbTools/admin/migrations/004_annotation_versioning_policy_rollback.sql`
+- verification examples: `dbTools/admin/migrations/004_annotation_versioning_policy_verify.sql`
+
+### 11.1. annotation_supersession
+
+**Purpose:** Preserve full history by expressing replacements as insert-only edges instead of destructive row updates/deletes.
+
+**Key columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `supersession_id` | `uuid` | Primary key |
+| `superseded_annotation_id` | `uuid` | FK to retired annotation row |
+| `replacement_annotation_id` | `uuid` | FK to replacement annotation row |
+| `reason` | `text` | Optional supersession rationale |
+| `created_by` | `varchar(128)` | Operator/process identity |
+| `created_at` | `timestamptz` | Supersession timestamp |
+
+**Invariant highlights:**
+
+- `superseded_annotation_id` unique (single canonical replacement edge).
+- `superseded_annotation_id <> replacement_annotation_id`.
+- Active selectors exclude superseded rows (`annotation_active_selection_v1`).
+
+### 11.2. annotation_export_policy
+
+**Purpose:** Versioned policy registry for deterministic export-selection behavior.
+
+**Key columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `policy_id` | `uuid` | Primary key |
+| `policy_name` | `varchar(64)` | Logical policy key (`human_first`, `model_first`, `hybrid`) |
+| `policy_version` | `integer` | Version integer for policy evolution |
+| `strategy` | `varchar(32)` | Source preference strategy |
+| `min_trust_rank` | `integer` | Trust floor (`0..3`) |
+| `allowed_source_kinds` | `text[]` | Permitted source kinds |
+| `include_conflict` | `boolean` | Whether conflict rows can pass candidate filter |
+| `notes` | `jsonb` | Policy metadata/decision-log payload |
+
+**Invariant highlights:**
+
+- Unique `(policy_name, policy_version)`.
+- Source-kind set must be non-empty.
+- Trust floor bounded to `[0,3]`.
+
+### 11.3. Deterministic Selector Surfaces
+
+`POL-655` introduces selector surfaces:
+
+- `annotation_active_selection_v1`
+  - active rows excluding superseded edges.
+- `annotation_export_select_v1(policy_name, policy_version)`
+  - deterministic source-policy selector producing one annotation per `(subject_id, label)`.
+- `annotation_export_default_human_first_v1`
+  - default projection bound to `human_first/v1`.
+
+Ranking semantics are deterministic and stable:
+
+- strategy-defined source priority
+- then descending trust rank
+- then descending confidence score
+- final deterministic tie-break on `annotation_id`
+
+Delete operations are guarded on lineage tables to preserve non-destructive history guarantees.
 
 ---
 
