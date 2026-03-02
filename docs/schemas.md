@@ -50,6 +50,9 @@ This reference is intended to help developers and maintainers quickly understand
 8. [Annotation Foundations (POL-652)](#8-annotation-foundations-pol-652)
    8.1. [annotation_set](#81-annotation_set)
    8.2. [annotation_subject](#82-annotation_subject)
+9. [Annotation Geometry Layer (POL-653)](#9-annotation-geometry-layer-pol-653)
+   9.1. [annotation](#91-annotation)
+   9.2. [annotation_geometry](#92-annotation_geometry)
 
 ---
 
@@ -739,7 +742,83 @@ Canonical DDL files:
 - Check constraints for non-negative frame index, positive dimensions, and valid time ranges.
 - Lookup indexes on `asset_uuid`, optional `observation_uuid`, and `created_at`.
 
-**Phase boundary:** `POL-652` intentionally does not define geometry rows, quality policy, or provenance edges; those are implemented in `POL-653`, `POL-654`, and `POL-655`.
+**Phase boundary:** `POL-652` intentionally does not define geometry rows, quality policy, or provenance edges. Geometry lands in `POL-653`; provenance/quality and export policy remain in `POL-654`/`POL-655`.
+
+---
+
+## 9. Annotation Geometry Layer (POL-653)
+
+`POL-653` adds Schema B: core annotation rows plus discriminated geometry payloads.
+
+Canonical DDL files:
+
+- `dbTools/admin/add_annotation_geometry_ddl.sql`
+- `dbTools/admin/migrations/002_annotation_geometry.sql`
+- rollback: `dbTools/admin/migrations/002_annotation_geometry_rollback.sql`
+- verification examples: `dbTools/admin/migrations/002_annotation_geometry_verify.sql`
+
+### 9.1. annotation
+
+**Purpose:** One row per localization/classification instance, linking identity (`annotation_subject`) to production lineage (`annotation_set`).
+
+**Key columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `annotation_id` | `uuid` | Primary key (`gen_random_uuid()`) |
+| `subject_id` | `uuid` | FK to `annotation_subject` |
+| `set_id` | `uuid` | FK to `annotation_set` |
+| `label` | `varchar(255)` | Required class label |
+| `label_id` | `integer` | Optional label vocabulary ID |
+| `taxon_id` | `integer` | Optional taxonomy linkage |
+| `score` | `double precision` | Optional model score in `[0,1]` |
+| `is_primary` | `boolean` | Preferred annotation flag |
+| `lifecycle_state` | `varchar(32)` | `active`, `superseded`, `retracted` |
+| `sidecar` | `jsonb` | Extensible metadata |
+
+**Index/constraint highlights:**
+
+- Lifecycle check constraint (`active|superseded|retracted`).
+- Score range check constraint (`0.0 <= score <= 1.0` when present).
+- Subject/set composite index for common lineage queries.
+- Partial `active` index for selection of current annotations.
+
+### 9.2. annotation_geometry
+
+**Purpose:** Non-lossy geometry storage for `bbox`, `polygon`, `mask`, and `point`, keyed to `annotation`.
+
+**Coordinate contract:**
+
+- Canonical coordinates are normalized `[0,1]` in top-left origin space.
+- Optional pixel bbox columns provide denormalized convenience values.
+
+**Key columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `geometry_id` | `uuid` | Primary key |
+| `annotation_id` | `uuid` | FK to `annotation` |
+| `geometry_kind` | `varchar(16)` | `bbox|polygon|mask|point` |
+| `bbox_*` | `double precision` | Normalized bbox coordinates |
+| `bbox_*_px` | `integer` | Optional pixel bbox coordinates |
+| `polygon_vertices` | `jsonb` | Vertex list `[[x,y], ...]` |
+| `mask_rle` | `jsonb` | COCO-style RLE payload |
+| `mask_uri` | `text` | External mask reference |
+| `point_x`, `point_y` | `double precision` | Normalized keypoint coordinates |
+| `sidecar` | `jsonb` | Extensible metadata |
+
+**Index/constraint highlights:**
+
+- Geometry-kind discriminator constraint.
+- Geometry-specific completeness constraints:
+  - bbox rows require all bbox normalized coordinates.
+  - polygon rows require `polygon_vertices`.
+  - mask rows require `mask_rle` or `mask_uri`.
+  - point rows require `point_x` and `point_y`.
+- Coordinate validity constraints for normalized and pixel forms.
+- GIN indexes for JSON-heavy query surfaces (`sidecar`, `polygon_vertices`, `mask_rle`).
+
+**Phase boundary:** `POL-653` defines representational structure only. Provenance/quality policy (`POL-654`) and export-selection/versioning invariants (`POL-655`) remain separate.
 
 ---
 

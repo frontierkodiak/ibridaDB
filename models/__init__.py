@@ -1,4 +1,9 @@
-from .annotation_models import AnnotationSet, AnnotationSubject
+from .annotation_models import (
+    Annotation,
+    AnnotationGeometry,
+    AnnotationSet,
+    AnnotationSubject,
+)
 from .base import Base
 from .coldp_models import (
     ColdpDistribution,
@@ -19,6 +24,8 @@ __all__ = [
     "ColdpMedia",
     "ColdpReference",
     "ColdpTypeMaterial",
+    "Annotation",
+    "AnnotationGeometry",
     "AnnotationSet",
     "AnnotationSubject",
 ]
