@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS annotation_quality (
 
     CONSTRAINT chk_quality_conflict_consistency CHECK (
         (review_status = 'conflict' AND conflict_flag = TRUE)
-        OR (review_status <> 'conflict')
+        OR (review_status <> 'conflict' AND conflict_flag = FALSE)
     ),
 
     CONSTRAINT chk_quality_conflict_reason CHECK (
