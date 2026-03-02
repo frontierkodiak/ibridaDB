@@ -1,18 +1,22 @@
 """
-ORM models for annotation lineage identity tables (POL-652 / Schema A).
+ORM models for annotation lineage tables.
 
-Tables:
+Schema A (POL-652):
     annotation_set     — groups annotations produced together (one run/batch).
     annotation_subject — stable target identity for what is being annotated.
 
-These foundations are consumed by later phases:
-    POL-653 (annotation_geometry), POL-654 (provenance/quality), POL-655 (export).
+Schema B (POL-653):
+    annotation          — core annotation row (label, score, lifecycle).
+    annotation_geometry — discriminated geometry (bbox/polygon/mask/point).
 """
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
+    Float,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -150,4 +154,192 @@ class AnnotationSubject(Base):
             postgresql_where=sidecar.isnot(None),
         ),
         Index("idx_annotation_subject_created_at", "created_at"),
+    )
+
+
+class Annotation(Base):
+    """
+    Core annotation row linking a subject ("what") to a set ("who/when/how").
+
+    This row stores label/class information, optional model confidence, and a
+    lifecycle marker for soft-versioning without destructive overwrite.
+    """
+
+    __tablename__ = "annotation"
+
+    annotation_id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=func.gen_random_uuid(),
+    )
+    subject_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("annotation_subject.subject_id"),
+        nullable=False,
+    )
+    set_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("annotation_set.set_id"),
+        nullable=False,
+    )
+    label = Column(String(255), nullable=False)
+    label_id = Column(Integer)
+    taxon_id = Column(Integer)
+    score = Column(Float)
+    is_primary = Column(Boolean, nullable=False, server_default="false")
+    lifecycle_state = Column(String(32), nullable=False, server_default="active")
+    sidecar = Column(JSONB)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "lifecycle_state IN ('active', 'superseded', 'retracted')",
+            name="chk_annotation_lifecycle",
+        ),
+        CheckConstraint(
+            "score IS NULL OR (score >= 0.0 AND score <= 1.0)",
+            name="chk_annotation_score",
+        ),
+        Index("idx_annotation_subject_set", "subject_id", "set_id"),
+        Index("idx_annotation_set_id", "set_id"),
+        Index("idx_annotation_label", "label"),
+        Index("idx_annotation_taxon", "taxon_id", postgresql_where=taxon_id.isnot(None)),
+        Index(
+            "idx_annotation_active",
+            "subject_id",
+            postgresql_where=lifecycle_state == "active",
+        ),
+        Index("idx_annotation_created_at", "created_at"),
+        Index(
+            "idx_annotation_sidecar",
+            "sidecar",
+            postgresql_using="gin",
+            postgresql_where=sidecar.isnot(None),
+        ),
+    )
+
+
+class AnnotationGeometry(Base):
+    """
+    Discriminated geometry payload for an annotation.
+
+    Supports bbox, polygon, mask, and point representations without coercion.
+    Canonical coordinate space is normalized [0,1] with top-left origin.
+    """
+
+    __tablename__ = "annotation_geometry"
+
+    geometry_id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=func.gen_random_uuid(),
+    )
+    annotation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("annotation.annotation_id"),
+        nullable=False,
+    )
+    geometry_kind = Column(String(16), nullable=False)
+
+    # bbox (normalized)
+    bbox_x_min = Column(Float)
+    bbox_y_min = Column(Float)
+    bbox_x_max = Column(Float)
+    bbox_y_max = Column(Float)
+
+    # bbox (pixel convenience)
+    bbox_x_min_px = Column(Integer)
+    bbox_y_min_px = Column(Integer)
+    bbox_x_max_px = Column(Integer)
+    bbox_y_max_px = Column(Integer)
+
+    # polygon/mask/point payloads
+    polygon_vertices = Column(JSONB)
+    mask_rle = Column(JSONB)
+    mask_uri = Column(Text)
+    mask_format = Column(String(32))
+    point_x = Column(Float)
+    point_y = Column(Float)
+
+    sidecar = Column(JSONB)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "geometry_kind IN ('bbox', 'polygon', 'mask', 'point')",
+            name="chk_geometry_kind",
+        ),
+        CheckConstraint(
+            "bbox_x_min IS NULL OR bbox_x_max IS NULL "
+            "OR (bbox_x_min < bbox_x_max AND bbox_y_min < bbox_y_max)",
+            name="chk_bbox_ordering",
+        ),
+        CheckConstraint(
+            "bbox_x_min IS NULL OR ("
+            "bbox_x_min >= 0.0 AND bbox_x_min <= 1.0 "
+            "AND bbox_y_min >= 0.0 AND bbox_y_min <= 1.0 "
+            "AND bbox_x_max >= 0.0 AND bbox_x_max <= 1.0 "
+            "AND bbox_y_max >= 0.0 AND bbox_y_max <= 1.0"
+            ")",
+            name="chk_bbox_normalized",
+        ),
+        CheckConstraint(
+            "bbox_x_min_px IS NULL OR ("
+            "bbox_x_min_px >= 0 AND bbox_y_min_px >= 0 "
+            "AND bbox_x_max_px >= 0 AND bbox_y_max_px >= 0"
+            ")",
+            name="chk_bbox_px_nonneg",
+        ),
+        CheckConstraint(
+            "point_x IS NULL OR ("
+            "point_x >= 0.0 AND point_x <= 1.0 "
+            "AND point_y >= 0.0 AND point_y <= 1.0"
+            ")",
+            name="chk_point_normalized",
+        ),
+        CheckConstraint(
+            "geometry_kind != 'mask' OR mask_rle IS NOT NULL OR mask_uri IS NOT NULL",
+            name="chk_mask_payload",
+        ),
+        CheckConstraint(
+            "geometry_kind != 'bbox' OR ("
+            "bbox_x_min IS NOT NULL AND bbox_y_min IS NOT NULL "
+            "AND bbox_x_max IS NOT NULL AND bbox_y_max IS NOT NULL"
+            ")",
+            name="chk_bbox_complete",
+        ),
+        CheckConstraint(
+            "geometry_kind != 'point' OR (point_x IS NOT NULL AND point_y IS NOT NULL)",
+            name="chk_point_complete",
+        ),
+        CheckConstraint(
+            "geometry_kind != 'polygon' OR polygon_vertices IS NOT NULL",
+            name="chk_polygon_complete",
+        ),
+        Index("idx_geometry_annotation", "annotation_id"),
+        Index("idx_geometry_kind", "geometry_kind"),
+        Index("idx_geometry_annotation_kind", "annotation_id", "geometry_kind"),
+        Index("idx_geometry_created_at", "created_at"),
+        Index(
+            "idx_geometry_sidecar",
+            "sidecar",
+            postgresql_using="gin",
+            postgresql_where=sidecar.isnot(None),
+        ),
+        Index(
+            "idx_geometry_polygon_vertices",
+            "polygon_vertices",
+            postgresql_using="gin",
+            postgresql_where=polygon_vertices.isnot(None),
+        ),
+        Index(
+            "idx_geometry_mask_rle",
+            "mask_rle",
+            postgresql_using="gin",
+            postgresql_where=mask_rle.isnot(None),
+        ),
     )
