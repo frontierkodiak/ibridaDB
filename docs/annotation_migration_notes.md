@@ -1,11 +1,13 @@
-# Annotation Foundations Migration Notes (POL-652)
+# Annotation Lineage Migration Notes (POL-652 / POL-653)
 
-This note explains how existing assumptions map onto the new Schema A foundations:
+This note explains how existing assumptions map onto the initial annotation-lineage layers:
 
 - `annotation_set`
 - `annotation_subject`
+- `annotation`
+- `annotation_geometry`
 
-These tables are identity scaffolding only. Geometry/provenance/quality policy arrives in `POL-653`/`POL-654`/`POL-655`.
+`POL-652` delivers identity scaffolding; `POL-653` adds representational geometry. Provenance/quality policy arrives in `POL-654`/`POL-655`.
 
 ## Why this split exists
 
@@ -49,11 +51,23 @@ Recommended fields:
 - **Old pattern:** Different jobs may construct the same asset/frame identity inconsistently.
 - **New pattern:** `annotation_subject` unique identity index on `(asset_uuid, frame_index?, time_start_ms?, time_end_ms?)` via `COALESCE` strategy.
 
+## 5. Geometry representation (added in POL-653)
+
+`POL-653` adds two surfaces:
+
+- `annotation`: one row per annotation instance (label, score, lifecycle).
+- `annotation_geometry`: one row per geometry payload with discriminator `bbox|polygon|mask|point`.
+
+Core guarantees from Schema B:
+
+- Geometry is non-lossy across bbox/polygon/mask/point.
+- Coordinate assumptions are explicit: normalized `[0,1]` with top-left origin.
+- Geometry-kind-specific completeness checks are enforced in DB constraints.
+
 ## What is intentionally deferred
 
-The following are explicitly out of scope for `POL-652` and should not be backfilled into this migration:
+The following remain out of scope after `POL-653` and should not be backfilled here:
 
-- Geometry payload tables (bbox/polygon/mask storage)
 - Provenance graph details beyond set-level source metadata
 - Quality scoring policy and adjudication contracts
 - Export selection/version matrix rules
@@ -68,10 +82,15 @@ Before building on this foundation:
 2. Confirm duplicate `(source_name, source_version, run_id)` rows are blocked when `run_id` is populated.
 3. Confirm duplicate subject identity for the same asset/frame slot is blocked.
 4. Confirm nullable video fields work for still-image assets.
+5. Confirm representative bbox/polygon/mask inserts pass on Schema B (`002_annotation_geometry_verify.sql`).
 
 ## File references
 
-- DDL: `dbTools/admin/add_annotation_foundations_ddl.sql`
+- DDL (Schema A): `dbTools/admin/add_annotation_foundations_ddl.sql`
+- DDL (Schema B): `dbTools/admin/add_annotation_geometry_ddl.sql`
 - Migration: `dbTools/admin/migrations/001_annotation_subject_set.sql`
 - Rollback: `dbTools/admin/migrations/001_annotation_subject_set_rollback.sql`
-- ORM: `models/annotation_models.py`
+- Migration: `dbTools/admin/migrations/002_annotation_geometry.sql`
+- Rollback: `dbTools/admin/migrations/002_annotation_geometry_rollback.sql`
+- Verification inserts: `dbTools/admin/migrations/002_annotation_geometry_verify.sql`
+- ORM: `models/annotation_models.py` (Schema A + Schema B)
