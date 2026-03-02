@@ -60,8 +60,76 @@ print_progress "Loading DEM data from ${HOST_DEM_DIR} into ${DB_NAME}"
 
 PARALLEL_TARS="${PARALLEL_TARS:-4}"
 CREATE_INDEX_AFTER_LOAD="${CREATE_INDEX_AFTER_LOAD:-true}"
+PROGRESS_STATE_DIR="${PROGRESS_STATE_DIR:-${TEMP_DIR}/.load_dem_progress}"
+PROGRESS_LOG_FILE="${PROGRESS_LOG_FILE:-${TEMP_DIR}/load_dem_progress.log}"
+
+format_duration() {
+  local total_seconds="$1"
+  local days=$((total_seconds / 86400))
+  local hours=$(((total_seconds % 86400) / 3600))
+  local minutes=$(((total_seconds % 3600) / 60))
+  local seconds=$((total_seconds % 60))
+
+  if [ "${days}" -gt 0 ]; then
+    printf "%dd %02dh %02dm %02ds" "${days}" "${hours}" "${minutes}" "${seconds}"
+  elif [ "${hours}" -gt 0 ]; then
+    printf "%dh %02dm %02ds" "${hours}" "${minutes}" "${seconds}"
+  else
+    printf "%dm %02ds" "${minutes}" "${seconds}"
+  fi
+}
+
+log_progress() {
+  local completed="$1"
+  local tarname="$2"
+  local tar_elapsed="$3"
+  local now_ts
+  now_ts="$(date +%s)"
+
+  local elapsed=$((now_ts - START_TS))
+  local remaining=$((TOTAL_TARS - completed))
+  local avg_per_tar=0
+  if [ "${completed}" -gt 0 ]; then
+    avg_per_tar=$((elapsed / completed))
+  fi
+  local eta=$((avg_per_tar * remaining))
+  local percent=$((completed * 100 / TOTAL_TARS))
+
+  local msg="Completed ${tarname} in ${tar_elapsed}. Progress ${completed}/${TOTAL_TARS} (${percent}%). Elapsed $(format_duration "${elapsed}"). ETA $(format_duration "${eta}")."
+  print_progress "${msg}"
+
+  if [ -n "${PROGRESS_LOG_FILE}" ]; then
+    printf "%s\t%s\n" "$(date -Iseconds)" "${msg}" >> "${PROGRESS_LOG_FILE}"
+  fi
+}
+
+record_progress() {
+  local tarname="$1"
+  local tar_elapsed="$2"
+
+  if command -v flock >/dev/null 2>&1; then
+    {
+      flock 9
+      local completed
+      completed="$(cat "${PROGRESS_FILE}" 2>/dev/null || echo 0)"
+      completed=$((completed + 1))
+      echo "${completed}" > "${PROGRESS_FILE}"
+      log_progress "${completed}" "${tarname}" "${tar_elapsed}"
+    } 9>"${PROGRESS_LOCK}"
+  else
+    local completed
+    completed="$(cat "${PROGRESS_FILE}" 2>/dev/null || echo 0)"
+    completed=$((completed + 1))
+    echo "${completed}" > "${PROGRESS_FILE}"
+    log_progress "${completed}" "${tarname}" "${tar_elapsed}"
+  fi
+}
 
 mapfile -t TAR_FILES < <(ls "${HOST_DEM_DIR}"/*.tar 2>/dev/null || true)
+TOTAL_TARS="${#TAR_FILES[@]}"
+START_TS="$(date +%s)"
+PROGRESS_FILE="${PROGRESS_STATE_DIR}/count"
+PROGRESS_LOCK="${PROGRESS_STATE_DIR}/lock"
 
 if [ "${#TAR_FILES[@]}" -eq 0 ]; then
   print_progress "No TIF files found, creating empty elevation_raster table..."
@@ -69,12 +137,21 @@ if [ "${#TAR_FILES[@]}" -eq 0 ]; then
   exit 0
 fi
 
+ensure_directory "${PROGRESS_STATE_DIR}"
+echo 0 > "${PROGRESS_FILE}"
+if [ -n "${PROGRESS_LOG_FILE}" ]; then
+  ensure_directory "$(dirname "${PROGRESS_LOG_FILE}")"
+  printf "%s\t%s\n" "$(date -Iseconds)" "Start load: ${TOTAL_TARS} tar(s), parallel=${PARALLEL_TARS}, tile=${TILE_SIZE}, index_after_load=${CREATE_INDEX_AFTER_LOAD}" >> "${PROGRESS_LOG_FILE}"
+fi
+print_progress "Found ${TOTAL_TARS} tar(s). Parallel=${PARALLEL_TARS}. Tile=${TILE_SIZE}. IndexAfterLoad=${CREATE_INDEX_AFTER_LOAD}."
+
 PSQL_ENV=( -e PGOPTIONS="-c synchronous_commit=off" )
 
 seed_tar="${TAR_FILES[0]}"
 seed_name="$(basename "${seed_tar}" .tar)"
 seed_temp_dir="${TEMP_DIR}/${seed_name}"
 seed_container_dir="${CONTAINER_TEMP_BASE}/${seed_name}"
+seed_start_ts="$(date +%s)"
 
 # Prepare seed temp dir
 rm -rf "${seed_temp_dir}" || true
@@ -111,12 +188,16 @@ fi
 
 # Cleanup seed temp dir
 rm -rf "${seed_temp_dir}" || true
+seed_elapsed=$(( $(date +%s) - seed_start_ts ))
+record_progress "${seed_name}" "$(format_duration "${seed_elapsed}")"
 
 process_tar() {
   local tarfile="$1"
   local tarname="$(basename "${tarfile}" .tar)"
   local host_dir="${TEMP_DIR}/${tarname}"
   local container_dir="${CONTAINER_TEMP_BASE}/${tarname}"
+  local tar_start_ts
+  tar_start_ts="$(date +%s)"
 
   rm -rf "${host_dir}" || true
   ensure_directory "${host_dir}"
@@ -128,6 +209,8 @@ process_tar() {
   if [ "${#found_tifs[@]}" -eq 0 ]; then
     echo "Warning: No .tif found in ${tarfile}; skipping."
     rm -rf "${host_dir}" || true
+    local tar_elapsed=$(( $(date +%s) - tar_start_ts ))
+    record_progress "${tarname}" "$(format_duration "${tar_elapsed}")"
     return
   fi
 
@@ -139,9 +222,11 @@ process_tar() {
   done
 
   rm -rf "${host_dir}" || true
+  local tar_elapsed=$(( $(date +%s) - tar_start_ts ))
+  record_progress "${tarname}" "$(format_duration "${tar_elapsed}")"
 }
 
-export -f process_tar print_progress ensure_directory
+export -f process_tar print_progress ensure_directory format_duration log_progress record_progress
 
 # Process remaining tar files in parallel
 for tarfile in "${TAR_FILES[@]:1}"; do
