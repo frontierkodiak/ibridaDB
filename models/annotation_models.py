@@ -8,6 +8,10 @@ Schema A (POL-652):
 Schema B (POL-653):
     annotation          — core annotation row (label, score, lifecycle).
     annotation_geometry — discriminated geometry (bbox/polygon/mask/point).
+
+Schema C (POL-654):
+    annotation_provenance — source completeness and lineage metadata per annotation.
+    annotation_quality    — review/adjudication policy per annotation.
 """
 
 from sqlalchemy import (
@@ -21,6 +25,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -341,5 +346,186 @@ class AnnotationGeometry(Base):
             "mask_rle",
             postgresql_using="gin",
             postgresql_where=mask_rle.isnot(None),
+        ),
+    )
+
+
+class AnnotationProvenance(Base):
+    """
+    Per-annotation provenance metadata.
+
+    Source-kind-specific completeness guarantees:
+    - human: operator_identity required
+    - model: model_id + config_hash + run_id required
+    - imported_dataset: source_version required
+    """
+
+    __tablename__ = "annotation_provenance"
+
+    provenance_id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=func.gen_random_uuid(),
+    )
+    annotation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("annotation.annotation_id"),
+        nullable=False,
+    )
+
+    source_kind = Column(String(32), nullable=False)
+    source_name = Column(String(128), nullable=False)
+    source_version = Column(String(64))
+
+    model_id = Column(String(128))
+    prompt_hash = Column(String(64))
+    config_hash = Column(String(64))
+    run_id = Column(String(128))
+
+    operator_identity = Column(String(128))
+    recorded_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    sidecar = Column(JSONB)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "annotation_id",
+            name="uq_annotation_provenance_annotation",
+        ),
+        CheckConstraint(
+            "source_kind IN ('human', 'model', 'imported_dataset')",
+            name="chk_provenance_source_kind",
+        ),
+        CheckConstraint(
+            "prompt_hash IS NULL OR prompt_hash ~ '^[0-9a-f]{64}$'",
+            name="chk_provenance_prompt_hash_hex",
+        ),
+        CheckConstraint(
+            "config_hash IS NULL OR config_hash ~ '^[0-9a-f]{64}$'",
+            name="chk_provenance_config_hash_hex",
+        ),
+        CheckConstraint(
+            "(source_kind = 'human' AND operator_identity IS NOT NULL) "
+            "OR (source_kind = 'model' AND model_id IS NOT NULL AND config_hash IS NOT NULL AND run_id IS NOT NULL) "
+            "OR (source_kind = 'imported_dataset' AND source_version IS NOT NULL)",
+            name="chk_provenance_required_by_kind",
+        ),
+        Index(
+            "idx_provenance_source",
+            "source_kind",
+            "source_name",
+            "source_version",
+        ),
+        Index(
+            "idx_provenance_model",
+            "model_id",
+            postgresql_where=model_id.isnot(None),
+        ),
+        Index(
+            "idx_provenance_run_id",
+            "run_id",
+            postgresql_where=run_id.isnot(None),
+        ),
+        Index("idx_provenance_recorded_at", "recorded_at"),
+        Index(
+            "idx_provenance_sidecar",
+            "sidecar",
+            postgresql_using="gin",
+            postgresql_where=sidecar.isnot(None),
+        ),
+    )
+
+
+class AnnotationQuality(Base):
+    """
+    Per-annotation quality and adjudication metadata.
+
+    Adjudicated states (accepted/rejected/conflict) require adjudicator identity
+    and timestamp.
+    """
+
+    __tablename__ = "annotation_quality"
+
+    quality_id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=func.gen_random_uuid(),
+    )
+    annotation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("annotation.annotation_id"),
+        nullable=False,
+    )
+
+    review_status = Column(String(32), nullable=False, server_default="unreviewed")
+    confidence_score = Column(Float)
+    conflict_flag = Column(Boolean, nullable=False, server_default="false")
+    conflict_reason = Column(Text)
+
+    adjudicated_by = Column(String(128))
+    adjudicated_at = Column(DateTime(timezone=True))
+    review_notes = Column(Text)
+
+    sidecar = Column(JSONB)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "annotation_id",
+            name="uq_annotation_quality_annotation",
+        ),
+        CheckConstraint(
+            "review_status IN ('unreviewed', 'needs_review', 'accepted', 'rejected', 'conflict')",
+            name="chk_quality_review_status",
+        ),
+        CheckConstraint(
+            "confidence_score IS NULL OR (confidence_score >= 0.0 AND confidence_score <= 1.0)",
+            name="chk_quality_confidence_range",
+        ),
+        CheckConstraint(
+            "("
+            "review_status IN ('accepted', 'rejected', 'conflict') "
+            "AND adjudicated_by IS NOT NULL "
+            "AND adjudicated_at IS NOT NULL"
+            ")"
+            " OR "
+            "("
+            "review_status IN ('unreviewed', 'needs_review')"
+            ")",
+            name="chk_quality_adjudication_required",
+        ),
+        CheckConstraint(
+            "(review_status = 'conflict' AND conflict_flag = TRUE) "
+            "OR (review_status <> 'conflict' AND conflict_flag = FALSE)",
+            name="chk_quality_conflict_consistency",
+        ),
+        CheckConstraint(
+            "conflict_flag = FALSE OR conflict_reason IS NOT NULL",
+            name="chk_quality_conflict_reason",
+        ),
+        Index("idx_quality_status", "review_status"),
+        Index("idx_quality_status_conflict", "review_status", "conflict_flag"),
+        Index(
+            "idx_quality_confidence",
+            "confidence_score",
+            postgresql_where=confidence_score.isnot(None),
+        ),
+        Index(
+            "idx_quality_adjudicated_at",
+            "adjudicated_at",
+            postgresql_where=adjudicated_at.isnot(None),
+        ),
+        Index(
+            "idx_quality_sidecar",
+            "sidecar",
+            postgresql_using="gin",
+            postgresql_where=sidecar.isnot(None),
         ),
     )

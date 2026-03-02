@@ -1,6 +1,8 @@
 from .annotation_models import (
     Annotation,
     AnnotationGeometry,
+    AnnotationProvenance,
+    AnnotationQuality,
     AnnotationSet,
     AnnotationSubject,
 )
@@ -26,6 +28,8 @@ __all__ = [
     "ColdpTypeMaterial",
     "Annotation",
     "AnnotationGeometry",
+    "AnnotationProvenance",
+    "AnnotationQuality",
     "AnnotationSet",
     "AnnotationSubject",
 ]
