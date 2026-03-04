@@ -658,6 +658,8 @@ finalize_completed() {
 
 run_meets_completion_criteria() {
   local ready
+  # Keep in sync with run_should_stop() stop signals; this adds the
+  # claimed_rows>=initial_remaining guard for late-stage finalize fallback.
   ready="$(psql_value "
     SELECT CASE
       WHEN state <> 'running' THEN false
@@ -688,12 +690,22 @@ cleanup_on_exit() {
       mark_run_state "stopped"
     else
       # Safety net: if processing goals are already satisfied, avoid leaving the
-      # run in failed state due late-stage control-path errors.
+      # run in failed state due to late-stage control-path errors.
       if run_meets_completion_criteria; then
         log "Non-zero exit after completion criteria met; marking run completed for safe recovery."
         finalize_completed
       else
-        mark_run_state "failed"
+        local current_db_state
+        current_db_state="$(psql_value "
+          SELECT state
+          FROM admin.elevation_fill_runs
+          WHERE run_id = '${RUN_ID}';
+        " "elevation-fill:${RUN_ID}:control" || true)"
+        if [[ "${current_db_state}" == "running" ]]; then
+          mark_run_state "failed"
+        else
+          log "Run state is '${current_db_state:-unknown}' at cleanup; skipping failed mark."
+        fi
       fi
     fi
   fi

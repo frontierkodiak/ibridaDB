@@ -6,6 +6,8 @@
 # Runs bash parser checks always, and ShellCheck when available.
 
 set -euo pipefail
+# NOTE: preserve the fail-accumulator pattern under `set -e` by guarding
+# per-target commands with `if ! ...` or `|| true`.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
