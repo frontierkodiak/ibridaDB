@@ -95,12 +95,43 @@ if [[ "${1:-}" == "--dry-run" ]]; then
     echo "==> DRY RUN MODE: Commands will be printed but not executed"
 fi
 
+format_cmd_for_log() {
+    local redacted=()
+    local expecting_dsn_value=0
+    local arg
+
+    for arg in "$@"; do
+        if [[ "$expecting_dsn_value" -eq 1 ]]; then
+            redacted+=("<redacted>")
+            expecting_dsn_value=0
+            continue
+        fi
+
+        case "$arg" in
+            --db-connection)
+                redacted+=("--db-connection")
+                expecting_dsn_value=1
+                ;;
+            --db-connection=*)
+                redacted+=("--db-connection=<redacted>")
+                ;;
+            *)
+                redacted+=("$arg")
+                ;;
+        esac
+    done
+
+    printf '%q ' "${redacted[@]}"
+}
+
 # Function to run command or print in dry-run mode
 run_cmd() {
+    local cmd_display
+    cmd_display="$(format_cmd_for_log "$@")"
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo "[DRY-RUN] $*"
+        echo "[DRY-RUN] ${cmd_display}"
     else
-        echo "==> $*"
+        echo "==> ${cmd_display}"
         "$@"
     fi
 }
@@ -188,12 +219,25 @@ if [[ "$DRY_RUN" == "false" ]]; then
     
     # Count kept vs total from dedup CSV
     if [[ -f "$RESOLVED_CSV" ]]; then
-        TOTAL_COUNT=$(tail -n +2 "$RESOLVED_CSV" | wc -l)
-        KEPT_COUNT=$(awk -F',' '
-          NR==1 {for (i=1;i<=NF;i++) if ($i=="keep_flag") k=i}
-          NR>1 && k>0 && $k=="True" {c++}
-          END {print c+0}
-        ' "$RESOLVED_CSV")
+        read -r TOTAL_COUNT KEPT_COUNT < <(python3 - "$RESOLVED_CSV" <<'PY'
+import csv
+import sys
+
+path = sys.argv[1]
+total = 0
+keep = 0
+
+with open(path, newline="", encoding="utf-8") as handle:
+    reader = csv.DictReader(handle)
+    for row in reader:
+        total += 1
+        value = str(row.get("keep_flag", "")).strip().strip('"').lower()
+        if value in {"true", "1", "yes"}:
+            keep += 1
+
+print(total, keep)
+PY
+        )
         DUPLICATE_COUNT=$((TOTAL_COUNT - KEPT_COUNT))
         
         echo "Total anthophila files processed: $TOTAL_COUNT"

@@ -63,6 +63,38 @@ def get_table_columns(conn, table_name: str) -> List[str]:
         return [row["column_name"] for row in cursor.fetchall()]
 
 
+def quote_ident(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def resolve_column_mapping(columns: List[str], table_name: str) -> Dict[str, str]:
+    column_set = set(columns)
+    candidates: Dict[str, List[str]] = {
+        "taxon_id": ["taxon_id", "taxonID", "id"],
+        "name": ["name"],
+        "rank_level": ["rank_level", "rankLevel"],
+        "rank": ["rank"],
+        "active": ["active", "taxonActive"],
+    }
+
+    mapping: Dict[str, str] = {}
+    for logical_name, options in candidates.items():
+        for option in options:
+            if option in column_set:
+                mapping[logical_name] = option
+                break
+
+    required = ["taxon_id", "name", "rank_level", "rank"]
+    missing = [key for key in required if key not in mapping]
+    if missing:
+        raise RuntimeError(
+            f"{table_name} missing required columns for taxa resolution: {missing} "
+            f"(available={sorted(columns)})"
+        )
+
+    return mapping
+
+
 def fetch_name_map(conn, names: List[str], table_name: str) -> Dict[str, List[Dict]]:
     name_map: Dict[str, List[Dict]] = {name: [] for name in names}
     if not names:
@@ -70,15 +102,24 @@ def fetch_name_map(conn, names: List[str], table_name: str) -> Dict[str, List[Di
 
     batch_size = 1000
     columns = get_table_columns(conn, table_name)
-    select_cols = ["taxon_id", "name", "rank_level", "rank"]
-    if "active" in columns:
-        select_cols.append("active")
+    column_mapping = resolve_column_mapping(columns, table_name)
+    select_cols = [
+        f"{quote_ident(column_mapping['taxon_id'])} AS taxon_id",
+        f"{quote_ident(column_mapping['name'])} AS name",
+        f"{quote_ident(column_mapping['rank_level'])} AS rank_level",
+        f"{quote_ident(column_mapping['rank'])} AS rank",
+    ]
+    if "active" in column_mapping:
+        select_cols.append(f"{quote_ident(column_mapping['active'])} AS active")
+
+    table_ident = quote_ident(table_name)
+    name_col = quote_ident(column_mapping["name"])
 
     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
         for i in range(0, len(names), batch_size):
             batch = names[i : i + batch_size]
             cursor.execute(
-                f"SELECT {', '.join(select_cols)} FROM {table_name} WHERE lower(name) = ANY(%s)",
+                f"SELECT {', '.join(select_cols)} FROM {table_ident} WHERE lower({name_col}) = ANY(%s)",
                 (batch,),
             )
             for row in cursor.fetchall():
