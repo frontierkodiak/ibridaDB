@@ -35,8 +35,7 @@ EPSG="$5"
 TILE_SIZE="$6"
 
 # Container-side paths (translate from host paths)
-CONTAINER_DEM_DIR="/dem/merit"  # /datasets/dem/merit -> /dem/merit
-CONTAINER_TEMP_BASE="/dem/merit/temp"
+CONTAINER_TEMP_BASE="${CONTAINER_TEMP_BASE:-/dem/merit/temp}"
 
 # If BASE_DIR not set, default to current script's grandparent
 BASE_DIR="${BASE_DIR:-"$(cd "$(dirname "$0")/../../.." && pwd)"}"
@@ -117,6 +116,8 @@ record_progress() {
       log_progress "${completed}" "${tarname}" "${tar_elapsed}"
     } 9>"${PROGRESS_LOCK}"
   else
+    # NOTE: Without flock, concurrent progress writes can race and lose counts.
+    # This impacts ETA/progress logging only (not load correctness).
     local completed
     completed="$(cat "${PROGRESS_FILE}" 2>/dev/null || echo 0)"
     completed=$((completed + 1))

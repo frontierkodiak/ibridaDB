@@ -716,7 +716,7 @@ trap cleanup_on_exit EXIT
 
 log "Starting post-carryover elevation sequence on db=${DB_NAME} container=${DB_CONTAINER}"
 
-if ! docker ps --format '{{.Names}}' | rg -qx "${DB_CONTAINER}"; then
+if ! docker ps --format '{{.Names}}' | grep -qxF "${DB_CONTAINER}"; then
   die "Container ${DB_CONTAINER} is not running"
 fi
 
