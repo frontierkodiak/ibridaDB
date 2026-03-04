@@ -75,6 +75,19 @@ def get_table_columns(conn, table_name: str) -> List[str]:
         )
         return [row["column_name"] for row in cursor.fetchall()]
 
+def get_column_type(conn, table_name: str, column_name: str) -> str:
+    with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+        cursor.execute(
+            """
+            SELECT data_type
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = %s AND column_name = %s
+            """,
+            (table_name, column_name),
+        )
+        row = cursor.fetchone()
+        return row["data_type"] if row else ""
+
 def add_observation_keys(kept_df: pd.DataFrame) -> pd.DataFrame:
     """Assign deterministic observation_uuid based on name+id_core or asset_uuid."""
     obs_keys = []
@@ -132,6 +145,33 @@ def safe_int(value):
     except Exception:
         return None
 
+def parse_phash_64(value):
+    """Parse a hex pHash string into signed int64 for PostgreSQL BIGINT storage."""
+    if value is None:
+        return None
+
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    if text.startswith("0x"):
+        text = text[2:]
+    if not text:
+        return None
+
+    try:
+        raw = int(text, 16)
+    except ValueError:
+        return None
+
+    # pHash should be 64-bit; ignore malformed wider values.
+    if raw >= (1 << 64):
+        return None
+
+    # PostgreSQL BIGINT is signed.
+    if raw >= (1 << 63):
+        raw -= (1 << 64)
+    return raw
+
 def insert_observations(
     kept_df: pd.DataFrame,
     db_conn,
@@ -162,12 +202,13 @@ def insert_observations(
         return 0
 
     records = []
+    missing_taxon_keys = []
     grouped = kept_df.groupby("observation_key")
     for obs_key, group in grouped:
         obs_uuid = group["observation_uuid"].iloc[0]
         taxon_ids = pd.to_numeric(group["taxon_id"], errors="coerce").dropna().astype(int)
         if taxon_ids.empty:
-            print(f"Warning: No taxon_id for observation {obs_key}; skipping")
+            missing_taxon_keys.append(str(obs_key))
             continue
 
         if taxon_ids.nunique() > 1:
@@ -195,20 +236,29 @@ def insert_observations(
 
         records.append({col: record.get(col) for col in available_cols})
 
+    if missing_taxon_keys:
+        sample = ", ".join(missing_taxon_keys[:10])
+        print(
+            f"Warning: missing taxon_id for {len(missing_taxon_keys)} observations; skipped. "
+            f"Sample keys: {sample}"
+        )
+
     if not records:
         return 0
 
     # Filter out observations that already exist
     obs_uuids = [r["observation_uuid"] for r in records]
+    obs_uuid_type = get_column_type(db_conn, "observations", "observation_uuid")
+    any_param = "%s::uuid[]" if obs_uuid_type == "uuid" else "%s"
     existing = set()
     with db_conn.cursor(cursor_factory=RealDictCursor) as cursor:
         cursor.execute(
-            "SELECT observation_uuid FROM observations WHERE observation_uuid = ANY(%s)",
+            f"SELECT observation_uuid FROM observations WHERE observation_uuid = ANY({any_param})",
             (obs_uuids,),
         )
-        existing = {row["observation_uuid"] for row in cursor.fetchall()}
+        existing = {str(row["observation_uuid"]) for row in cursor.fetchall() if row["observation_uuid"] is not None}
 
-    records = [r for r in records if r["observation_uuid"] not in existing]
+    records = [r for r in records if str(r["observation_uuid"]) not in existing]
     if not records:
         print("Observations already present; skipping insert")
         return 0
@@ -257,14 +307,34 @@ def insert_observation_media(
         print("Warning: observation_media table not found; skipping observation_media insert")
         return 0
 
+    obs_uuid_type = get_column_type(db_conn, "observations", "observation_uuid")
+    any_param = "%s::uuid[]" if obs_uuid_type == "uuid" else "%s"
+    candidate_obs_uuids = sorted({str(value) for value in kept_df["observation_uuid"].dropna().tolist()})
+    existing_obs_uuids = set()
+    if candidate_obs_uuids:
+        with db_conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                f"SELECT observation_uuid FROM observations WHERE observation_uuid = ANY({any_param})",
+                (candidate_obs_uuids,),
+            )
+            existing_obs_uuids = {
+                str(row["observation_uuid"])
+                for row in cursor.fetchall()
+                if row.get("observation_uuid") is not None
+            }
+
     records = []
     seen = set()
+    skipped_missing_observation = 0
     for _, row in kept_df.iterrows():
         sha256 = row.get("sha256", "")
         media_id = media_id_map.get(sha256)
         if not media_id:
             continue
-        obs_uuid = row["observation_uuid"]
+        obs_uuid = str(row["observation_uuid"])
+        if obs_uuid not in existing_obs_uuids:
+            skipped_missing_observation += 1
+            continue
         key = (obs_uuid, media_id)
         if key in seen:
             continue
@@ -281,6 +351,11 @@ def insert_observation_media(
             records,
         )
     db_conn.commit()
+    if skipped_missing_observation:
+        print(
+            f"Skipped {skipped_missing_observation} observation_media candidate rows "
+            "because observation_uuid was not present in observations"
+        )
     print(f"Inserted {len(records)} observation_media rows")
     return len(records)
 
@@ -342,6 +417,8 @@ def materialize_files(kept_df: pd.DataFrame, flat_dir: Path, use_hardlinks: bool
     
     materialized_files = []
     failed_files = []
+    created_count = 0
+    existing_count = 0
     
     print(f"Materializing {len(kept_df)} files to {flat_dir}")
     print(f"Using {'hardlinks' if use_hardlinks else 'copies'}")
@@ -358,7 +435,13 @@ def materialize_files(kept_df: pd.DataFrame, flat_dir: Path, use_hardlinks: bool
                 continue
                 
             if target_path.exists():
-                print(f"Warning: Target already exists, skipping: {target_path}")
+                existing_count += 1
+                materialized_files.append({
+                    'asset_uuid': row['asset_uuid'],
+                    'original_path': str(original_path),
+                    'flat_path': str(target_path),
+                    'flat_name': flat_name
+                })
                 continue
             
             if use_hardlinks:
@@ -377,12 +460,18 @@ def materialize_files(kept_df: pd.DataFrame, flat_dir: Path, use_hardlinks: bool
                 'flat_path': str(target_path),
                 'flat_name': flat_name
             })
+            created_count += 1
             
         except Exception as e:
             print(f"Error materializing {original_path}: {e}")
             failed_files.append(row['asset_uuid'])
     
-    print(f"Materialization complete: {len(materialized_files)} files, {len(failed_files)} failed")
+    print(
+        "Materialization complete: "
+        f"{len(materialized_files)} ready "
+        f"({created_count} created, {existing_count} already present), "
+        f"{len(failed_files)} failed"
+    )
     return materialized_files, failed_files
 
 def insert_media_records(
@@ -416,6 +505,7 @@ def insert_media_records(
         
         remote_key = ""
         remote_uri = ""
+        flat_name = mat_file["flat_name"]
         if remote_key_prefix:
             remote_key = f"{remote_key_prefix.rstrip('/')}/{flat_name}"
         if remote_uri_prefix:
@@ -432,11 +522,7 @@ def insert_media_records(
             remote_uri=remote_uri,
         )
 
-        phash_hex = str(row.get("phash", "")).strip()
-        try:
-            phash_64 = int(phash_hex, 16) if phash_hex else None
-        except ValueError:
-            phash_64 = None
+        phash_64 = parse_phash_64(row.get("phash"))
         
         media_record = {
             'dataset': dataset,

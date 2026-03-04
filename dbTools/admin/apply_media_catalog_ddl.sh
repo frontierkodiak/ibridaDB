@@ -31,26 +31,14 @@ SELECT CASE WHEN EXISTS (
 ")"
 
 if [[ "${HAS_UNIQUE_OBS_UUID}" != "1" ]]; then
-  echo "==> No usable unique index/constraint found on observations(observation_uuid). Checking duplicates..."
-  DUP_COUNT="$(psql_exec -Atqc "
-  SELECT COUNT(*)
-  FROM (
-    SELECT observation_uuid
-    FROM observations
-    WHERE observation_uuid IS NOT NULL
-    GROUP BY observation_uuid
-    HAVING COUNT(*) > 1
-  ) d;
-  ")"
-
-  if [[ "${DUP_COUNT}" != "0" ]]; then
-    echo "ERROR: observations.observation_uuid has ${DUP_COUNT} duplicate value(s); cannot enforce FK target uniqueness." >&2
-    echo "Resolve duplicates first, then rerun apply_media_catalog_ddl.sh." >&2
+  echo "==> No usable unique index/constraint found on observations(observation_uuid)."
+  echo "==> Creating unique index for FK target: uq_observations_observation_uuid"
+  if ! psql_exec -c "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uq_observations_observation_uuid ON observations(observation_uuid);"; then
+    echo "ERROR: failed to create unique index on observations(observation_uuid)." >&2
+    echo "Likely cause: duplicate observation_uuid values in observations." >&2
+    echo "Inspect duplicates, resolve, then rerun apply_media_catalog_ddl.sh." >&2
     exit 1
   fi
-
-  echo "==> Creating unique index for FK target: uq_observations_observation_uuid"
-  psql_exec -c "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uq_observations_observation_uuid ON observations(observation_uuid);"
 fi
 
 # Apply the DDL
