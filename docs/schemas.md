@@ -47,6 +47,20 @@ This reference is intended to help developers and maintainers quickly understand
    6.1. [Elevation_Raster Table](#elevation_raster-table)
 
 7. [Appendix: SQL Dumps and \d Outputs](#appendix-sql-dumps-and-d-output)
+8. [Annotation Foundations (POL-652)](#8-annotation-foundations-pol-652)
+   8.1. [annotation_set](#81-annotation_set)
+   8.2. [annotation_subject](#82-annotation_subject)
+9. [Annotation Geometry Layer (POL-653)](#9-annotation-geometry-layer-pol-653)
+   9.1. [annotation](#91-annotation)
+   9.2. [annotation_geometry](#92-annotation_geometry)
+10. [Annotation Provenance + Quality Layer (POL-654)](#10-annotation-provenance--quality-layer-pol-654)
+   10.1. [annotation_provenance](#101-annotation_provenance)
+   10.2. [annotation_quality](#102-annotation_quality)
+   10.3. [Trusted Selection Query Surface](#103-trusted-selection-query-surface)
+11. [Annotation Versioning + Export Policy Layer (POL-655)](#11-annotation-versioning--export-policy-layer-pol-655)
+   11.1. [annotation_supersession](#111-annotation_supersession)
+   11.2. [annotation_export_policy](#112-annotation_export_policy)
+   11.3. [Deterministic Selector Surfaces](#113-deterministic-selector-surfaces)
 
 ---
 
@@ -674,6 +688,303 @@ Assuming the export group is named `amphibia_all_exc_nonrg_sp_oor_elev`, an exam
  inat_scientific_name | text                   
  col_scientific_name  | text                   
 ```
+
+---
+
+## 8. Annotation Foundations (POL-652)
+
+`POL-652` establishes the first two annotation-lineage identity tables:
+
+- `annotation_set`: groups one production of annotations (human batch, model run, or imported dataset batch).
+- `annotation_subject`: stable target identity for "what is being annotated" across still images and video frames.
+
+Canonical DDL files:
+
+- `dbTools/admin/add_annotation_foundations_ddl.sql`
+- `dbTools/admin/migrations/001_annotation_subject_set.sql`
+- rollback: `dbTools/admin/migrations/001_annotation_subject_set_rollback.sql`
+
+### 8.1. annotation_set
+
+**Purpose:** Track producer/run/build identity and release linkage so later geometry/provenance tables can point to a stable set record.
+
+**Key columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `set_id` | `uuid` | Primary key (`gen_random_uuid()`) |
+| `dataset` | `varchar(64)` | Dataset namespace; defaults to `ibrida` |
+| `release` | `varchar(16)` | Source release (e.g. `r2`) |
+| `source_kind` | `varchar(32)` | Constrained to `human`, `model`, `imported_dataset` |
+| `source_name` | `varchar(128)` | Producer name (tool/model/batch label) |
+| `source_version` | `varchar(64)` | Version string for producer |
+| `run_id` | `varchar(128)` | External run/batch identity |
+| `prompt_hash`, `config_hash` | `char(64)` | SHA-256 hashes for deterministic config provenance |
+| `sidecar` | `jsonb` | Extensible metadata |
+
+**Index/constraint highlights:**
+
+- Partial unique index on `(source_name, source_version, run_id)` where `run_id IS NOT NULL` to prevent duplicate ingestion of the same run.
+- Lookup indexes on `(dataset, release)` and `(source_kind, source_name)`.
+- GIN index on `sidecar` for metadata filtering.
+
+### 8.2. annotation_subject
+
+**Purpose:** Represent stable annotation targets independent of specific annotation geometry/provenance rows.
+
+**Key columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `subject_id` | `uuid` | Primary key (`gen_random_uuid()`) |
+| `asset_uuid` | `uuid` | Required stable asset identity (photo/media) |
+| `observation_uuid` | `uuid` | Optional observation linkage |
+| `frame_index` | `integer` | Optional video frame index (`>= 0`) |
+| `time_start_ms`, `time_end_ms` | `integer` | Optional segment window; guarded by range check |
+| `asset_width_px`, `asset_height_px` | `integer` | Optional positive dimensions |
+| `sidecar` | `jsonb` | Extensible metadata |
+
+**Index/constraint highlights:**
+
+- Unique index on `(asset_uuid, COALESCE(frame_index, -1), COALESCE(time_start_ms, -1), COALESCE(time_end_ms, -1))` to enforce one subject identity per asset/frame/window slot.
+- Check constraints for non-negative frame index, positive dimensions, and valid time ranges.
+- Lookup indexes on `asset_uuid`, optional `observation_uuid`, and `created_at`.
+
+**Phase boundary:** `POL-652` intentionally does not define geometry rows, quality policy, or provenance edges. Geometry lands in `POL-653`; provenance/quality and export policy remain in `POL-654`/`POL-655`.
+
+---
+
+## 9. Annotation Geometry Layer (POL-653)
+
+`POL-653` adds Schema B: core annotation rows plus discriminated geometry payloads.
+
+Canonical DDL files:
+
+- `dbTools/admin/add_annotation_geometry_ddl.sql`
+- `dbTools/admin/migrations/002_annotation_geometry.sql`
+- rollback: `dbTools/admin/migrations/002_annotation_geometry_rollback.sql`
+- verification examples: `dbTools/admin/migrations/002_annotation_geometry_verify.sql`
+
+### 9.1. annotation
+
+**Purpose:** One row per localization/classification instance, linking identity (`annotation_subject`) to production lineage (`annotation_set`).
+
+**Key columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `annotation_id` | `uuid` | Primary key (`gen_random_uuid()`) |
+| `subject_id` | `uuid` | FK to `annotation_subject` |
+| `set_id` | `uuid` | FK to `annotation_set` |
+| `label` | `varchar(255)` | Required class label |
+| `label_id` | `integer` | Optional label vocabulary ID |
+| `taxon_id` | `integer` | Optional taxonomy linkage |
+| `score` | `double precision` | Optional model score in `[0,1]` |
+| `is_primary` | `boolean` | Preferred annotation flag |
+| `lifecycle_state` | `varchar(32)` | `active`, `superseded`, `retracted` |
+| `sidecar` | `jsonb` | Extensible metadata |
+
+**Index/constraint highlights:**
+
+- Lifecycle check constraint (`active|superseded|retracted`).
+- Score range check constraint (`0.0 <= score <= 1.0` when present).
+- Subject/set composite index for common lineage queries.
+- Partial `active` index for selection of current annotations.
+
+### 9.2. annotation_geometry
+
+**Purpose:** Non-lossy geometry storage for `bbox`, `polygon`, `mask`, and `point`, keyed to `annotation`.
+
+**Coordinate contract:**
+
+- Canonical coordinates are normalized `[0,1]` in top-left origin space.
+- Optional pixel bbox columns provide denormalized convenience values.
+
+**Key columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `geometry_id` | `uuid` | Primary key |
+| `annotation_id` | `uuid` | FK to `annotation` |
+| `geometry_kind` | `varchar(16)` | `bbox|polygon|mask|point` |
+| `bbox_*` | `double precision` | Normalized bbox coordinates |
+| `bbox_*_px` | `integer` | Optional pixel bbox coordinates |
+| `polygon_vertices` | `jsonb` | Vertex list `[[x,y], ...]` |
+| `mask_rle` | `jsonb` | COCO-style RLE payload |
+| `mask_uri` | `text` | External mask reference |
+| `point_x`, `point_y` | `double precision` | Normalized keypoint coordinates |
+| `sidecar` | `jsonb` | Extensible metadata |
+
+**Index/constraint highlights:**
+
+- Geometry-kind discriminator constraint.
+- Geometry-specific completeness constraints:
+  - bbox rows require all bbox normalized coordinates.
+  - polygon rows require `polygon_vertices`.
+  - mask rows require `mask_rle` or `mask_uri`.
+  - point rows require `point_x` and `point_y`.
+- Coordinate validity constraints for normalized and pixel forms.
+- GIN indexes for JSON-heavy query surfaces (`sidecar`, `polygon_vertices`, `mask_rle`).
+
+**Phase boundary:** `POL-653` defines representational structure only. Provenance/quality policy (`POL-654`) and export-selection/versioning invariants (`POL-655`) remain separate.
+
+---
+
+## 10. Annotation Provenance + Quality Layer (POL-654)
+
+`POL-654` adds Schema C: provenance-completeness and quality/adjudication policy
+surfaces keyed to `annotation`.
+
+Canonical DDL files:
+
+- `dbTools/admin/add_annotation_provenance_quality_ddl.sql`
+- `dbTools/admin/migrations/003_annotation_provenance_quality.sql`
+- rollback: `dbTools/admin/migrations/003_annotation_provenance_quality_rollback.sql`
+- verification examples: `dbTools/admin/migrations/003_annotation_provenance_quality_verify.sql`
+
+### 10.1. annotation_provenance
+
+**Purpose:** Attach durable source lineage metadata to each annotation with source-kind-specific completeness checks.
+
+**Key columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `provenance_id` | `uuid` | Primary key (`gen_random_uuid()`) |
+| `annotation_id` | `uuid` | Unique FK to `annotation` (one provenance row per annotation) |
+| `source_kind` | `varchar(32)` | `human`, `model`, `imported_dataset` |
+| `source_name` | `varchar(128)` | Producer name (`sam3`, `md3`, `inat2017-import`, etc.) |
+| `source_version` | `varchar(64)` | Version/source release marker |
+| `model_id` | `varchar(128)` | Required for `source_kind=model` |
+| `prompt_hash`, `config_hash` | `varchar(64)` | Optional/required deterministic hashes (hex SHA-256) |
+| `run_id` | `varchar(128)` | Run/build identity (required for `source_kind=model`) |
+| `operator_identity` | `varchar(128)` | Required for `source_kind=human` |
+| `recorded_at` | `timestamptz` | Provenance record timestamp |
+| `sidecar` | `jsonb` | Extensible metadata |
+
+**Source-kind completeness policy:**
+
+- `human`: `operator_identity` required.
+- `model`: `model_id`, `config_hash`, and `run_id` required.
+- `imported_dataset`: `source_version` required.
+
+### 10.2. annotation_quality
+
+**Purpose:** Represent review lifecycle and adjudication decisions for each annotation.
+
+**Key columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `quality_id` | `uuid` | Primary key |
+| `annotation_id` | `uuid` | Unique FK to `annotation` (one quality row per annotation) |
+| `review_status` | `varchar(32)` | `unreviewed`, `needs_review`, `accepted`, `rejected`, `conflict` |
+| `confidence_score` | `double precision` | Optional quality confidence in `[0,1]` |
+| `conflict_flag` | `boolean` | True for unresolved disagreement |
+| `conflict_reason` | `text` | Required when `conflict_flag=true` |
+| `adjudicated_by` | `varchar(128)` | Required for adjudicated statuses |
+| `adjudicated_at` | `timestamptz` | Required for adjudicated statuses |
+| `review_notes` | `text` | Optional adjudication notes |
+| `sidecar` | `jsonb` | Extensible metadata |
+
+**Policy constraints:**
+
+- Adjudicated statuses (`accepted`, `rejected`, `conflict`) require both `adjudicated_by` and `adjudicated_at`.
+- `review_status='conflict'` requires `conflict_flag=true`.
+- `confidence_score` bounded to `[0,1]` when present.
+
+### 10.3. Trusted Selection Query Surface
+
+`POL-654` adds `annotation_trusted_selection_v1` to make trust semantics explicit and queryable.
+
+Selection baseline:
+
+- Excludes non-active annotation rows (`annotation.lifecycle_state='active'` only).
+- Rejects rows with `review_status='rejected'` or `conflict_flag=true`.
+- Assigns trust rank by source + quality state:
+  - rank `3`: human + accepted/unreviewed
+  - rank `2`: accepted model rows with confidence gate (`>= 0.50`) or accepted/unreviewed imported rows
+  - rank `1`: all other non-rejected/non-conflict active rows
+  - rank `0`: rejected/conflict rows
+
+This view is intended as a stable, auditable policy surface for downstream export-selection logic in `POL-655`.
+
+---
+
+## 11. Annotation Versioning + Export Policy Layer (POL-655)
+
+`POL-655` adds Schema D: non-destructive update invariants and deterministic export policy surfaces.
+
+Canonical DDL files:
+
+- `dbTools/admin/add_annotation_versioning_policy_ddl.sql`
+- `dbTools/admin/migrations/004_annotation_versioning_policy.sql`
+- rollback: `dbTools/admin/migrations/004_annotation_versioning_policy_rollback.sql`
+- verification examples: `dbTools/admin/migrations/004_annotation_versioning_policy_verify.sql`
+
+### 11.1. annotation_supersession
+
+**Purpose:** Preserve full history by expressing replacements as insert-only edges instead of destructive row updates/deletes.
+
+**Key columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `supersession_id` | `uuid` | Primary key |
+| `superseded_annotation_id` | `uuid` | FK to retired annotation row |
+| `replacement_annotation_id` | `uuid` | FK to replacement annotation row |
+| `reason` | `text` | Optional supersession rationale |
+| `created_by` | `varchar(128)` | Operator/process identity |
+| `created_at` | `timestamptz` | Supersession timestamp |
+
+**Invariant highlights:**
+
+- `superseded_annotation_id` unique (single canonical replacement edge).
+- `superseded_annotation_id <> replacement_annotation_id`.
+- Active selectors exclude superseded rows (`annotation_active_selection_v1`).
+
+### 11.2. annotation_export_policy
+
+**Purpose:** Versioned policy registry for deterministic export-selection behavior.
+
+**Key columns:**
+
+| Column | Type | Notes |
+|---|---|---|
+| `policy_id` | `uuid` | Primary key |
+| `policy_name` | `varchar(64)` | Logical policy key (`human_first`, `model_first`, `hybrid`) |
+| `policy_version` | `integer` | Version integer for policy evolution |
+| `strategy` | `varchar(32)` | Source preference strategy |
+| `min_trust_rank` | `integer` | Trust floor (`0..3`) |
+| `allowed_source_kinds` | `text[]` | Permitted source kinds |
+| `include_conflict` | `boolean` | Whether conflict rows can pass candidate filter |
+| `notes` | `jsonb` | Policy metadata/decision-log payload |
+
+**Invariant highlights:**
+
+- Unique `(policy_name, policy_version)`.
+- Source-kind set must be non-empty.
+- Trust floor bounded to `[0,3]`.
+
+### 11.3. Deterministic Selector Surfaces
+
+`POL-655` introduces selector surfaces:
+
+- `annotation_active_selection_v1`
+  - active rows excluding superseded edges.
+- `annotation_export_select_v1(policy_name, policy_version)`
+  - deterministic source-policy selector producing one annotation per `(subject_id, label)`.
+- `annotation_export_default_human_first_v1`
+  - default projection bound to `human_first/v1`.
+
+Ranking semantics are deterministic and stable:
+
+- strategy-defined source priority
+- then descending trust rank
+- then descending confidence score
+- final deterministic tie-break on `annotation_id`
+
+Delete operations are guarded on lineage tables to preserve non-destructive history guarantees.
 
 ---
 
