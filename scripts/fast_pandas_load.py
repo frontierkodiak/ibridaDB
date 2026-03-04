@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
 """Fast load using pandas + psycopg2 (more robust for malformed CSVs)."""
 
+import os
 import pandas as pd
 import psycopg2
 from io import StringIO
 import time
 
 print("🔌 Connecting to database...")
-conn = psycopg2.connect(
-    host="localhost",
-    database="ibrida-v0",
-    user="postgres",
-    password="ooglyboogly69"
-)
+DB_DSN = os.getenv("IBRIDADB_DSN", "postgresql://postgres@localhost/ibrida-v0")
+conn = psycopg2.connect(DB_DSN)
 
 try:
     # Drop and recreate staging schema

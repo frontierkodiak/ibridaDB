@@ -3,8 +3,13 @@ set -euo pipefail
 
 DB_CONTAINER="${DB_CONTAINER:-ibridaDB}"
 DB_USER="${DB_USER:-postgres}"
-OLD_DB="${OLD_DB:-ibrida-v0}"
+OLD_DB="${OLD_DB:-ibrida}"
 NEW_DB="${NEW_DB:-ibrida-v0}"
+
+if [[ "${OLD_DB}" == "${NEW_DB}" ]]; then
+  echo "ERROR: OLD_DB and NEW_DB are identical (${OLD_DB}); nothing to rename." >&2
+  exit 1
+fi
 
 echo "==> Terminating sessions on ${OLD_DB}"
 docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -v ON_ERROR_STOP=1 -c \

@@ -13,7 +13,7 @@ LOG_FILE="${SCRIPT_DIR}/wrapper_ingest_coldp_$(date +%Y%m%d_%H%M%S).log"
 # --- Configuration ---
 # These can be overridden by environment variables if needed
 DB_USER="${DB_USER:-postgres}"
-DB_PASSWORD="${DB_PASSWORD:-ooglyboogly69}" # Hardcoded password for private repo
+DB_PASSWORD="${DB_PASSWORD:-}"
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
 DB_NAME="${DB_NAME:-ibrida-v0}" # Target ibridaDB database

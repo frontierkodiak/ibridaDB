@@ -8,6 +8,7 @@ Usage:
 """
 
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
@@ -148,25 +149,24 @@ class FastINatIngester:
         print(f"\n📸 Processing photos (chunked): {csv_path}")
         start_time = time.time()
         total_rows = 0
-        
-        # Create a lazy frame for chunked reading
-        lazy_df = pl.scan_csv(
+
+        # Stream sequential CSV batches (avoid repeated O(n) scans per chunk).
+        reader = pl.read_csv_batched(
             str(csv_path),
             separator='\t',
             null_values=['', 'NULL', '\\N'],
-            try_parse_dates=False
+            try_parse_dates=False,
+            batch_size=self.chunk_size,
         )
-        
-        # Process in chunks
+
         chunk_num = 0
         with tqdm(desc="Loading photos") as pbar:
-            for offset in range(0, 300_000_000, self.chunk_size):  # Up to 300M rows
-                chunk_num += 1
-                
-                # Read chunk
-                chunk = lazy_df.slice(offset, self.chunk_size).collect()
-                if len(chunk) == 0:
+            while True:
+                batches = reader.next_batches(1)
+                if not batches:
                     break
+                chunk_num += 1
+                chunk = batches[0]
                 
                 # Convert chunk to CSV
                 output = StringIO()
@@ -286,12 +286,25 @@ def main():
         help="Directory containing iNaturalist CSV files"
     )
     parser.add_argument(
+        "--db-connection",
+        default=os.getenv("IBRIDADB_DSN", ""),
+        help="PostgreSQL connection string (preferred; supports .pgpass/no password in source)",
+    )
+    parser.add_argument(
         "--host", default="localhost",
         help="PostgreSQL host"
     )
     parser.add_argument(
         "--database", default="ibrida-v0",
         help="PostgreSQL database"
+    )
+    parser.add_argument(
+        "--user", default=os.getenv("PGUSER", "postgres"),
+        help="PostgreSQL user (used when --db-connection is unset)"
+    )
+    parser.add_argument(
+        "--password", default=os.getenv("PGPASSWORD", ""),
+        help="PostgreSQL password (optional; prefer .pgpass)"
     )
     
     args = parser.parse_args()
@@ -310,12 +323,17 @@ def main():
     
     # Connect to database
     print(f"🔌 Connecting to {args.database}...")
-    conn = psycopg2.connect(
-        host=args.host,
-        database=args.database,
-        user="postgres",
-        password="ooglyboogly69"
-    )
+    if args.db_connection:
+        conn = psycopg2.connect(args.db_connection)
+    else:
+        conn_kwargs = {
+            "host": args.host,
+            "database": args.database,
+            "user": args.user,
+        }
+        if args.password:
+            conn_kwargs["password"] = args.password
+        conn = psycopg2.connect(**conn_kwargs)
     
     try:
         ingester = FastINatIngester(conn)

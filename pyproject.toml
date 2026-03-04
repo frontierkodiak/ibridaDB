@@ -9,10 +9,10 @@ description = "Modular, reproducible database system for biodiversity observatio
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "Caleb", email = "caleb@example.com"}
+    {name = "Caleb", email = "frontierkodiak@gmail.com"}
 ]
 maintainers = [
-    {name = "Caleb", email = "caleb@example.com"}
+    {name = "Caleb", email = "frontierkodiak@gmail.com"}
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -85,10 +85,10 @@ export = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/ibridaDB"
-Documentation = "https://github.com/yourusername/ibridaDB/blob/main/README.md"
-Repository = "https://github.com/yourusername/ibridaDB"
-"Bug Tracker" = "https://github.com/yourusername/ibridaDB/issues"
+Homepage = "https://github.com/frontierkodiak/ibridaDB"
+Documentation = "https://github.com/frontierkodiak/ibridaDB/blob/main/README.md"
+Repository = "https://github.com/frontierkodiak/ibridaDB"
+"Bug Tracker" = "https://github.com/frontierkodiak/ibridaDB/issues"
 
 [project.scripts]
 build-anthophila-manifest = "scripts.build_anthophila_manifest:main"

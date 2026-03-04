@@ -10,7 +10,7 @@ Usage:
   uv run python3 scripts/materialize_anthophila_flat.py \
     --manifest anthophila_duplicates.csv \
     --flat-dir /datasets/ibrida-data/anthophila_flat \
-    --db-connection "postgresql://postgres:ooglyboogly69@localhost/ibrida-v0"
+    --db-connection "postgresql://postgres@localhost/ibrida-v0"
 """
 
 import argparse
@@ -530,8 +530,8 @@ def main():
     )
     parser.add_argument(
         "--db-connection", 
-        default="postgresql://postgres:ooglyboogly69@localhost/ibrida-v0",
-        help="PostgreSQL connection string"
+        default=os.getenv("IBRIDADB_DSN", "postgresql://postgres@localhost/ibrida-v0"),
+        help="PostgreSQL connection string (prefer env/.pgpass over inline passwords)"
     )
     parser.add_argument(
         "--dataset",

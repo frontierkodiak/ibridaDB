@@ -16,7 +16,7 @@ MANIFEST_DIR="${MANIFEST_DIR:-/datasets/ibrida-data/media/anthophila/r2/manifest
 MANIFEST_CSV="${MANIFEST_CSV:-${MANIFEST_DIR}/anthophila_manifest.csv}"
 DEDUP_CSV="${DEDUP_CSV:-${MANIFEST_DIR}/anthophila_duplicates.csv}"
 RESOLVED_CSV="${RESOLVED_CSV:-${MANIFEST_DIR}/anthophila_duplicates_resolved.csv}"
-DB_CONNECTION="${DB_CONNECTION:-postgresql://postgres:ooglyboogly69@localhost/ibrida-v0}"
+DB_CONNECTION="${DB_CONNECTION:-postgresql://postgres@localhost/ibrida-v0}"
 DATASET="${DATASET:-anthophila}"
 ORIGIN="${ORIGIN:-anthophila}"
 VERSION="${VERSION:-v0}"
@@ -26,6 +26,7 @@ REMOTE_URI_PREFIX="${REMOTE_URI_PREFIX:-b2://ibrida-1}"
 DB_CONTAINER="${DB_CONTAINER:-ibridaDB}"
 DB_NAME="${DB_NAME:-}"
 DB_USER="${DB_USER:-}"
+RUN_CONFIG_PATH="${RUN_CONFIG_PATH:-/tmp/anthophila_ingest_config_$(date -u +%Y%m%dT%H%M%SZ).txt}"
 
 if [[ -n "${DB_CONNECTION:-}" ]]; then
     read -r DB_NAME_FROM_CONN DB_USER_FROM_CONN < <(python3 - <<'PY'
@@ -57,6 +58,37 @@ fi
 DB_NAME="${DB_NAME:-ibrida-v0}"
 DB_USER="${DB_USER:-postgres}"
 
+DB_CONNECTION_DISPLAY="$(DB_CONNECTION="${DB_CONNECTION}" python3 - <<'PY'
+import os
+import urllib.parse
+
+conn = os.environ.get("DB_CONNECTION", "")
+if not conn:
+    print("")
+    raise SystemExit(0)
+
+parsed = urllib.parse.urlparse(conn)
+if parsed.password is None:
+    print(conn)
+    raise SystemExit(0)
+
+netloc = ""
+if parsed.username:
+    netloc += urllib.parse.quote(parsed.username, safe="")
+    netloc += ":***@"
+else:
+    netloc += "***@"
+if parsed.hostname:
+    netloc += parsed.hostname
+if parsed.port:
+    netloc += f":{parsed.port}"
+sanitized = urllib.parse.urlunparse(
+    (parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment)
+)
+print(sanitized)
+PY
+)"
+
 DRY_RUN=false
 if [[ "${1:-}" == "--dry-run" ]]; then
     DRY_RUN=true
@@ -80,7 +112,7 @@ echo "    Manifest dir: $MANIFEST_DIR"
 echo "    Manifest CSV: $MANIFEST_CSV"
 echo "    Dedup CSV: $DEDUP_CSV"
 echo "    Resolved CSV: $RESOLVED_CSV"
-echo "    DB connection: $DB_CONNECTION"
+echo "    DB connection: $DB_CONNECTION_DISPLAY"
 echo "    Dataset: $DATASET  Origin: $ORIGIN  Version: $VERSION  Release: $RELEASE"
 echo "    Remote key prefix: $REMOTE_KEY_PREFIX"
 echo "    Remote URI prefix: $REMOTE_URI_PREFIX"
@@ -182,7 +214,8 @@ echo "==> Anthophila ingest orchestration complete"
 
 # Save the configuration used for this run
 if [[ "$DRY_RUN" == "false" ]]; then
-    cat > "${REPO_ROOT}/anthophila_ingest_config.txt" << EOF
+    umask 077
+    cat > "${RUN_CONFIG_PATH}" << EOF
 # Anthophila Ingest Configuration - $(date)
 ANTHOPHILA_DIR=$ANTHOPHILA_DIR
 FLAT_DIR=$FLAT_DIR
@@ -190,7 +223,7 @@ MANIFEST_DIR=$MANIFEST_DIR
 MANIFEST_CSV=$MANIFEST_CSV
 DEDUP_CSV=$DEDUP_CSV
 RESOLVED_CSV=$RESOLVED_CSV
-DB_CONNECTION=$DB_CONNECTION
+DB_CONNECTION=$DB_CONNECTION_DISPLAY
 DATASET=$DATASET
 ORIGIN=$ORIGIN
 VERSION=$VERSION
@@ -198,5 +231,5 @@ RELEASE=$RELEASE
 REMOTE_KEY_PREFIX=$REMOTE_KEY_PREFIX
 REMOTE_URI_PREFIX=$REMOTE_URI_PREFIX
 EOF
-    echo "Configuration saved to: ${REPO_ROOT}/anthophila_ingest_config.txt"
+    echo "Configuration saved to: ${RUN_CONFIG_PATH}"
 fi

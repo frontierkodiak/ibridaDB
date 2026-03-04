@@ -9,10 +9,11 @@ Usage:
   uv run python3 scripts/deduplicate_anthophila.py \
     --manifest anthophila_manifest.csv \
     --output anthophila_duplicates.csv \
-    --db-connection "postgresql://postgres:ooglyboogly69@localhost/ibrida-v0"
+    --db-connection "postgresql://postgres@localhost/ibrida-v0"
 """
 
 import argparse
+import os
 from pathlib import Path
 from typing import Dict, List, Tuple, Set
 import pandas as pd
@@ -206,8 +207,8 @@ def main():
     )
     parser.add_argument(
         "--db-connection",
-        default="postgresql://postgres:ooglyboogly69@localhost/ibrida-v0",
-        help="PostgreSQL connection string"
+        default=os.getenv("IBRIDADB_DSN", "postgresql://postgres@localhost/ibrida-v0"),
+        help="PostgreSQL connection string (prefer env/.pgpass over inline passwords)"
     )
     
     args = parser.parse_args()

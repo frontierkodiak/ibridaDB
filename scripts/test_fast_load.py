@@ -2,17 +2,14 @@
 """Quick test of fast loading approach with taxa table."""
 
 import polars as pl
+import os
 import psycopg2
 from io import StringIO
 import time
 
 print("🔌 Connecting to database...")
-conn = psycopg2.connect(
-    host="localhost",
-    database="ibrida-v0",
-    user="postgres",
-    password="ooglyboogly69"
-)
+DB_DSN = os.getenv("IBRIDADB_DSN", "postgresql://postgres@localhost/ibrida-v0")
+conn = psycopg2.connect(DB_DSN)
 
 try:
     # Drop and recreate staging schema

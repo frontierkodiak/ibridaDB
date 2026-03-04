@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-/home/caleb/repo/ibridaDB}"
-OLD="ibrida-v0"
+OLD="ibrida"
 NEW="ibrida-v0"
 
 cd "${REPO_ROOT}"
@@ -12,7 +12,7 @@ echo "==> Updating references from '${OLD}' to '${NEW}' (excluding archival wrap
 
 # 1) Explicitly update the taxa expander default:
 if [ -f "dbTools/taxa/expand/expand_taxa.sh" ]; then
-  sed -i 's/DB_NAME="${DB_NAME:-ibrida-v0}"/DB_NAME="${DB_NAME:-ibrida-v0}"/' \
+  sed -i 's/DB_NAME="${DB_NAME:-ibrida}"/DB_NAME="${DB_NAME:-ibrida-v0}"/' \
     dbTools/taxa/expand/expand_taxa.sh || true
 fi
 

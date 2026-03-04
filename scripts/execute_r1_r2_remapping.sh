@@ -84,8 +84,8 @@ WITH subspecies_to_species AS (
         r1.name as old_name,
         r1.ancestry,
         r1.rank,
-        -- Extract immediate parent ID from ancestry
-        REGEXP_REPLACE(r1.ancestry, '^.*?/(\d+)/' || r1.taxon_id::text || '$', '\1')::INTEGER as parent_id
+        -- Extract immediate parent ID from ancestry (NULL when unmatched)
+        (REGEXP_MATCH(r1.ancestry, '.*/([0-9]+)/' || r1.taxon_id::text || '$'))[1]::INTEGER as parent_id
     FROM taxa r1
     JOIN stg_inat_20250827.taxa r2 ON r1.taxon_id = r2.taxon_id
     WHERE r1.active = true 

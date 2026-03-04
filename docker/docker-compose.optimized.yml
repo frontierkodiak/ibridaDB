@@ -6,7 +6,7 @@ services:
     user: "998:998"
     shm_size: '32g'  # Increased for better performance
     environment:
-      POSTGRES_PASSWORD: ooglyboogly69
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in environment}
       PGDATA: /var/lib/postgresql/data/pgdata
       
       # Memory settings (optimized for 128GB system)

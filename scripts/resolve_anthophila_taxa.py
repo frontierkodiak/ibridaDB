@@ -6,10 +6,11 @@ Usage:
   uv run python3 scripts/resolve_anthophila_taxa.py \
     --manifest anthophila_duplicates.csv \
     --output anthophila_duplicates_resolved.csv \
-    --db-connection "postgresql://postgres:...@localhost/ibrida-v0"
+    --db-connection "postgresql://postgres@localhost/ibrida-v0"
 """
 
 import argparse
+import os
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -93,8 +94,8 @@ def main() -> int:
     parser.add_argument("--output", required=True, help="Output CSV with taxon_id columns")
     parser.add_argument(
         "--db-connection",
-        default="postgresql://postgres:ooglyboogly69@localhost/ibrida-v0",
-        help="PostgreSQL connection string",
+        default=os.getenv("IBRIDADB_DSN", "postgresql://postgres@localhost/ibrida-v0"),
+        help="PostgreSQL connection string (prefer env/.pgpass over inline passwords)",
     )
     parser.add_argument(
         "--prefer-expanded-taxa",
