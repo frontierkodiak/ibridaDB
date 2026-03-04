@@ -177,6 +177,38 @@ CREATE INDEX IF NOT EXISTS idx_quality_sidecar
 
 
 -- ============================================================================
+-- Invariant guardrail: every annotation row must have one provenance row
+-- ============================================================================
+-- Keep export/trust selection deterministic by rejecting annotation inserts that
+-- do not provide provenance within the same transaction.
+
+CREATE OR REPLACE FUNCTION enforce_annotation_provenance_exists()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM annotation_provenance p
+        WHERE p.annotation_id = NEW.annotation_id
+    ) THEN
+        RAISE EXCEPTION
+            'annotation % requires exactly one provenance row before commit',
+            NEW.annotation_id;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_annotation_require_provenance ON annotation;
+CREATE CONSTRAINT TRIGGER trg_annotation_require_provenance
+AFTER INSERT ON annotation
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW
+EXECUTE FUNCTION enforce_annotation_provenance_exists();
+
+
+-- ============================================================================
 -- Trusted-selection query surface
 -- ============================================================================
 -- Query semantics for selecting trusted annotations across source kinds.

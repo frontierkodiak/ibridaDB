@@ -51,6 +51,28 @@ CREATE INDEX IF NOT EXISTS idx_supersession_created_at
     ON annotation_supersession (created_at);
 
 
+-- Keep lifecycle state and supersession lineage synchronized.
+CREATE OR REPLACE FUNCTION sync_annotation_lifecycle_on_supersession()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    UPDATE annotation
+       SET lifecycle_state = 'superseded',
+           updated_at = NOW()
+     WHERE annotation_id = NEW.superseded_annotation_id
+       AND lifecycle_state <> 'superseded';
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_sync_lifecycle_on_supersession ON annotation_supersession;
+CREATE TRIGGER trg_sync_lifecycle_on_supersession
+AFTER INSERT ON annotation_supersession
+FOR EACH ROW
+EXECUTE FUNCTION sync_annotation_lifecycle_on_supersession();
+
+
 -- ============================================================================
 -- annotation_export_policy
 -- ============================================================================

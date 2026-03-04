@@ -77,6 +77,14 @@ class AnnotationSet(Base):
             "source_kind IN ('human', 'model', 'imported_dataset')",
             name="chk_source_kind",
         ),
+        CheckConstraint(
+            "prompt_hash IS NULL OR prompt_hash ~ '^[0-9a-f]{64}$'",
+            name="chk_annotation_set_prompt_hash_hex",
+        ),
+        CheckConstraint(
+            "config_hash IS NULL OR config_hash ~ '^[0-9a-f]{64}$'",
+            name="chk_annotation_set_config_hash_hex",
+        ),
         Index(
             "uq_annotation_set_run",
             "source_name",
@@ -116,7 +124,10 @@ class AnnotationSubject(Base):
         server_default=func.gen_random_uuid(),
     )
     asset_uuid = Column(UUID(as_uuid=True), nullable=False)
-    observation_uuid = Column(UUID(as_uuid=True))
+    observation_uuid = Column(
+        UUID(as_uuid=True),
+        ForeignKey("observations.observation_uuid", ondelete="SET NULL"),
+    )
     frame_index = Column(Integer)
     time_start_ms = Column(Integer)
     time_end_ms = Column(Integer)

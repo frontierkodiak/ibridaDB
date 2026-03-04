@@ -46,12 +46,19 @@ CREATE TABLE IF NOT EXISTS annotation_set (
     source_name     VARCHAR(128) NOT NULL,                      -- e.g. 'sam3', 'gemini', 'expert-batch-2026'
     source_version  VARCHAR(64),                                -- model/tool version
     model_id        VARCHAR(128),                               -- full model identifier
-    prompt_hash     CHAR(64),                                   -- SHA-256 of prompt template
-    config_hash     CHAR(64),                                   -- SHA-256 of run config
+    prompt_hash     VARCHAR(64),                                -- SHA-256 of prompt template (hex)
+    config_hash     VARCHAR(64),                                -- SHA-256 of run config (hex)
     run_id          VARCHAR(128),                               -- external run/batch identifier
     created_by      VARCHAR(128),                               -- operator or agent identity
     sidecar         JSONB,                                      -- extensible metadata
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT chk_annotation_set_prompt_hash_hex CHECK (
+        prompt_hash IS NULL OR prompt_hash ~ '^[0-9a-f]{64}$'
+    ),
+    CONSTRAINT chk_annotation_set_config_hash_hex CHECK (
+        config_hash IS NULL OR config_hash ~ '^[0-9a-f]{64}$'
+    )
 );
 
 COMMENT ON TABLE  annotation_set IS 'Groups annotations produced together (POL-652).';
@@ -99,7 +106,7 @@ CREATE INDEX IF NOT EXISTS idx_annotation_set_created_at
 CREATE TABLE IF NOT EXISTS annotation_subject (
     subject_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     asset_uuid      UUID         NOT NULL,                      -- photo_uuid or external media UUID
-    observation_uuid UUID,                                      -- optional: FK to observations
+    observation_uuid UUID REFERENCES observations(observation_uuid) ON DELETE SET NULL,
     frame_index     INTEGER,                                    -- optional: video frame number
     time_start_ms   INTEGER,                                    -- optional: video segment start (ms)
     time_end_ms     INTEGER,                                    -- optional: video segment end (ms)
