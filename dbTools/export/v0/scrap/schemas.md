@@ -4,7 +4,7 @@ One row per taxon. Expands the 'ancestry' column from the 'taxa' table into a se
     Can be much more performany than recursive string parsing for ancestry.
 
 ```sql
-ibrida-v0-r1=# \d expanded_taxa
+ibrida-v0=# \d expanded_taxa
                         Table "public.expanded_taxa"
       Column      |          Type          | Collation | Nullable | Default
 ------------------+------------------------+-----------+----------+---------
@@ -124,7 +124,7 @@ Indexes:
 One row per taxon.
 
 ```sql
-ibrida-v0-r1=# \d taxa
+ibrida-v0=# \d taxa
                          Table "public.taxa"
    Column   |          Type          | Collation | Nullable | Default
 ------------+------------------------+-----------+----------+---------
@@ -151,7 +151,7 @@ Indexes:
 # observations
 
 ```sql
-ibrida-v0-r1=# \d observations
+ibrida-v0=# \d observations
                           Table "public.observations"
        Column        |          Type          | Collation | Nullable | Default
 ---------------------+------------------------+-----------+----------+---------
@@ -184,7 +184,7 @@ Indexes:
 # photos
 
 ```sql
-ibrida-v0-r1=# \d photos
+ibrida-v0=# \d photos
                            Table "public.photos"
       Column      |          Type          | Collation | Nullable | Default
 ------------------+------------------------+-----------+----------+---------
@@ -215,7 +215,7 @@ Indexes:
 # observers
 
 ```sql
-ibrida-v0-r1=# \d observers
+ibrida-v0=# \d observers
                        Table "public.observers"
    Column    |          Type          | Collation | Nullable | Default
 -------------+------------------------+-----------+----------+---------

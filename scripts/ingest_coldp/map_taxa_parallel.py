@@ -631,7 +631,7 @@ def main():
     parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD", "password"))
     parser.add_argument("--db-host", default=os.getenv("DB_HOST", "localhost"))
     parser.add_argument("--db-port", default=os.getenv("DB_PORT", "5432"))
-    parser.add_argument("--db-name", default=os.getenv("DB_NAME", "ibrida-v0-r1"))
+    parser.add_argument("--db-name", default=os.getenv("DB_NAME", "ibrida-v0"))
     parser.add_argument("--fuzzy-match", action="store_true", help="Enable fuzzy matching for unmatched taxa")
     parser.add_argument("--fuzzy-threshold", type=int, default=90, help="Threshold score (0-100) for fuzzy matching")
     parser.add_argument("--processes", type=int, default=None, help="Number of parallel processes to use (default: CPU count - 1)")
