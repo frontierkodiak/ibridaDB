@@ -4,7 +4,7 @@ services:
     user: "998:998"
     shm_size: '16g'
     environment:
-      POSTGRES_PASSWORD: ooglyboogly69
+      POSTGRES_PASSWORD: ${IBRIDADB_POSTGRES_PASSWORD:?set via with-polli-secrets or env}
       PGDATA: /var/lib/postgresql/data/pgdata
     command:
       - postgres
