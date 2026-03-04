@@ -30,6 +30,7 @@ Core options:
 Control options:
   --no-wait                   Do not wait for carryover; fail if carryover is active
   --skip-vacuum               Skip final VACUUM ANALYZE
+  --skip-self-check           Skip upfront parser self-check (not recommended)
   --target-updated-rows <n>   Stop once rows_updated >= n (calibration mode)
   --max-batches <n>           Stop once total batches_completed >= n
   --resume                    Resume/continue existing run-id (default)
@@ -73,6 +74,7 @@ RESUME=1
 TARGET_UPDATED_ROWS=""
 MAX_BATCHES=""
 FINALIZED=0
+SELF_CHECK=1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -110,6 +112,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-vacuum)
       RUN_VACUUM=0
+      shift
+      ;;
+    --skip-self-check)
+      SELF_CHECK=0
       shift
       ;;
     --target-updated-rows)
@@ -184,6 +190,16 @@ log() {
 die() {
   echo "[$(ts)] ERROR: $*" >&2
   exit 1
+}
+
+self_syntax_check() {
+  if [[ "${SELF_CHECK}" -eq 0 ]]; then
+    log "Skipping parser self-check (--skip-self-check)."
+    return
+  fi
+  if ! bash -n "${BASH_SOURCE[0]}"; then
+    die "Parser self-check failed for ${BASH_SOURCE[0]}. Fix syntax before running long fill jobs."
+  fi
 }
 
 ensure_run_id() {
@@ -640,6 +656,24 @@ finalize_completed() {
   FINALIZED=1
 }
 
+run_meets_completion_criteria() {
+  local ready
+  # Keep in sync with run_should_stop() stop signals; this adds the
+  # claimed_rows>=initial_remaining guard for late-stage finalize fallback.
+  ready="$(psql_value "
+    SELECT CASE
+      WHEN state <> 'running' THEN false
+      WHEN claimed_rows >= initial_remaining THEN true
+      WHEN target_updated_rows IS NOT NULL AND rows_updated >= target_updated_rows THEN true
+      WHEN max_batches IS NOT NULL AND batches_completed >= max_batches THEN true
+      ELSE false
+    END
+    FROM admin.elevation_fill_runs
+    WHERE run_id = '${RUN_ID}';
+  " "elevation-fill:${RUN_ID}:control" || true)"
+  [[ "${ready:-f}" == "t" ]]
+}
+
 cleanup_on_exit() {
   local exit_code="$?"
   if [[ "$STATUS_ONLY" -eq 1 || "$DRY_RUN" -eq 1 ]]; then
@@ -655,10 +689,29 @@ cleanup_on_exit() {
     if [[ "$exit_code" -eq 0 ]]; then
       mark_run_state "stopped"
     else
-      mark_run_state "failed"
+      # Safety net: if processing goals are already satisfied, avoid leaving the
+      # run in failed state due to late-stage control-path errors.
+      if run_meets_completion_criteria; then
+        log "Non-zero exit after completion criteria met; marking run completed for safe recovery."
+        finalize_completed
+      else
+        local current_db_state
+        current_db_state="$(psql_value "
+          SELECT state
+          FROM admin.elevation_fill_runs
+          WHERE run_id = '${RUN_ID}';
+        " "elevation-fill:${RUN_ID}:control" || true)"
+        if [[ "${current_db_state}" == "running" ]]; then
+          mark_run_state "failed"
+        else
+          log "Run state is '${current_db_state:-unknown}' at cleanup; skipping failed mark."
+        fi
+      fi
     fi
   fi
 }
+
+self_syntax_check
 trap cleanup_on_exit EXIT
 
 log "Starting post-carryover elevation sequence on db=${DB_NAME} container=${DB_CONTAINER}"
