@@ -6,29 +6,76 @@ DB_USER="${DB_USER:-postgres}"
 DB_NAME="${DB_NAME:-ibrida-v0}"  # Still using old name until IBRIDA-017 completes
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+psql_exec() {
+  docker exec -i "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" "$@"
+}
+
 echo "==> Applying media catalog DDL to ${DB_NAME}"
 
+echo "==> Preflight: validating observations(observation_uuid) uniqueness prerequisites"
+HAS_UNIQUE_OBS_UUID="$(psql_exec -Atqc "
+SELECT CASE WHEN EXISTS (
+  SELECT 1
+  FROM pg_index i
+  JOIN pg_class t ON t.oid = i.indrelid
+  JOIN pg_namespace n ON n.oid = t.relnamespace
+  JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(i.indkey)
+  WHERE n.nspname = 'public'
+    AND t.relname = 'observations'
+    AND i.indisunique
+    AND i.indisvalid
+    AND i.indpred IS NULL
+    AND i.indnatts = 1
+    AND a.attname = 'observation_uuid'
+) THEN 1 ELSE 0 END;
+")"
+
+if [[ "${HAS_UNIQUE_OBS_UUID}" != "1" ]]; then
+  echo "==> No usable unique index/constraint found on observations(observation_uuid). Checking duplicates..."
+  DUP_COUNT="$(psql_exec -Atqc "
+  SELECT COUNT(*)
+  FROM (
+    SELECT observation_uuid
+    FROM observations
+    WHERE observation_uuid IS NOT NULL
+    GROUP BY observation_uuid
+    HAVING COUNT(*) > 1
+  ) d;
+  ")"
+
+  if [[ "${DUP_COUNT}" != "0" ]]; then
+    echo "ERROR: observations.observation_uuid has ${DUP_COUNT} duplicate value(s); cannot enforce FK target uniqueness." >&2
+    echo "Resolve duplicates first, then rerun apply_media_catalog_ddl.sh." >&2
+    exit 1
+  fi
+
+  echo "==> Creating unique index for FK target: uq_observations_observation_uuid"
+  psql_exec -c "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS uq_observations_observation_uuid ON observations(observation_uuid);"
+fi
+
 # Apply the DDL
-docker exec -i "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -v ON_ERROR_STOP=1 \
-  < "${SCRIPT_DIR}/add_media_catalog_ddl.sql"
+psql_exec -v ON_ERROR_STOP=1 < "${SCRIPT_DIR}/add_media_catalog_ddl.sql"
 
 echo "==> DDL applied successfully"
 
 echo "==> Verifying tables exist"
-docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -c "
-\\dt+ media
-\\dt+ observation_media  
+psql_exec -c "
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+  AND table_name IN ('media', 'observation_media')
+ORDER BY table_name;
 "
 
 echo "==> Checking public_media view"
-docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -c "
+psql_exec -c "
 SELECT COUNT(*) as media_count FROM public_media;
 "
 
 echo "==> Testing basic insert/select"
-docker exec "${DB_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -c "
-INSERT INTO media (dataset, release, uri, sha256_hex) 
-VALUES ('test', 'r0', 'file:///tmp/test.jpg', 'abc123def456') 
+psql_exec -c "
+INSERT INTO media (dataset, release, uri, sha256_hex)
+VALUES ('test', 'r0', 'file:///tmp/test.jpg', 'abc123def456')
 ON CONFLICT (uri) DO NOTHING;
 
 SELECT media_id, dataset, release, uri FROM media WHERE dataset = 'test';
