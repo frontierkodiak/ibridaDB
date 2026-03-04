@@ -139,6 +139,13 @@ cd dbTools/ingest/v0/utils/elevation
 ./wrapper.sh
 ```
 
+### Shell Safety Gate (admin/elevation scripts)
+
+```bash
+# Parser + targeted ShellCheck guard before long-running admin flows
+./scripts/lint_shell_critical.sh
+```
+
 ### Elevation Data Download
 
 ```bash
