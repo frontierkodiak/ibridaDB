@@ -21,7 +21,7 @@
 #   VERSION_VALUE     -> Database version identifier (e.g. "v0")
 #   RELEASE_VALUE     -> Release identifier (e.g. "r1")
 #   ORIGIN_VALUE      -> (Optional) For logging context
-#   DB_NAME           -> Name of the database (e.g. "ibrida-v0-r1")
+#   DB_NAME           -> Name of the database (e.g. "ibrida-v0")
 #   REGION_TAG        -> Region bounding box key (e.g. "NAfull")
 #   MIN_OBS           -> Minimum observations required for a species to be included
 #   MAX_RN            -> Max random number of research-grade rows per species in final CSV

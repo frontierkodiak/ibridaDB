@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  ibrida:
+    image: frontierkodiak/ibridadb:latest
+    user: "998:998"
+    shm_size: '32g'  # Increased for better performance
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in environment}
+      PGDATA: /var/lib/postgresql/data/pgdata
+      
+      # Memory settings (optimized for 128GB system)
+      POSTGRES_SHARED_BUFFERS: 32GB  # 25% of RAM
+      POSTGRES_WORK_MEM: 4GB
+      POSTGRES_MAINTENANCE_WORK_MEM: 8GB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 64GB  # 50% of RAM
+      
+      # WAL and checkpoint settings (bulk loading optimized)
+      POSTGRES_WAL_BUFFERS: 128MB
+      POSTGRES_MAX_WAL_SIZE: 32GB
+      POSTGRES_MIN_WAL_SIZE: 8GB
+      POSTGRES_CHECKPOINT_TIMEOUT: 60min
+      POSTGRES_CHECKPOINT_COMPLETION_TARGET: 0.9
+      POSTGRES_WAL_LEVEL: minimal  # Reduces WAL overhead
+      
+      # Bulk loading optimizations
+      POSTGRES_SYNCHRONOUS_COMMIT: off
+      POSTGRES_FULL_PAGE_WRITES: off
+      POSTGRES_AUTOVACUUM: off  # Disable during bulk loads
+      POSTGRES_FSYNC: off  # DANGER: Only for initial loads!
+      
+      # Connection and misc
+      POSTGRES_MAX_CONNECTIONS: 50
+      POSTGRES_MAX_PARALLEL_WORKERS_PER_GATHER: 8
+      POSTGRES_MAX_PARALLEL_WORKERS: 12
+      POSTGRES_MAX_PARALLEL_MAINTENANCE_WORKERS: 8
+      
+    volumes:
+      - ~/repo/ibridaDB/dbTools:/tool
+      - ~/repo/ibridaDB/dbQueries:/query
+      - /database/ibridaDB:/var/lib/postgresql/data
+      - /datasets/ibrida-data/exports:/exports
+      - /datasets/ibrida-data/intake:/metadata
+      - /datasets/dem:/dem
+      
+    ports:
+      - "5432:5432"
+      
+    container_name: ibridaDB
+    
+    # Resource limits to prevent runaway
+    deploy:
+      resources:
+        limits:
+          memory: 64G
+        reservations:
+          memory: 32G

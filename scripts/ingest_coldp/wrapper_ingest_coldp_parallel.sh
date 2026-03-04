@@ -14,10 +14,10 @@ COLDP_DIR=${COLDP_DIR:-"/datasets/taxa/catalogue_of_life/2024/ColDP"}
 
 # Database config
 DB_USER=${DB_USER:-"postgres"}
-DB_PASSWORD=${DB_PASSWORD:-"ooglyboogly69"}
+DB_PASSWORD=${DB_PASSWORD:-""}
 DB_HOST=${DB_HOST:-"localhost"}
 DB_PORT=${DB_PORT:-"5432"}
-DB_NAME=${DB_NAME:-"ibrida-v0-r1"}
+DB_NAME=${DB_NAME:-"ibrida-v0"}
 
 # Step flags
 DO_LOAD_TABLES=${DO_LOAD_TABLES:-true}

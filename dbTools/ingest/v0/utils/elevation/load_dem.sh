@@ -8,7 +8,7 @@
 #   load_dem.sh <DEM_DIR> <DB_NAME> <DB_USER> <DB_CONTAINER> <EPSG> <TILE_SIZE>
 #
 # Example:
-#   load_dem.sh /datasets/dem/merit ibrida-v0-r1 postgres ibridaDB 4326 100x100
+#   load_dem.sh /datasets/dem/merit ibrida-v0 postgres ibridaDB 4326 100x100
 #
 # Notes:
 #   - Expects .tar files each containing .tif(s).

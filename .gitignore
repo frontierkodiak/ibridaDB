@@ -161,3 +161,4 @@ cython_debug/
 
 **/.claude/settings.local.json
 *.tsv
+anthophila_ingest_config*.txt

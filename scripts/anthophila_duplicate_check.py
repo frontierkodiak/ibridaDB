@@ -4,19 +4,23 @@ Check anthophila observation IDs against ibridaDB to identify duplicates.
 """
 
 import re
+import os
 import psycopg2
 from pathlib import Path
 from collections import Counter
 
 def connect_to_db():
     """Connect to the ibridaDB database."""
-    return psycopg2.connect(
-        host="localhost",
-        port="5432", 
-        database="ibrida-v0-r1",
-        user="postgres",
-        password="ooglyboogly69"
-    )
+    kwargs = {
+        "host": os.getenv("PGHOST", "localhost"),
+        "port": os.getenv("PGPORT", "5432"),
+        "database": os.getenv("PGDATABASE", "ibrida-v0"),
+        "user": os.getenv("PGUSER", "postgres"),
+    }
+    password = os.getenv("PGPASSWORD", "")
+    if password:
+        kwargs["password"] = password
+    return psycopg2.connect(**kwargs)
 
 def extract_anthophila_ids(anthophila_dir="/datasets/dataZoo/anthophila"):
     """Extract all observation IDs from anthophila filenames."""

@@ -24,7 +24,7 @@ def check_ids_in_database(ids_list):
     ids_str = ",".join(map(str, ids_list))
     
     cmd = [
-        "docker", "exec", "ibridaDB", "psql", "-U", "postgres", "-d", "ibrida-v0-r1", 
+        "docker", "exec", "ibridaDB", "psql", "-U", "postgres", "-d", "ibrida-v0", 
         "-t", "-c", f"SELECT photo_id FROM photos WHERE photo_id IN ({ids_str});"
     ]
     

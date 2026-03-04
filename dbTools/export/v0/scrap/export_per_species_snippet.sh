@@ -9,7 +9,7 @@
 # Usage: set environment variables before calling, e.g.:
 #   export DB_CONTAINER="ibridaDB"
 #   export DB_USER="postgres"
-#   export DB_NAME="ibrida-v0-r1"
+#   export DB_NAME="ibrida-v0"
 #   export EXPORT_GROUP="primary_terrestrial_arthropoda"
 #   export EXPORT_DIR="/exports/v0/r1/primary_only_50min_4000max"
 #   export MAX_RN=4000
