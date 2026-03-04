@@ -1,5 +1,6 @@
 -- Migration 002: annotation + annotation_geometry
 -- POL-653 / Schema B — annotation core rows and geometry representation
+-- Mirror note: keep this file byte-identical with its corresponding add/migration pair.
 --
 -- Purpose:
 --   Define canonical annotation rows with label/score/lifecycle, and

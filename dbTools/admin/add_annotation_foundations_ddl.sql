@@ -1,5 +1,6 @@
 -- Migration 001: annotation_subject + annotation_set foundations
 -- POL-652 / Schema A — annotation lineage identity
+-- Mirror note: keep this file byte-identical with its corresponding add/migration pair.
 --
 -- Purpose:
 --   Define the foundational relational schema for annotation lineage:

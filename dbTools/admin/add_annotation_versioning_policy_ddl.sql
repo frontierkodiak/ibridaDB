@@ -1,5 +1,6 @@
 -- Migration 004: annotation versioning invariants + export-selection semantics
 -- POL-655 / Schema D
+-- Mirror note: keep this file byte-identical with its corresponding add/migration pair.
 --
 -- Purpose:
 --   Finalize non-destructive lifecycle behavior and deterministic export policy

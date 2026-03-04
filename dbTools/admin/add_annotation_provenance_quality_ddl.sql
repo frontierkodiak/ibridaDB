@@ -1,5 +1,6 @@
 -- Migration 003: annotation_provenance + annotation_quality
 -- POL-654 / Schema C — provenance completeness and quality/adjudication policy
+-- Mirror note: keep this file byte-identical with its corresponding add/migration pair.
 --
 -- Purpose:
 --   Add first-class provenance + quality tables for annotation rows so
