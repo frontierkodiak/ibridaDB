@@ -249,6 +249,13 @@ fi
 
 EXPORT_FILE="${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv"
 
+# Ensure planner has fresh stats on the staging table before the heavy COPY.
+print_progress "cladistic.sh: ANALYZE staging table for planner accuracy"
+execute_sql "ANALYZE \"${TABLE_NAME}\";"
+
+# Boost work_mem for the windowed COPY (ROW_NUMBER + sort + join).
+execute_sql "SET work_mem = '512MB';"
+
 # Final COPY query uses these columns in quotes.
 # Important contract behavior for POL-447:
 #   - MAX_RN caps distinct research observations per species ("L10_taxonID").
