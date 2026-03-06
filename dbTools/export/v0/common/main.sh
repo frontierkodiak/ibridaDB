@@ -24,7 +24,7 @@
 #   DB_NAME           -> Name of the database (e.g. "ibrida-v0")
 #   REGION_TAG        -> Region bounding box key (e.g. "NAfull")
 #   MIN_OBS           -> Minimum observations required for a species to be included
-#   MAX_RN            -> Max random number of research-grade rows per species in final CSV
+#   MAX_RN            -> Max research-grade observations per species in final CSV
 #   DB_CONTAINER      -> Docker container name for exec (e.g. "ibridaDB")
 #   HOST_EXPORT_BASE_PATH -> Host system directory for exports
 #   CONTAINER_EXPORT_BASE_PATH -> Container path that maps to HOST_EXPORT_BASE_PATH
@@ -151,6 +151,74 @@ SELECT format(
 )
 FROM export_stats;")
 
+EXPORT_CSV_FILE="${HOST_EXPORT_DIR}/${EXPORT_GROUP}_photos.csv"
+
+if [ ! -f "${EXPORT_CSV_FILE}" ]; then
+  echo "Error: Expected export CSV not found at ${EXPORT_CSV_FILE}"
+  exit 1
+fi
+
+get_tsv_col_index() {
+  local file="$1"
+  local target_col="$2"
+  awk -F'\t' -v target="$target_col" '
+    NR == 1 {
+      for (i = 1; i <= NF; i++) {
+        if ($i == target) {
+          print i
+          exit
+        }
+      }
+    }
+  ' "$file"
+}
+
+obs_col_idx="$(get_tsv_col_index "${EXPORT_CSV_FILE}" "observation_uuid")"
+
+if [ -z "${obs_col_idx}" ]; then
+  echo "Error: Could not find required column 'observation_uuid' in ${EXPORT_CSV_FILE}"
+  exit 1
+fi
+
+csv_total_photo_rows="$(awk 'NR > 1 {c++} END {print c+0}' "${EXPORT_CSV_FILE}")"
+csv_distinct_observations="$(awk -F'\t' -v col="${obs_col_idx}" '
+  NR > 1 { seen[$col] = 1 }
+  END { print length(seen) }
+' "${EXPORT_CSV_FILE}")"
+csv_multi_photo_observations="$(awk -F'\t' -v col="${obs_col_idx}" '
+  NR > 1 { obs_photo_count[$col]++ }
+  END {
+    multi = 0
+    for (obs in obs_photo_count) {
+      if (obs_photo_count[obs] > 1) {
+        multi++
+      }
+    }
+    print multi
+  }
+' "${EXPORT_CSV_FILE}")"
+csv_max_photos_per_observation="$(awk -F'\t' -v col="${obs_col_idx}" '
+  NR > 1 { obs_photo_count[$col]++ }
+  END {
+    max_photos = 0
+    for (obs in obs_photo_count) {
+      if (obs_photo_count[obs] > max_photos) {
+        max_photos = obs_photo_count[obs]
+      }
+    }
+    print max_photos
+  }
+' "${EXPORT_CSV_FILE}")"
+csv_avg_photos_per_observation="$(awk -v rows="${csv_total_photo_rows}" -v obs="${csv_distinct_observations}" '
+  BEGIN {
+    if (obs == 0) {
+      print "0.00"
+    } else {
+      printf "%.2f", rows / obs
+    }
+  }
+')"
+
 SUMMARY_FILE="${HOST_EXPORT_DIR}/${EXPORT_GROUP}_export_summary.txt"
 {
   echo "Export Summary"
@@ -159,7 +227,7 @@ SUMMARY_FILE="${HOST_EXPORT_DIR}/${EXPORT_GROUP}_export_summary.txt"
   echo "Origin: ${ORIGIN_VALUE}"
   echo "Region: ${REGION_TAG}"
   echo "Minimum Observations (species): ${MIN_OBS}"
-  echo "Maximum Random Number (MAX_RN): ${MAX_RN}"
+  echo "Maximum Observation Cap (MAX_RN): ${MAX_RN}"
   echo "Export Group: ${EXPORT_GROUP}"
   echo "Date: $(date)"
   echo "SKIP_REGIONAL_BASE: ${SKIP_REGIONAL_BASE}"
@@ -171,8 +239,20 @@ SUMMARY_FILE="${HOST_EXPORT_DIR}/${EXPORT_GROUP}_export_summary.txt"
   echo "MIN_OCCURRENCES_PER_RANK: ${MIN_OCCURRENCES_PER_RANK}"
   echo "INCLUDE_ELEVATION_EXPORT: ${INCLUDE_ELEVATION_EXPORT}"
   echo ""
+  echo "Contract Notes:"
+  echo "MAX_RN semantics: observation-capped for research observations per species (L10_taxonID); all photos for selected observations are included."
+  echo "Final ordering: observation_uuid ASC, position ASC, photo_id ASC, photo_uuid ASC."
+  echo "Split key: deferred to downstream materialization lane (POL-448)."
+  echo ""
   echo "Final Table Stats:"
   echo "${STATS}"
+  echo ""
+  echo "Final CSV Stats (${EXPORT_GROUP}_photos.csv):"
+  echo "Photo Rows: ${csv_total_photo_rows}"
+  echo "Distinct Observations: ${csv_distinct_observations}"
+  echo "Multi-photo Observations (>1 photo): ${csv_multi_photo_observations}"
+  echo "Max Photos per Observation: ${csv_max_photos_per_observation}"
+  echo "Avg Photos per Observation: ${csv_avg_photos_per_observation}"
   echo ""
   echo "Timing:"
   echo " - Regional Base: ${regional_secs} seconds"

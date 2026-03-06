@@ -155,9 +155,9 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# 5) Export Final CSV with partition-based sampling for research-grade species
+# 5) Export Final CSV with observation-capped sampling for research-grade species
 # ------------------------------------------------------------------------------
-print_progress "cladistic.sh: Exporting final CSV with partition-based sampling"
+print_progress "cladistic.sh: Exporting final CSV with observation-capped species sampling"
 
 pos_condition="TRUE"
 if [ "${PRIMARY_ONLY:-false}" = "true" ]; then
@@ -241,18 +241,41 @@ SELECT 'DEBUG: Final CSV photo columns => ' ||
 execute_sql "$debug_sql_obs"
 execute_sql "$debug_sql_photo"
 
-# If no MAX_RN, default to 3000
+# If no MAX_RN, default to 3000 observations per research species.
 if [ -z "${MAX_RN:-}" ]; then
-  echo "Warning: MAX_RN not set, defaulting to 3000"
+  echo "Warning: MAX_RN not set, defaulting to 3000 observations per research species"
   MAX_RN=3000
 fi
 
 EXPORT_FILE="${EXPORT_DIR}/${EXPORT_GROUP}_photos.csv"
 
-# Final COPY query uses these columns in quotes
+# Final COPY query uses these columns in quotes.
+# Important contract behavior for POL-447:
+#   - MAX_RN caps distinct research observations per species ("L10_taxonID").
+#   - All photos for selected observations are then included.
+#   - Final CSV rows are deterministically ordered and observation-grouped.
 execute_sql "
 COPY (
   WITH
+  research_observation_candidates AS (
+    SELECT
+      o.*,
+      ROW_NUMBER() OVER (
+        PARTITION BY o.\"L10_taxonID\"
+        ORDER BY
+          CASE WHEN o.in_region THEN 0 ELSE 1 END,
+          md5(o.observation_uuid::text),
+          o.observation_uuid
+      ) AS rn
+    FROM \"${TABLE_NAME}\" o
+    WHERE o.quality_grade='research'
+      AND o.\"L10_taxonID\" IS NOT NULL
+  ),
+  selected_research_observations AS (
+    SELECT *
+    FROM research_observation_candidates
+    WHERE rn <= ${MAX_RN}
+  ),
   capped_research_species AS (
     SELECT
       o.*,
@@ -262,18 +285,10 @@ COPY (
       p.license,
       p.width,
       p.height,
-      p.position,
-      ROW_NUMBER() OVER (
-        PARTITION BY o.\"L10_taxonID\"  -- This is a quoted column in the new table
-        ORDER BY
-          CASE WHEN o.in_region THEN 0 ELSE 1 END,
-          random()
-      ) AS rn
-    FROM \"${TABLE_NAME}\" o
+      p.position
+    FROM selected_research_observations o
     JOIN photos p ON o.observation_uuid = p.observation_uuid
     WHERE ${pos_condition}
-      AND o.quality_grade='research'
-      AND o.\"L10_taxonID\" IS NOT NULL
   ),
   everything_else AS (
     SELECT
@@ -290,21 +305,29 @@ COPY (
     JOIN photos p ON o.observation_uuid = p.observation_uuid
     WHERE ${pos_condition}
       AND NOT (o.quality_grade='research' AND o.\"L10_taxonID\" IS NOT NULL)
+  ),
+  final_rows AS (
+    SELECT
+      ${CSV_OBS_COLS},
+      ${CSV_PHOTO_COLS},
+      rn
+    FROM capped_research_species
+
+    UNION ALL
+
+    SELECT
+      ${CSV_OBS_COLS},
+      ${CSV_PHOTO_COLS},
+      rn
+    FROM everything_else
   )
-  SELECT
-    ${CSV_OBS_COLS},
-    ${CSV_PHOTO_COLS},
-    rn
-  FROM capped_research_species
-  WHERE rn <= ${MAX_RN}
-
-  UNION ALL
-
-  SELECT
-    ${CSV_OBS_COLS},
-    ${CSV_PHOTO_COLS},
-    rn
-  FROM everything_else
+  SELECT *
+  FROM final_rows
+  ORDER BY
+    \"observation_uuid\" ASC,
+    \"position\" ASC NULLS LAST,
+    \"photo_id\" ASC NULLS LAST,
+    \"photo_uuid\" ASC
 ) TO '${EXPORT_FILE}'
   WITH (FORMAT CSV, HEADER, DELIMITER E'\t');
 "
