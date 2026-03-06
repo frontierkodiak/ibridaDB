@@ -1,20 +1,17 @@
 #!/bin/bash
+set -euo pipefail
 
 # Setup logging
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 LOG_FILE="${SCRIPT_DIR}/$(basename "$0" .sh)_$(date +%Y%m%d_%H%M%S).log"
 echo "Starting new run at $(date)" > "${LOG_FILE}"
 
-# Function to log messages to both console and file
-log_message() {
-    echo "$1" | tee -a "${LOG_FILE}"
-}
-
-# Redirect all stdout and stderr to both console and log file
+# Redirect all stdout and stderr to both console and log file.
+# After this, plain echo/printf go to both console and log — no need for tee in helpers.
 exec 1> >(tee -a "${LOG_FILE}")
 exec 2> >(tee -a "${LOG_FILE}")
 
-log_message "Initializing export process with configuration:"
+echo "Initializing export process with configuration:"
 
 # ---------------------------------------------------------------------------
 # Database config
@@ -25,9 +22,9 @@ export RELEASE_VALUE="r2"
 export ORIGIN_VALUE="iNat-Dec2024"
 export DB_NAME="ibrida-${VERSION_VALUE}-${RELEASE_VALUE}"
 
-log_message "Database: ${DB_NAME}"
-log_message "Version: ${VERSION_VALUE}"
-log_message "Release: ${RELEASE_VALUE}"
+echo "Database: ${DB_NAME}"
+echo "Version: ${VERSION_VALUE}"
+echo "Release: ${RELEASE_VALUE}"
 
 # ---------------------------------------------------------------------------
 # Export parameters
@@ -50,16 +47,16 @@ export RG_FILTER_MODE="ALL_EXCLUDE_SPECIES_NON_RESEARCH"
 export MIN_OCCURRENCES_PER_RANK=50
 export INCLUDE_MINOR_RANKS_IN_ANCESTORS=true
 
-log_message "Region: ${REGION_TAG}"
-log_message "Min Observations: ${MIN_OBS}"
-log_message "Max Observation Cap (MAX_RN): ${MAX_RN}"
-log_message "Primary Only: ${PRIMARY_ONLY}"
-log_message "Export Group: ${EXPORT_GROUP}"
-log_message "Skip Regional Base Creation: ${SKIP_REGIONAL_BASE}"
-log_message "Include Out-of-Region Obs: ${INCLUDE_OUT_OF_REGION_OBS}"
-log_message "RG Filter Mode: ${RG_FILTER_MODE}"
-log_message "Min Occurrences per Rank: ${MIN_OCCURRENCES_PER_RANK}"
-log_message "Include Minor Ranks in Ancestors: ${INCLUDE_MINOR_RANKS_IN_ANCESTORS}"
+echo "Region: ${REGION_TAG}"
+echo "Min Observations: ${MIN_OBS}"
+echo "Max Observation Cap (MAX_RN): ${MAX_RN}"
+echo "Primary Only: ${PRIMARY_ONLY}"
+echo "Export Group: ${EXPORT_GROUP}"
+echo "Skip Regional Base Creation: ${SKIP_REGIONAL_BASE}"
+echo "Include Out-of-Region Obs: ${INCLUDE_OUT_OF_REGION_OBS}"
+echo "RG Filter Mode: ${RG_FILTER_MODE}"
+echo "Min Occurrences per Rank: ${MIN_OCCURRENCES_PER_RANK}"
+echo "Include Minor Ranks in Ancestors: ${INCLUDE_MINOR_RANKS_IN_ANCESTORS}"
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -71,7 +68,7 @@ export EXPORT_SUBDIR="${VERSION_VALUE}/${RELEASE_VALUE}/multi_photo_${MIN_OBS}mi
 export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/export/v0"
 export WRAPPER_PATH="$0"
 
-log_message "Export Directory: ${HOST_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
+echo "Export Directory: ${HOST_EXPORT_BASE_PATH}/${EXPORT_SUBDIR}"
 
 # ---------------------------------------------------------------------------
 # Source common functions
@@ -82,8 +79,13 @@ source "${BASE_DIR}/common/functions.sh"
 # Execute main script
 # ---------------------------------------------------------------------------
 send_notification "Starting ${EXPORT_GROUP} export"
-log_message "Executing main script at $(date)"
-"${BASE_DIR}/common/main.sh"
-
-log_message "Process completed at $(date)"
-send_notification "${EXPORT_GROUP} export completed!"
+echo "Executing main script at $(date)"
+if "${BASE_DIR}/common/main.sh"; then
+  echo "Process completed at $(date)"
+  send_notification "${EXPORT_GROUP} export completed!"
+else
+  rc=$?
+  echo "ERROR: main.sh exited with code ${rc} at $(date)"
+  send_notification "FAILED: ${EXPORT_GROUP} export (exit ${rc})"
+  exit "${rc}"
+fi
