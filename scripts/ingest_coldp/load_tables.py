@@ -161,11 +161,14 @@ def main():
     parser = argparse.ArgumentParser(description="Load ColDP TSV data into PostgreSQL database.")
     parser.add_argument("--coldp-dir", required=True, help="Path to the unzipped ColDP directory.")
     parser.add_argument("--db-user", default=os.getenv("DB_USER", "postgres"), help="Database user.")
-    parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD", "password"), help="Database password.")
+    parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD"), help="Database password.")
     parser.add_argument("--db-host", default=os.getenv("DB_HOST", "localhost"), help="Database host.")
     parser.add_argument("--db-port", default=os.getenv("DB_PORT", "5432"), help="Database port.")
     parser.add_argument("--db-name", default=os.getenv("DB_NAME", "ibrida-v0"), help="Database name.")
     args = parser.parse_args()
+
+    if not args.db_password:
+        parser.error("--db-password is required (set DB_PASSWORD or pass --db-password).")
 
     engine = get_db_engine(args.db_user, args.db_password, args.db_host, args.db_port, args.db_name)
     

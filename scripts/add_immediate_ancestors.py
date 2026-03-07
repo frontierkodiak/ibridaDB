@@ -259,7 +259,7 @@ def verify_results(session):
 def main():
     parser = argparse.ArgumentParser(description="Add and populate immediate ancestor columns in expanded_taxa.")
     parser.add_argument("--db-user", default=os.getenv("DB_USER", "postgres"))
-    parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD", "password"))
+    parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD"))
     parser.add_argument("--db-host", default=os.getenv("DB_HOST", "localhost"))
     parser.add_argument("--db-port", default=os.getenv("DB_PORT", "5432"))
     parser.add_argument("--db-name", default=os.getenv("DB_NAME", "ibrida-v0"))
@@ -270,6 +270,9 @@ def main():
     parser.add_argument("--verify-only", action="store_true", help="Only verify existing data")
     
     args = parser.parse_args()
+
+    if not args.db_password:
+        parser.error("--db-password is required (set DB_PASSWORD or pass --db-password).")
     
     engine = get_db_engine(args.db_user, args.db_password, args.db_host, args.db_port, args.db_name)
     Session = sessionmaker(bind=engine)
