@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  ibrida:
+    image: frontierkodiak/ibridadb:latest
+    shm_size: '16g'
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in environment}
+      PGDATA: /var/lib/postgresql/data/pgdata
+
+      # Memory settings (tuned for worm: 64GB RAM)
+      POSTGRES_SHARED_BUFFERS: 16GB
+      POSTGRES_WORK_MEM: 2GB
+      POSTGRES_MAINTENANCE_WORK_MEM: 4GB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 40GB
+
+      # WAL and checkpoint settings (production-safe)
+      POSTGRES_WAL_BUFFERS: 64MB
+      POSTGRES_MAX_WAL_SIZE: 8GB
+      POSTGRES_MIN_WAL_SIZE: 2GB
+      POSTGRES_CHECKPOINT_TIMEOUT: 15min
+      POSTGRES_CHECKPOINT_COMPLETION_TARGET: 0.9
+      POSTGRES_WAL_LEVEL: minimal
+
+      # Production settings (safe defaults)
+      POSTGRES_SYNCHRONOUS_COMMIT: on
+      POSTGRES_FULL_PAGE_WRITES: on
+      POSTGRES_AUTOVACUUM: on
+      POSTGRES_FSYNC: on
+
+      # Connection and parallelism
+      POSTGRES_MAX_CONNECTIONS: 50
+      POSTGRES_MAX_PARALLEL_WORKERS_PER_GATHER: 4
+      POSTGRES_MAX_PARALLEL_WORKERS: 8
+      POSTGRES_MAX_PARALLEL_MAINTENANCE_WORKERS: 4
+
+      # pg_stat_statements for otel observability
+      POSTGRES_SHARED_PRELOAD_LIBRARIES: pg_stat_statements
+      POSTGRES_PG_STAT_STATEMENTS_TRACK: all
+
+      # Logging
+      POSTGRES_LOG_MIN_DURATION_STATEMENT: 5000
+      POSTGRES_LOG_STATEMENT: ddl
+
+    volumes:
+      - ~/repo/ibridaDB/dbTools:/tool
+      - ~/repo/ibridaDB/dbQueries:/query
+      - ~/database/ibridaDB:/var/lib/postgresql/data
+      - ~/datasets/ibrida-data/exports:/exports
+
+    ports:
+      - "5432:5432"
+
+    container_name: ibridaDB
+
+    restart: unless-stopped
+
+    deploy:
+      resources:
+        limits:
+          memory: 32G
+        reservations:
+          memory: 16G
