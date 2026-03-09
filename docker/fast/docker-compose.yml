@@ -4,7 +4,7 @@ services:
     image: postgis/postgis:15-3.3
     shm_size: '16g'
     environment:
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${IBRIDADB_POSTGRES_PASSWORD:?set via with-polli-secrets or env}
       PGDATA: /var/lib/postgresql/data/pgdata
       POSTGRES_SHARED_BUFFERS: 8GB
       POSTGRES_WORK_MEM: 2048MB
