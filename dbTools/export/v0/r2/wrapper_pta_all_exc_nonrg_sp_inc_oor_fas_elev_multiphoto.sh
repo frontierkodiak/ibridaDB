@@ -62,7 +62,7 @@ echo "Include Minor Ranks in Ancestors: ${INCLUDE_MINOR_RANKS_IN_ANCESTORS}"
 # Paths
 # ---------------------------------------------------------------------------
 export DB_CONTAINER="ibridaDB"
-export HOST_EXPORT_BASE_PATH="/datasets/ibrida-data/exports"
+export HOST_EXPORT_BASE_PATH="${HOST_EXPORT_BASE_PATH:-/datasets/ibrida-data/exports}"
 export CONTAINER_EXPORT_BASE_PATH="/exports"
 export EXPORT_SUBDIR="${VERSION_VALUE}/${RELEASE_VALUE}/multi_photo_${MIN_OBS}min_${MAX_RN}max"
 export BASE_DIR="/home/caleb/repo/ibridaDB/dbTools/export/v0"
