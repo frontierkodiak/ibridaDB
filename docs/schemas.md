@@ -61,6 +61,7 @@ This reference is intended to help developers and maintainers quickly understand
    11.1. [annotation_supersession](#111-annotation_supersession)
    11.2. [annotation_export_policy](#112-annotation_export_policy)
    11.3. [Deterministic Selector Surfaces](#113-deterministic-selector-surfaces)
+12. [Annotation Write-Gate Hardening Layer (POL-1423)](#12-annotation-write-gate-hardening-layer-pol-1423)
 
 ---
 
@@ -782,7 +783,9 @@ Canonical DDL files:
 | `score` | `double precision` | Optional model score in `[0,1]` |
 | `is_primary` | `boolean` | Preferred annotation flag |
 | `lifecycle_state` | `varchar(32)` | `active`, `superseded`, `retracted` |
+| `source_annotation_key` | `varchar(255)` | Optional per-set idempotency key (POL-1423) |
 | `sidecar` | `jsonb` | Extensible metadata |
+| `updated_at` | `timestamptz` | Lifecycle audit timestamp (POL-1423) |
 
 **Index/constraint highlights:**
 
@@ -790,6 +793,7 @@ Canonical DDL files:
 - Score range check constraint (`0.0 <= score <= 1.0` when present).
 - Subject/set composite index for common lineage queries.
 - Partial `active` index for selection of current annotations.
+- Partial unique index `uq_annotation_source_key` on `(set_id, source_annotation_key)` where the key is non-NULL (POL-1423).
 
 ### 9.2. annotation_geometry
 
@@ -886,6 +890,7 @@ Canonical DDL files:
 | `adjudicated_at` | `timestamptz` | Required for adjudicated statuses |
 | `review_notes` | `text` | Optional adjudication notes |
 | `sidecar` | `jsonb` | Extensible metadata |
+| `updated_at` | `timestamptz` | Review-surface audit timestamp (POL-1423) |
 
 **Policy constraints:**
 
@@ -985,6 +990,47 @@ Ranking semantics are deterministic and stable:
 - final deterministic tie-break on `annotation_id`
 
 Delete operations are guarded on lineage tables to preserve non-destructive history guarantees.
+
+---
+
+## 12. Annotation Write-Gate Hardening Layer (POL-1423)
+
+`POL-1423` closes the typed annotation write/readback gate by hardening the
+lifecycle and idempotency surfaces the live typed writer depends on.
+
+Canonical DDL files:
+
+- `dbTools/admin/add_annotation_write_gate_hardening_ddl.sql`
+- `dbTools/admin/migrations/005_annotation_write_gate_hardening.sql`
+- rollback: `dbTools/admin/migrations/005_annotation_write_gate_hardening_rollback.sql`
+- verification examples: `dbTools/admin/migrations/005_annotation_write_gate_hardening_verify.sql`
+
+**Added surfaces:**
+
+- `annotation.updated_at` (`timestamptz`, `NOT NULL DEFAULT NOW()`) — lifecycle
+  audit timestamp. The `POL-655` supersession trigger already set this column;
+  the column was previously missing, so any supersession insert failed.
+- `annotation_quality.updated_at` (`timestamptz`, `NOT NULL DEFAULT NOW()`) —
+  review-surface audit timestamp. `annotation_provenance` stays immutable and
+  deliberately has no `updated_at`.
+- `annotation.source_annotation_key` (`varchar(255)`) — deterministic per-set
+  idempotency key for typed duplicate-import detection. NULL is allowed.
+
+**Triggers and indexes:**
+
+- `touch_updated_at()` — generic `BEFORE UPDATE` trigger function attached to
+  `annotation` (`trg_annotation_touch_updated_at`) and `annotation_quality`
+  (`trg_annotation_quality_touch_updated_at`); refreshes `updated_at` on every
+  row update so writers never maintain it by hand.
+- `uq_annotation_source_key` — partial unique index on
+  `(set_id, source_annotation_key)` where the key is non-NULL. Duplicate source
+  annotation keys are rejected within a set; unrelated sets are unaffected and
+  NULL keys are exempt.
+- `idx_annotation_source_key` — partial lookup index on `source_annotation_key`.
+
+The migration is idempotent (`ADD COLUMN IF NOT EXISTS`, `CREATE OR REPLACE
+FUNCTION`, `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER`, `CREATE [UNIQUE] INDEX
+IF NOT EXISTS`) and non-destructive.
 
 ---
 
