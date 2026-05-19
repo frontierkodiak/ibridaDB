@@ -95,9 +95,29 @@ Core guarantees from Schema D:
 - Export selection is deterministic and policy-driven via `annotation_export_select_v1(policy_name, policy_version)`.
 - Delete operations are guarded on annotation-lineage tables to reinforce non-destructive history preservation.
 
+## 8. Write-gate hardening (added in POL-1423)
+
+`POL-1423` closes the typed annotation write/readback gate. The earlier layers left three surfaces the live typed writer depends on either missing or inconsistent:
+
+- `annotation.updated_at` did not exist, yet the `POL-655` supersession trigger (`sync_annotation_lifecycle_on_supersession`) already set it — any supersession insert failed against a missing column.
+- `annotation_quality` is intentionally mutable but had no audit timestamp for review-surface changes.
+- Duplicate-import semantics were only enforced at `annotation_set` granularity; there was no per-annotation idempotency key.
+
+Migration `005` adds Schema E:
+
+- `annotation.updated_at` — lifecycle audit timestamp.
+- `annotation_quality.updated_at` — review-surface audit timestamp.
+- `annotation.source_annotation_key` — deterministic per-set idempotency key.
+- `touch_updated_at()` — generic `BEFORE UPDATE` trigger function, attached to `annotation` and `annotation_quality`, so writers never maintain `updated_at` by hand.
+- `uq_annotation_source_key` — partial unique index on `(set_id, source_annotation_key)` where the key is non-NULL. Duplicate source annotation keys are rejected deterministically within a set; unrelated sets are never blocked, and NULL keys are exempt.
+
+`annotation_provenance` stays immutable and deliberately receives no `updated_at` column.
+
+The `POL-655` supersession trigger is unchanged: once `annotation.updated_at` exists, the trigger stops referencing a missing column and continues to express retraction/supersession semantics.
+
 ## What is intentionally deferred
 
-No remaining annotation-lineage schema rules are deferred after `POL-655`; downstream work should consume these invariants rather than re-derive policy ad hoc.
+No remaining annotation-lineage schema rules are deferred after `POL-1423`; downstream work should consume these invariants rather than re-derive policy ad hoc.
 
 ## Validation checklist for downstream lanes
 
@@ -110,6 +130,7 @@ Before building on this foundation:
 5. Confirm representative bbox/polygon/mask inserts pass on Schema B (`002_annotation_geometry_verify.sql`).
 6. Confirm source-kind completeness + adjudication constraints pass on Schema C (`003_annotation_provenance_quality_verify.sql`).
 7. Confirm supersession + policy-driven selection invariants pass on Schema D (`004_annotation_versioning_policy_verify.sql`).
+8. Confirm `updated_at` touch triggers, per-set `source_annotation_key` uniqueness, and supersession-trigger repair pass on Schema E (`005_annotation_write_gate_hardening_verify.sql`).
 
 ## File references
 
@@ -128,4 +149,8 @@ Before building on this foundation:
 - Migration: `dbTools/admin/migrations/004_annotation_versioning_policy.sql`
 - Rollback: `dbTools/admin/migrations/004_annotation_versioning_policy_rollback.sql`
 - Verification inserts: `dbTools/admin/migrations/004_annotation_versioning_policy_verify.sql`
-- ORM: `models/annotation_models.py` (Schema A + Schema B + Schema C + Schema D)
+- DDL (Schema E): `dbTools/admin/add_annotation_write_gate_hardening_ddl.sql`
+- Migration: `dbTools/admin/migrations/005_annotation_write_gate_hardening.sql`
+- Rollback: `dbTools/admin/migrations/005_annotation_write_gate_hardening_rollback.sql`
+- Verification inserts: `dbTools/admin/migrations/005_annotation_write_gate_hardening_verify.sql`
+- ORM: `models/annotation_models.py` (Schema A + Schema B + Schema C + Schema D + Schema E)
