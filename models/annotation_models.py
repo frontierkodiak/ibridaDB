@@ -16,6 +16,12 @@ Schema C (POL-654):
 Schema D (POL-655):
     annotation_supersession — insert-only supersession edges (history preserving updates).
     annotation_export_policy — versioned deterministic export-selection policy matrix.
+
+Schema E (POL-1423):
+    annotation.updated_at / annotation_quality.updated_at — lifecycle audit
+        timestamps maintained by the touch_updated_at() BEFORE UPDATE trigger.
+    annotation.source_annotation_key — deterministic per-set idempotency key,
+        unique within set_id, for typed duplicate-import detection.
 """
 
 from sqlalchemy import (
@@ -208,8 +214,16 @@ class Annotation(Base):
     score = Column(Float)
     is_primary = Column(Boolean, nullable=False, server_default="false")
     lifecycle_state = Column(String(32), nullable=False, server_default="active")
+    # Deterministic per-set idempotency key (POL-1423). Unique within set_id;
+    # NULL allowed for sets without a stable upstream key.
+    source_annotation_key = Column(String(255))
     sidecar = Column(JSONB)
     created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    # Lifecycle audit timestamp (POL-1423). Maintained by the
+    # touch_updated_at() BEFORE UPDATE trigger and the supersession trigger.
+    updated_at = Column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
@@ -232,6 +246,18 @@ class Annotation(Base):
             postgresql_where=lifecycle_state == "active",
         ),
         Index("idx_annotation_created_at", "created_at"),
+        Index(
+            "uq_annotation_source_key",
+            "set_id",
+            "source_annotation_key",
+            unique=True,
+            postgresql_where=source_annotation_key.isnot(None),
+        ),
+        Index(
+            "idx_annotation_source_key",
+            "source_annotation_key",
+            postgresql_where=source_annotation_key.isnot(None),
+        ),
         Index(
             "idx_annotation_sidecar",
             "sidecar",
@@ -488,6 +514,11 @@ class AnnotationQuality(Base):
 
     sidecar = Column(JSONB)
     created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    # Review-surface audit timestamp (POL-1423). Maintained by the
+    # touch_updated_at() BEFORE UPDATE trigger.
+    updated_at = Column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
