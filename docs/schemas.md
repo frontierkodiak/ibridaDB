@@ -977,8 +977,12 @@ Canonical DDL files:
 
 - `annotation_active_selection_v1`
   - active rows excluding superseded edges.
-- `annotation_export_select_v1(policy_name, policy_version)`
+- `annotation_export_select_v1(policy_name, policy_version, set_ids uuid[] = NULL)`
   - deterministic source-policy selector producing one annotation per `(subject_id, label)`.
+  - when `set_ids` is NULL, selection is global and preserves the original
+    two-argument call behavior.
+  - when `set_ids` is non-NULL, candidates are filtered by set before ranking,
+    so overlapping annotation sets each select their own best annotation.
 - `annotation_export_default_human_first_v1`
   - default projection bound to `human_first/v1`.
 
@@ -1031,6 +1035,34 @@ Canonical DDL files:
 The migration is idempotent (`ADD COLUMN IF NOT EXISTS`, `CREATE OR REPLACE
 FUNCTION`, `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER`, `CREATE [UNIQUE] INDEX
 IF NOT EXISTS`) and non-destructive.
+
+---
+
+## 13. Annotation Set-Scoped Selector (POL-1784)
+
+`POL-1784` updates `annotation_export_select_v1` so explicit annotation-set
+readback can rank within the requested set scope before choosing the best row.
+This fixes overlapping-set cases where two sets share a `(subject_id, label)`:
+the previous global selector could choose one set's annotation, causing a
+post-join `set_id` filter to return zero rows for the other set.
+
+Canonical DDL files:
+
+- `dbTools/admin/add_annotation_set_scoped_selector_ddl.sql`
+- `dbTools/admin/migrations/006_annotation_set_scoped_selector.sql`
+- rollback: `dbTools/admin/migrations/006_annotation_set_scoped_selector_rollback.sql`
+- verification examples: `dbTools/admin/migrations/006_annotation_set_scoped_selector_verify.sql`
+
+**Changed surface:**
+
+- `annotation_export_select_v1(policy_name, policy_version, set_ids uuid[] = NULL)`
+  remains the single canonical export selector. Existing two-argument callers
+  continue to work through the defaulted third argument. Passing a non-NULL
+  UUID array filters candidates by `annotation_active_selection_v1.set_id`
+  before `row_number()` ranking.
+
+`annotation_export_default_human_first_v1` is recreated on the new selector
+signature and keeps its global default behavior.
 
 ---
 

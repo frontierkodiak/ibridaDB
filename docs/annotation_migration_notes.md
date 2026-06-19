@@ -92,7 +92,8 @@ Core guarantees from Schema C:
 Core guarantees from Schema D:
 
 - Active selectors exclude superseded rows via `annotation_active_selection_v1`.
-- Export selection is deterministic and policy-driven via `annotation_export_select_v1(policy_name, policy_version)`.
+- Export selection is deterministic and policy-driven via
+  `annotation_export_select_v1(policy_name, policy_version, set_ids uuid[] = NULL)`.
 - Delete operations are guarded on annotation-lineage tables to reinforce non-destructive history preservation.
 
 ## 8. Write-gate hardening (added in POL-1423)
@@ -115,9 +116,38 @@ Migration `005` adds Schema E:
 
 The `POL-655` supersession trigger is unchanged: once `annotation.updated_at` exists, the trigger stops referencing a missing column and continues to express retraction/supersession semantics.
 
+## 9. Set-scoped export selector (added in POL-1784)
+
+`POL-1784` fixes explicit annotation-set readback for overlapping sets. The
+previous selector ranked candidates globally across all active sets and callers
+then filtered by `set_id` after joining the selected row. If two sets shared a
+`(subject_id, label)`, only the global winner survived the join; the losing set
+could read back zero rows.
+
+Migration `006` replaces the old two-argument function with the canonical
+three-argument form:
+
+```sql
+annotation_export_select_v1(
+    policy_name varchar DEFAULT 'human_first',
+    policy_version int DEFAULT 1,
+    set_ids uuid[] DEFAULT NULL
+)
+```
+
+`set_ids IS NULL` preserves global selection for existing two-argument callers.
+When `set_ids` is non-NULL, `annotation_active_selection_v1.set_id` is filtered
+inside the candidates CTE before `row_number()` ranking.
+
+Because PostgreSQL can treat defaulted-argument overloads as ambiguous,
+migration `006` drops the old two-argument function before creating the new
+three-argument function. It recreates
+`annotation_export_default_human_first_v1` and raises if any other database
+object depends on the old signature.
+
 ## What is intentionally deferred
 
-No remaining annotation-lineage schema rules are deferred after `POL-1423`; downstream work should consume these invariants rather than re-derive policy ad hoc.
+No remaining annotation-lineage schema rules are deferred after `POL-1784`; downstream work should consume these invariants rather than re-derive policy ad hoc.
 
 ## Validation checklist for downstream lanes
 
@@ -131,6 +161,7 @@ Before building on this foundation:
 6. Confirm source-kind completeness + adjudication constraints pass on Schema C (`003_annotation_provenance_quality_verify.sql`).
 7. Confirm supersession + policy-driven selection invariants pass on Schema D (`004_annotation_versioning_policy_verify.sql`).
 8. Confirm `updated_at` touch triggers, per-set `source_annotation_key` uniqueness, and supersession-trigger repair pass on Schema E (`005_annotation_write_gate_hardening_verify.sql`).
+9. Confirm set-scoped selector behavior and two-argument backward compatibility pass on Schema F (`006_annotation_set_scoped_selector_verify.sql`).
 
 ## File references
 
@@ -153,4 +184,8 @@ Before building on this foundation:
 - Migration: `dbTools/admin/migrations/005_annotation_write_gate_hardening.sql`
 - Rollback: `dbTools/admin/migrations/005_annotation_write_gate_hardening_rollback.sql`
 - Verification inserts: `dbTools/admin/migrations/005_annotation_write_gate_hardening_verify.sql`
+- DDL (Schema F): `dbTools/admin/add_annotation_set_scoped_selector_ddl.sql`
+- Migration: `dbTools/admin/migrations/006_annotation_set_scoped_selector.sql`
+- Rollback: `dbTools/admin/migrations/006_annotation_set_scoped_selector_rollback.sql`
+- Verification inserts: `dbTools/admin/migrations/006_annotation_set_scoped_selector_verify.sql`
 - ORM: `models/annotation_models.py` (Schema A + Schema B + Schema C + Schema D + Schema E)

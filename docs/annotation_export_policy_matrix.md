@@ -19,12 +19,17 @@ Issue: POL-655
 
 ## Deterministic selector behavior
 
-`annotation_export_select_v1(policy_name, policy_version)` selects one annotation per `(subject_id, label)` with deterministic ordering:
+`annotation_export_select_v1(policy_name, policy_version, set_ids uuid[] = NULL)` selects one annotation per `(subject_id, label)` with deterministic ordering:
 
 1. source priority (from policy strategy)
 2. trust rank (descending)
 3. confidence score (descending, NULLS LAST)
 4. annotation UUID (ascending tie-break)
+
+When `set_ids` is NULL, selection is global and existing two-argument callers
+preserve their original behavior. When `set_ids` is non-NULL, the selector
+filters active candidates by set before ranking so overlapping annotation sets
+can each select their own best row.
 
 Rejected rows and (by default policy config) conflict rows are excluded from candidates.
 
