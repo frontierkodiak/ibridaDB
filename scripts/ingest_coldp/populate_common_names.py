@@ -93,13 +93,16 @@ def populate_common_names_in_expanded_taxa(session):
 def main():
     parser = argparse.ArgumentParser(description="Populate common names in the expanded_taxa table.")
     parser.add_argument("--db-user", default=os.getenv("DB_USER", "postgres"))
-    parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD", "password"))
+    parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD"))
     parser.add_argument("--db-host", default=os.getenv("DB_HOST", "localhost"))
     parser.add_argument("--db-port", default=os.getenv("DB_PORT", "5432"))
     parser.add_argument("--db-name", default=os.getenv("DB_NAME", "ibrida-v0"))
     parser.add_argument("--clear-first", action="store_true", help="Clear existing common names before populating.")
 
     args = parser.parse_args()
+
+    if not args.db_password:
+        parser.error("--db-password is required (set DB_PASSWORD or pass --db-password).")
 
     engine = get_db_engine(args.db_user, args.db_password, args.db_host, args.db_port, args.db_name)
     Session = sessionmaker(bind=engine)

@@ -628,7 +628,7 @@ def perform_mapping_parallel(session, num_processes=None, fuzzy_match=True, fuzz
 def main():
     parser = argparse.ArgumentParser(description="Map iNaturalist taxa to ColDP taxa using parallel processing.")
     parser.add_argument("--db-user", default=os.getenv("DB_USER", "postgres"))
-    parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD", "password"))
+    parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD"))
     parser.add_argument("--db-host", default=os.getenv("DB_HOST", "localhost"))
     parser.add_argument("--db-port", default=os.getenv("DB_PORT", "5432"))
     parser.add_argument("--db-name", default=os.getenv("DB_NAME", "ibrida-v0"))
@@ -637,6 +637,9 @@ def main():
     parser.add_argument("--processes", type=int, default=None, help="Number of parallel processes to use (default: CPU count - 1)")
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
     args = parser.parse_args()
+
+    if not args.db_password:
+        parser.error("--db-password is required (set DB_PASSWORD or pass --db-password).")
 
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
